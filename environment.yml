@@ -1,0 +1,12 @@
+name: attribution
+dependencies:
+  - Flask=0.10.1
+  - PIL=1.1.7
+  - pandas
+  - numpy
+  - pymysql
+  - pip:
+    - pyotp
+    - qrcode
+    - plotly
+    - xhtml2pdf

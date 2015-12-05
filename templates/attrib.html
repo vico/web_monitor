@@ -1,0 +1,19 @@
+{% extends "layout.html" %}
+{% block body %}
+{{ hitRateDf.head() }}
+<div id="tester" style="width:800px;height:400;"></div>
+<script>
+  TESTER = document.getElementById('tester');
+  Plotly.plot( TESTER, [
+    {% for col in csAttrDf['columns'] %}
+      {
+        x: {{csAttrDf.index | safe}},
+        y: {{csAttrDf['columns'][col] | safe }},
+        name: '{{col + ' PL' }}',
+        line: { width: 3 }
+      }, 
+    {% endfor %}
+  ], {
+  margin: { t: 0 } } );
+</script>
+{% endblock %}
