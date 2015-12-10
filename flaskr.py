@@ -299,6 +299,10 @@ group by a.advisor
 
   return render_template('attrib.html', hitRateDf=hitRateDf, csAttrDf=paramCsAttrDf)
 
+@app.route('/test')
+def test():
+  return render_template('test.html')
+
 @app.route('/enable-tfa-via-app')
 def enable_tfa_via_app():
     if request.method == 'GET':
