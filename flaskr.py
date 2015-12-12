@@ -303,38 +303,6 @@ group by a.advisor
 def test():
   return render_template('test.html')
 
-@app.route('/enable-tfa-via-app')
-def enable_tfa_via_app():
-    if request.method == 'GET':
-        return render_template('enable_tfa_via_app.html')
-    token = request.form['token']
-    if token:
-        pass
-
-@app.route('/auth-qr-code.png')
-def auth_qr_code():
-    """generate a QR code with the users TOTP secret
-
-    We do this to reduce the risk of leaking
-    the secret over the wire in plaintext"""
-    #FIXME: This logic should really apply site-wide
-    domain = urlparse.urlparse(request.url).netloc
-
-    secret = pyotp.random_base32()
-
-    totp = pyotp.TOTP(secret)
-
-    if not domain:
-        domain = 'example.com'
-    username = "%s@%s" % (5, domain)
-
-    uri = totp.provisioning_uri(username)
-    qrc = qrcode.make(uri)
-
-    stream = StringIO.StringIO()
-    qrc.save(stream)
-    image = stream.getvalue()
-    return Response(image, mimetype='image/png')
 
 @app.route('/logout')
 def logout():
