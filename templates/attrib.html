@@ -38,9 +38,9 @@
       <td>Long PL</td>
       <td class="number">{{'{:,}'.format(params['longPL'])}}</td>
       <td>Long Topix O/P</td>
-      <td class="number">-0.09%</td>
+      <td class="number">{{'{:.2f}%'.format(params['longIndexOP'])}}</td>
       <td>Long Beta O/P</td>
-      <td class="number">0.03%</td>
+      <td class="number">{{'{:.2f}%'.format(params['longBetaOP'])}}</td>
     </tr>
     <tr>
       <td>Short Turnover</td>
@@ -49,9 +49,9 @@
       <td>Short PL</td>
       <td class="number">{{'{:,}'.format(params['shortPL'])}}</td>
       <td>Short Topix O/P</td>
-      <td class="number">-0.09%</td>
+      <td class="number">{{'{:.2f}%'.format(params['shortIndexOP'])}}</td>
       <td>Short Beta O/P</td>
-      <td class="number">0.03%</td>
+      <td class="number">{{'{:.2f}%'.format(params['shortBetaOP'])}}</td>
     </tr>
   </tbody>
   <tfoot class="overlineTfoot">
@@ -62,9 +62,9 @@
       <td>Total PL</td>
       <td class="number">{{'{:,}'.format(params['longPL']+params['shortPL'])}}</td>
       <td>Total Topix O/P</td>
-      <td class="number">-0.09%</td>
+      <td class="number">{{'{:.2f}%'.format(params['longIndexOP']+params['shortIndexOP'])}}</td>
       <td>Total Beta O/P</td>
-      <td class="number">0.03%</td>
+      <td class="number">{{'{:.2f}%'.format(params['longBetaOP']+params['shortBetaOP'])}}</td>
     </tr>
   </tfoot>
 </table>
@@ -93,11 +93,11 @@
   <tbody>
     <tr>
       <td>Long Return</td>
-      <td class="number">0.5%</td>
+      <td class="number">{{'{:.1f}%'.format(params['longReturn'])}}</td>
     </tr>
     <tr>
       <td>Short Return</td>
-      <td class="number">1.3%</td>
+      <td class="number">{{'{:.1f}%'.format(params['shortReturn'])}}</td>
     </tr>
   </tbody>
 </table>
@@ -105,11 +105,11 @@
 <table class="inlineTable col-1-3">
   <caption>Hit Rate</caption>
   <tbody>
-    <tr>   <td>Long</td>     <td class="number">53%</td>     </tr>
-    <tr>   <td>Short</td>    <td class="number">53%</td>     </tr>
+    <tr>   <td>Long</td>     <td class="number">{{'{:.2f}%'.format(params['longHitRate'])}}</td>     </tr>
+    <tr>   <td>Short</td>    <td class="number">{{'{:.2f}%'.format(params['shortHitRate'])}}</td>     </tr>
 </tbody>
 <tfoot class="overlineTfoot">
-  <tr>    <td>Total</td>   <td class="number">53%</td>  </tr>
+  <tr>    <td>Total</td>   <td class="number">{{'{:.2f}%'.format((params['longHitRate']+params['shortHitRate'])/2)}}</td>  </tr>
 </tfoot><!--
 --></table>
 <table class="inlineTable borderTable col-2-3">
@@ -140,5 +140,6 @@
   ], {
   margin: { t: 0 } } );
 </script>
+  {{params['test']}}
 </section>
 {% endblock %}
