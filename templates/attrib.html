@@ -13,12 +13,10 @@
         <tr>
             <th>Analyst</th>
             <td><strong>{{params['analyst']}}</strong></td>
-            <th>Start</th>
-            <td><strong>{{params['startDate']}}</strong></td>
-        </tr>
-        <tr>
             <td>Index</td>
             <td>{{params['index']}}</td>
+            <th>Start</th>
+            <td><strong>{{params['startDate']}}</strong></td>
             <th>End</th>
             <td><strong>{{params['endDate']}}</strong></td>
         </tr>
@@ -184,9 +182,9 @@
     {{params['strategy_table'] | safe}}
 
 </section>
-<section class="sheet padding-10mm">
+
     {{params['position_table'] | safe }}
-</section>
+
 
     <script>
   TESTER = document.getElementById('plGraph');
@@ -207,7 +205,7 @@
         line: { width: 0}
      }
   ], {
-  margin: { t: 0 },
+   margin: { t: 0,b:15,l:{{params['margin_left']}},r:{{params['margin_right']}} },
    width: {{params['graph_width']}},
    height: {{params['graph_height']}}
    } );
@@ -223,7 +221,7 @@
       },
     {% endfor %}
   ], {
-  margin: { t: 0 },
+   margin: { t: 0,b:15,l:{{params['margin_left']}},r:{{params['margin_right']}} },
    width: {{params['graph_width']}},
    height: {{params['graph_height']}}
    } );
@@ -239,7 +237,7 @@
       },
     {% endfor %}
   ], {
-  margin: { t: 0 },
+   margin: { t: 0,b:15,l:{{params['margin_left']}},r:{{params['margin_right']}} },
    width: {{params['graph_width']}},
    height: {{params['graph_height']}}
    } );
@@ -256,7 +254,7 @@
       },
     {% endfor %}
   ], {
-  margin: { t: 0 },
+   margin: { t: {{params['margin_top']}},b:{{params['margin_bottom']}},l:{{params['margin_left']}},r:{{params['margin_right']}} },
    width: {{params['graph_width']}},
    height: {{params['graph_height']}}
    } );
@@ -273,14 +271,14 @@
       },
     {% endfor %}
   ], {
-  margin: { t: 0 },
+   margin: { t: {{params['margin_top']}},b:{{params['margin_bottom']}},l:{{params['margin_left']}},r:{{params['margin_right']}} },
    width: {{params['graph_width']}},
    height: {{params['graph_height']}}
    } );
 
     grossExposureGraph = document.getElementById('grossExposureGraph');
   Plotly.plot( grossExposureGraph, {{params['gross_exposure_graph'] | safe}} , {
-  margin: { t: 0 },
+   margin: { t: {{params['margin_top']}},b:{{params['margin_bottom']}},l:{{params['margin_left']}},r:{{params['margin_right']}} },
    width: {{params['graph_width']}},
    height: {{params['graph_height']}},
    title: 'Gross Exposure',
@@ -288,7 +286,7 @@
 
    shortExposureGraph = document.getElementById('shortExposureGraph');
   Plotly.plot( shortExposureGraph, {{params['short_exposure_graph'] | safe}} , {
-  margin: { t: 0 },
+   margin: { t: {{params['margin_top']}},b:{{params['margin_bottom']}},l:{{params['margin_left']}},r:{{params['margin_right']}} },
    width: {{params['graph_width']}},
    height: {{params['graph_height']}},
    title: 'Short Exposure (As a Percent of all non-index short exposure)'
@@ -296,7 +294,7 @@
 
    namesGraph = document.getElementById('namesGraph');
   Plotly.plot( namesGraph, {{params['names_graph'] | safe}} , {
-  margin: { t: 0 },
+   margin: { t: {{params['margin_top']}},b:{{params['margin_bottom']}},l:{{params['margin_left']}},r:{{params['margin_right']}} },
    width: {{params['graph_width']}},
    height: {{params['graph_height']}},
    title: 'Number of Names'

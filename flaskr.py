@@ -1056,7 +1056,7 @@ def attrib():
 
     t = sqlPlDf.groupby(['processDate', 'advisor', 'side']).sum().drop(['RHAttr', 'YAAttr', 'LRAttr'],
                                                                        axis=1).unstack().reset_index().set_index(
-        'processDate')
+            'processDate')
     attr_df = t[t['advisor'] == g.reportAdvisor]['attribution']
     attr_df['Total'] = attr_df['L'] + attr_df['S']
     cs_attr_df = attr_df
@@ -1085,7 +1085,7 @@ def attrib():
     gross_exposure = t.groupby(by=['processDate', 'advisor'])[0].sum().div(aumDf['Total'], axis=0)
     t2 = t[t['side'] == 'S'].set_index(['processDate', 'advisor'])[0].div(aumDf['Total'], axis=0)
     t3 = DataFrame(
-        t[t['side'] == 'S'].set_index(['processDate', 'advisor'])[0].div(aumDf['Total'], axis=0)).reset_index()
+            t[t['side'] == 'S'].set_index(['processDate', 'advisor'])[0].div(aumDf['Total'], axis=0)).reset_index()
     t3[t3['advisor'] == 'Bal'] = 0
     t4 = t3.groupby(by='processDate')[0].sum().truncate(before=g.fromDate)
     short_exposure = t2.div(t4, axis=0)
@@ -1116,7 +1116,7 @@ def attrib():
 
     totalFund = sqlPlDf.groupby(['processDate', 'advisor', 'side']).sum().drop(['attribution'],
                                                                                axis=1).unstack().reset_index().set_index(
-        'processDate')
+            'processDate')
 
     pl_graph = dict()
     pl_graph['index'] = [pd.to_datetime(str(i)).strftime('%Y-%m-%d') for i in cs_attr_df.index]
@@ -1189,20 +1189,18 @@ def attrib():
 
     gicsTable = mergedDf.truncate(after=g.endDate).groupby(["advisor", "GICS"]).sum()[['JPYPL']].loc[
                 (slice(g.reportAdvisor, g.reportAdvisor), slice(None)), :].reset_index().drop('advisor', 1).set_index(
-        'GICS')
+            'GICS')
     fundGics = sqlPlDf.groupby(['advisor', 'GICS']).sum()[['RHAttr', 'YAAttr', 'LRAttr']].loc[
                (slice(g.reportAdvisor, g.reportAdvisor), slice(None)), :].reset_index().drop('advisor', 1).set_index(
-        'GICS')
+            'GICS')
     gicsPl = sqlPlDf.groupby(['advisor', 'GICS', 'side']).sum()[['attribution']].loc[
              (slice(g.reportAdvisor, g.reportAdvisor), slice(None)), :].unstack()['attribution'].reset_index().drop(
-        'advisor', 1).set_index('GICS').fillna(0)
+            'advisor', 1).set_index('GICS').fillna(0)
     gicsTable = gicsTable.merge(fundGics, left_index=True, right_index=True).merge(gicsPl, left_index=True,
                                                                                    right_index=True)
 
     totalTurnOver = gicsTable['JPYPL'].sum()
     gicsTable['TO'] = gicsTable['JPYPL'] / totalTurnOver
-
-
 
     percent_fmt = lambda x: '{:.2f}%'.format(x * 100)
     percent1_fmt = lambda x: '{:.1f}%'.format(x * 100)
@@ -1217,8 +1215,9 @@ def attrib():
     gicsTable['Return'] = (gicsTable['L'] + gicsTable['S']) / gicsTable['JPYPL']
     gicsTable = gicsTable[['RHAttr', 'YAAttr', 'LRAttr', 'L', 'S', 'JPYPL', 'TO', 'Return']]
     gicsTable = gicsTable.rename(
-        columns={'JPYPL': 'Turnover', 'RHAttr': 'Rockhampton', 'YAAttr': 'Yaraka', 'LRAttr': 'Longreach', 'L': 'LongPL',
-                 'S': 'ShortPL', 'TO': 'TO %'})
+            columns={'JPYPL': 'Turnover', 'RHAttr': 'Rockhampton', 'YAAttr': 'Yaraka', 'LRAttr': 'Longreach',
+                     'L': 'LongPL',
+                     'S': 'ShortPL', 'TO': 'TO %'})
     frmt = {col: frmt_map[col] for col in gicsTable.columns if col in frmt_map.keys()}
     gics_table_html = gicsTable.to_html(index_names=False, formatters=frmt, classes="borderTable")
 
@@ -1227,22 +1226,24 @@ def attrib():
     t = sqlPlDf.merge(codeBetaDf, left_on='quick', right_on='code', how='left')
     sectorTable = mergedDf.truncate(after=g.endDate).groupby(["advisor", "sector"]).sum()[['JPYPL']].loc[
                   (slice(g.reportAdvisor, g.reportAdvisor), slice(None)), :].reset_index().drop('advisor', 1).set_index(
-        'sector')
+            'sector')
     fundSector = t.groupby(['advisor', 'sector']).sum()[['RHAttr', 'YAAttr', 'LRAttr']].loc[
                  (slice(g.reportAdvisor, g.reportAdvisor), slice(None)), :].reset_index().drop('advisor', 1).set_index(
-        'sector')
+            'sector')
 
     sectorPl = t.groupby(['advisor', 'sector', 'side']).sum()[['attribution']].loc[
                (slice(g.reportAdvisor, g.reportAdvisor), slice(None)), :].unstack()['attribution'].reset_index().drop(
-        'advisor', 1).set_index('sector').fillna(0)
+            'advisor', 1).set_index('sector').fillna(0)
 
-    sectorTable= sectorTable.merge(fundSector,left_index=True, right_index=True, how='left').merge(sectorPl, left_index=True, right_index=True, how='left').fillna(0)
+    sectorTable = sectorTable.merge(fundSector, left_index=True, right_index=True, how='left').merge(sectorPl,
+                                                                                                     left_index=True,
+                                                                                                     right_index=True,
+                                                                                                     how='left').fillna(
+            0)
 
     sectorTotalTurnOver = sectorTable['JPYPL'].sum()
 
     sectorTable['TO'] = sectorTable['JPYPL'] / sectorTotalTurnOver
-
-
 
     sectorSeries = sectorTable.sum()
     sectorSeries.name = 'Total'
@@ -1253,73 +1254,132 @@ def attrib():
     sectorTable['Return'] = (sectorTable['L'] + sectorTable['S']) / sectorTable['JPYPL']
     sectorTable = sectorTable[['RHAttr', 'YAAttr', 'LRAttr', 'L', 'S', 'JPYPL', 'TO', 'Return']]
     sectorTable = sectorTable.rename(
-        columns={'JPYPL': 'Turnover', 'RHAttr': 'Rockhampton', 'YAAttr': 'Yaraka', 'LRAttr': 'Longreach', 'L': 'LongPL',
-                 'S': 'ShortPL', 'TO': 'TO %'})
+            columns={'JPYPL': 'Turnover', 'RHAttr': 'Rockhampton', 'YAAttr': 'Yaraka', 'LRAttr': 'Longreach',
+                     'L': 'LongPL',
+                     'S': 'ShortPL', 'TO': 'TO %'})
     sectorTableHtml = sectorTable.to_html(index_names=False, formatters=frmt, classes="borderTable")
 
-    topixTable = mergedDf.truncate(after=g.endDate).groupby(["advisor", "TOPIX"]).sum()[['JPYPL']].loc[(slice(g.reportAdvisor, g.reportAdvisor),slice(None)), :].reset_index().drop('advisor', 1).set_index('TOPIX')
-    fundTopix = sqlPlDf.groupby(['advisor', 'TPX']).sum()[['RHAttr', 'YAAttr', 'LRAttr']].loc[(slice(g.reportAdvisor, g.reportAdvisor),slice(None)), :].reset_index().drop('advisor', 1).set_index('TPX')
-    fundTopix = fundTopix.rename(index={'Warehousing  and  Harbor Transpo':'Warehousing  and  Harbor Transport'})
-    topixPl = sqlPlDf.groupby(['advisor', 'TPX', 'side']).sum()[['attribution']].loc[(slice(g.reportAdvisor, g.reportAdvisor),slice(None)),:].unstack()['attribution'].reset_index().drop('advisor', 1).set_index('TPX')
-    topixPl = topixPl.rename(index={'Warehousing  and  Harbor Transpo':'Warehousing  and  Harbor Transport'})
-    topixTable = topixTable.merge(fundTopix, left_index=True, right_index=True).merge(topixPl.fillna(0), left_index=True, right_index=True)
+    topixTable = mergedDf.truncate(after=g.endDate).groupby(["advisor", "TOPIX"]).sum()[['JPYPL']].loc[
+                 (slice(g.reportAdvisor, g.reportAdvisor), slice(None)), :].reset_index().drop('advisor', 1).set_index(
+            'TOPIX')
+    fundTopix = sqlPlDf.groupby(['advisor', 'TPX']).sum()[['RHAttr', 'YAAttr', 'LRAttr']].loc[
+                (slice(g.reportAdvisor, g.reportAdvisor), slice(None)), :].reset_index().drop('advisor', 1).set_index(
+            'TPX')
+    fundTopix = fundTopix.rename(index={'Warehousing  and  Harbor Transpo': 'Warehousing  and  Harbor Transport'})
+    topixPl = sqlPlDf.groupby(['advisor', 'TPX', 'side']).sum()[['attribution']].loc[
+              (slice(g.reportAdvisor, g.reportAdvisor), slice(None)), :].unstack()['attribution'].reset_index().drop(
+            'advisor', 1).set_index('TPX')
+    topixPl = topixPl.rename(index={'Warehousing  and  Harbor Transpo': 'Warehousing  and  Harbor Transport'})
+    topixTable = topixTable.merge(fundTopix, left_index=True, right_index=True).merge(topixPl.fillna(0),
+                                                                                      left_index=True, right_index=True)
     totalTurnOver = topixTable['JPYPL'].sum()
-    topixTable['TO'] = topixTable['JPYPL']/totalTurnOver
+    topixTable['TO'] = topixTable['JPYPL'] / totalTurnOver
 
     topixSeries = topixTable.sum()
     topixSeries.name = 'Total'
     topixTotal = pd.DataFrame(topixSeries).T
     topixTable = pd.concat([topixTable, topixTotal])
-    topixTable['Return'] = (topixTable['L']+topixTable['S'].fillna(0))/topixTable['JPYPL']
+    topixTable['Return'] = (topixTable['L'] + topixTable['S'].fillna(0)) / topixTable['JPYPL']
     topixTable = topixTable[['RHAttr', 'YAAttr', 'LRAttr', 'L', 'S', 'JPYPL', 'TO', 'Return']]
-    topixTable = topixTable.rename(columns={'JPYPL': 'Turnover', 'RHAttr': 'Rockhampton', 'YAAttr': 'Yaraka', 'LRAttr': 'Longreach', 'L':'LongPL', 'S': 'ShortPL', 'TO': 'TO %'})
+    topixTable = topixTable.rename(
+            columns={'JPYPL': 'Turnover', 'RHAttr': 'Rockhampton', 'YAAttr': 'Yaraka', 'LRAttr': 'Longreach',
+                     'L': 'LongPL',
+                     'S': 'ShortPL', 'TO': 'TO %'})
 
     topixTableHtml = topixTable.to_html(index_names=False, formatters=frmt, classes="borderTable")
 
-
-    strategyTable = mergedDf.truncate(after=g.endDate).groupby(["advisor","strategy"]).sum()[['JPYPL']].loc[(slice(g.reportAdvisor, g.reportAdvisor), slice(None)), :].reset_index().drop('advisor', 1).set_index('strategy')
-    fundStrategy = sqlPlDf.groupby(['advisor', 'strategy']).sum()[['RHAttr', 'YAAttr', 'LRAttr']].loc[(slice(g.reportAdvisor, g.reportAdvisor), slice(None)), :].reset_index().drop('advisor', 1).set_index('strategy')
+    strategyTable = mergedDf.truncate(after=g.endDate).groupby(["advisor", "strategy"]).sum()[['JPYPL']].loc[
+                    (slice(g.reportAdvisor, g.reportAdvisor), slice(None)), :].reset_index().drop('advisor',
+                                                                                                  1).set_index(
+            'strategy')
+    fundStrategy = sqlPlDf.groupby(['advisor', 'strategy']).sum()[['RHAttr', 'YAAttr', 'LRAttr']].loc[
+                   (slice(g.reportAdvisor, g.reportAdvisor), slice(None)), :].reset_index().drop('advisor',
+                                                                                                 1).set_index(
+            'strategy')
     fundStrategy = fundStrategy.fillna(0).drop([''])
-    strategyPl = sqlPlDf.groupby(['advisor', 'strategy', 'side']).sum()[['attribution']].loc[(slice(g.reportAdvisor, g.reportAdvisor), slice(None)), :].unstack()['attribution'].reset_index().drop('advisor', 1).set_index('strategy')
+    strategyPl = sqlPlDf.groupby(['advisor', 'strategy', 'side']).sum()[['attribution']].loc[
+                 (slice(g.reportAdvisor, g.reportAdvisor), slice(None)), :].unstack()['attribution'].reset_index().drop(
+            'advisor', 1).set_index('strategy')
     strategyPl = strategyPl.fillna(0).drop([''])
-    strategyTable = strategyTable.merge(fundStrategy,left_index=True, right_index=True).merge(strategyPl, left_index=True, right_index=True)
+    strategyTable = strategyTable.merge(fundStrategy, left_index=True, right_index=True).merge(strategyPl,
+                                                                                               left_index=True,
+                                                                                               right_index=True)
 
     totalStrategyTurnOver = strategyTable['JPYPL'].sum()
-    strategyTable['TO'] = strategyTable['JPYPL']/totalStrategyTurnOver
+    strategyTable['TO'] = strategyTable['JPYPL'] / totalStrategyTurnOver
 
     strategySeries = strategyTable.sum()
     strategySeries.name = 'Total'
     strategyTotal = pd.DataFrame(strategySeries).T
     strategyTable = pd.concat([strategyTable, strategyTotal])
-    strategyTable['Return'] = (strategyTable['L']+strategyTable['S'].fillna(0))/strategyTable['JPYPL']
+    strategyTable['Return'] = (strategyTable['L'] + strategyTable['S'].fillna(0)) / strategyTable['JPYPL']
     strategyTable = strategyTable[['RHAttr', 'YAAttr', 'LRAttr', 'L', 'S', 'JPYPL', 'TO', 'Return']]
-    strategyTable = strategyTable.rename(columns={'JPYPL': 'Turnover', 'RHAttr': 'Rockhampton', 'YAAttr': 'Yaraka', 'LRAttr': 'Longreach', 'L':'LongPL',
-                              'S': 'ShortPL', 'TO': 'TO %'})
-    strategy_table_html = strategyTable.to_html(index_names=False,formatters=frmt, classes="borderTable")
+    strategyTable = strategyTable.rename(
+            columns={'JPYPL': 'Turnover', 'RHAttr': 'Rockhampton', 'YAAttr': 'Yaraka', 'LRAttr': 'Longreach',
+                     'L': 'LongPL',
+                     'S': 'ShortPL', 'TO': 'TO %'})
+    strategy_table_html = strategyTable.to_html(index_names=False, formatters=frmt, classes="borderTable")
 
+    positionTable = mergedDf.truncate(after=g.endDate).groupby(["advisor", "code"]).sum()[['JPYPL']].loc[
+                    (slice(g.reportAdvisor, g.reportAdvisor), slice(None)), :].reset_index().drop('advisor',
+                                                                                                  1).set_index('code')
+    positionPl = sqlPlDf.groupby(['advisor', 'quick', 'name']).sum()[['RHAttr', 'YAAttr', 'LRAttr']].loc[
+                 (slice(g.reportAdvisor, g.reportAdvisor), slice(None)), :].reset_index().drop('advisor', 1).set_index(
+            'quick')
+    sidePl = sqlPlDf.groupby(['advisor', 'quick', 'side']).sum()[['attribution']].loc[
+             (slice(g.reportAdvisor, g.reportAdvisor), slice(None)), :].unstack()['attribution'].reset_index().drop(
+            'advisor', 1).set_index('quick').fillna(0)
+    positionTable = positionTable.merge(positionPl, left_index=True, right_index=True).merge(sidePl, left_index=True,
+                                                                                             right_index=True)
 
-    positionTable = mergedDf.truncate(after=g.endDate).groupby(["advisor","code"]).sum()[['JPYPL']].loc[(slice(g.reportAdvisor, g.reportAdvisor),slice(None)),:].reset_index().drop('advisor',1).set_index('code')
-    positionPl   = sqlPlDf.groupby(['advisor', 'quick', 'name']).sum()[['RHAttr', 'YAAttr', 'LRAttr']].loc[(slice(g.reportAdvisor, g.reportAdvisor),slice(None)),:].reset_index().drop('advisor',1).set_index('quick')
-    sidePl = sqlPlDf.groupby(['advisor','quick','side']).sum()[['attribution']].loc[(slice(g.reportAdvisor, g.reportAdvisor),slice(None)),:].unstack()['attribution'].reset_index().drop('advisor',1).set_index('quick').fillna(0)
-    positionTable = positionTable.merge(positionPl,left_index=True, right_index=True).merge(sidePl, left_index=True, right_index=True)
-    
     totalPositionTurnOver = positionTable['JPYPL'].sum()
-    positionTable['TO'] = positionTable['JPYPL']/totalPositionTurnOver
+    positionTable['TO'] = positionTable['JPYPL'] / totalPositionTurnOver
     positionTable = positionTable.reset_index().set_index(['name']).sort_index().drop('code', 1)
     positionSeries = positionTable.sum()
     positionSeries.name = 'Total'
     positionTotal = pd.DataFrame(positionSeries).T
 
     positionTable = pd.concat([positionTable, positionTotal])
-    positionTable['Return'] = (positionTable['L']+positionTable['S'].fillna(0))/positionTable['JPYPL']
-    positionTable = positionTable[['RHAttr','YAAttr','LRAttr','L','S','JPYPL','TO','Return']]
-    positionTable = positionTable.rename(columns={'JPYPL': 'Turnover', 'RHAttr': 'Rockhampton', 'YAAttr': 'Yaraka', 'LRAttr': 'Longreach', 'L':'LongPL', 'S': 'ShortPL', 'TO': 'TO %'})
-    position_table_html = positionTable.to_html(index_names=False,formatters=frmt, classes="borderTable")
-    app.logger.debug(position_table_html)
+    positionTable['Return'] = (positionTable['L'] + positionTable['S'].fillna(0)) / positionTable['JPYPL']
+    positionTable = positionTable[['RHAttr', 'YAAttr', 'LRAttr', 'L', 'S', 'JPYPL', 'TO', 'Return']]
+    positionTable = positionTable.rename(
+            columns={'JPYPL': 'Turnover', 'RHAttr': 'Rockhampton', 'YAAttr': 'Yaraka', 'LRAttr': 'Longreach',
+                     'L': 'LongPL',
+                     'S': 'ShortPL', 'TO': 'TO %'})
+
+    position_table_csv = positionTable.to_csv()
+    rows = positionTable.to_csv().split('\n')
+    count = 0
+    position_table_html = '<section class="sheet padding-10mm"><table class="dataframe borderTable" border="1">'
+    table_header = '<thead><tr>' + ''.join(['<th>' + h + '</th>' for h in rows[0].split(',')]) + '</tr></thead><tbody>'
+    position_table_html += table_header
+    # TODO: put this into a function with number of rows to roll over a new page as a parameter and return the total number of rows
+    for r in rows[1:]:
+        if (count > 30):
+            position_table_html += '</tbody></table></section><section class="sheet padding-10mm"><table class="dataframe borderTable" border="1">' + table_header
+            count %= 30
+        elif (r != ''):
+            elements = r.split(',')
+            position_table_html += '<tr>' + ''.join(['<th>' + elements[0] + '</th>'] + [
+                '<td>' + '{:.2f}%'.format(float(h) * 100) + '</td>' for h in elements[1:4]] + [
+                                                        '<td>' + '{:,.0f}'.format(float(h)) + '</td>' for h in
+                                                        elements[4:7]] + [
+                                                        '<td>' + '{:.1f}%'.format(float(h)*100) + '</td>' for h in
+                                                        elements[7:]
+                                                        ]) + '</tr>'
+        count += 1
+    position_table_html += '</tbody></table></section>'
+
     render_obj = dict()
-    render_obj['graph_width'] = 700;
-    render_obj['graph_height'] = 250;
-    render_obj['graph_line_width'] = g.lineWidth;
+    render_obj['graph_width'] = 750
+    render_obj['graph_height'] = 240
+    render_obj['graph_line_width'] = g.lineWidth
+    render_obj['margin_left'] = 30
+    render_obj['margin_top']  = 40
+    render_obj['margin_bottom'] = 30
+    render_obj['margin_right'] = 5
+    render_obj['graph_font']  = 'Calibri'
+    render_obj['graph_font_size'] = 10
     render_obj['analyst'] = g.reportAdvisor
     render_obj['index'] = g.indexMapping[g.reportAdvisor]
     render_obj['startDate'] = g.fromDate
@@ -1347,8 +1407,8 @@ def attrib():
     render_obj['lrBpsLong'] = totalFund[totalFund['advisor'] == g.reportAdvisor].sum()['LRAttr']['L'] * 100
     render_obj['lrBpsShort'] = totalFund[totalFund['advisor'] == g.reportAdvisor].sum()['LRAttr']['S'] * 100
     render_obj['exposure_avg_long'] = (
-    exposure_avg[(exposure_avg['advisor'] == g.reportAdvisor) & (exposure_avg['side'] == 'L')].mean() * 100 / aumDf[
-        'Total'].mean()).iloc[0]
+        exposure_avg[(exposure_avg['advisor'] == g.reportAdvisor) & (exposure_avg['side'] == 'L')].mean() * 100 / aumDf[
+            'Total'].mean()).iloc[0]
     render_obj['exposure_avg_short'] = (
         exposure_avg[(exposure_avg['advisor'] == g.reportAdvisor) & (exposure_avg['side'] == 'S')].mean() * 100 / aumDf[
             'Total'].mean()).iloc[0]
@@ -1363,7 +1423,7 @@ def attrib():
     render_obj['names_graph'] = names_graph
     render_obj['gics_table'] = gics_table_html
     render_obj['sector_table'] = sectorTableHtml
-    render_obj['topix_table']  = topixTableHtml
+    render_obj['topix_table'] = topixTableHtml
     render_obj['strategy_table'] = strategy_table_html
     render_obj['position_table'] = position_table_html
 
