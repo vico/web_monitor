@@ -1,145 +1,308 @@
 {% extends "layout.html" %}
 {% block body %}
 <div class=metanav>
-  {% if not session.logged_in %}
-      <a href="{{ url_for('login') }}">log in</a>
-  {% else %}
-      <a href="{{ url_for('logout') }}">log out</a>
-  {% endif %}
-  </div>
+    {% if not session.logged_in %}
+    <a href="{{ url_for('login') }}">log in</a>
+    {% else %}
+    <a href="{{ url_for('logout') }}">log out</a>
+    {% endif %}
+</div>
 <section class="sheet padding-10mm">
 
-<table>
-  <tr>
-    <th>Analyst</th><td><strong>{{params['analyst']}}</strong></td><th>Start</th><td><strong>{{params['startDate']}}</strong></td>
-  </tr>
-  <tr>
-    <td>Index</td><td>{{params['index']}}</td><th>End</th><td><strong>{{params['endDate']}}</strong></td>
-  </tr>
-</table>
+    <table>
+        <tr>
+            <th>Analyst</th>
+            <td><strong>{{params['analyst']}}</strong></td>
+            <th>Start</th>
+            <td><strong>{{params['startDate']}}</strong></td>
+        </tr>
+        <tr>
+            <td>Index</td>
+            <td>{{params['index']}}</td>
+            <th>End</th>
+            <td><strong>{{params['endDate']}}</strong></td>
+        </tr>
+    </table>
 
-<table>
-  <tbody>
-    <tr>
-      <td></td>
-      <td></td>
-      <td>Total</td>
-      <td></td>
-      <td></td>
-      <td></td>
-      <td></td>
-      <td></td>
-      <td></td>
-    </tr>
-    <tr>
-      <td>Long Turnover</td>
-      <td class="number">{{'{:,}'.format(params['longTurnover'])}}</td>
-      <td class="number">{{'{:.1f}%'.format(params['totalLong'])}}</td>
-      <td>Long PL</td>
-      <td class="number">{{'{:,}'.format(params['longPL'])}}</td>
-      <td>Long Topix O/P</td>
-      <td class="number">{{'{:.2f}%'.format(params['longIndexOP'])}}</td>
-      <td>Long Beta O/P</td>
-      <td class="number">{{'{:.2f}%'.format(params['longBetaOP'])}}</td>
-    </tr>
-    <tr>
-      <td>Short Turnover</td>
-      <td class="number">{{'{:,}'.format(params['shortTurnover'])}}</td>
-      <td class="number">{{'{:.1f}%'.format(params['totalShort'])}}</td>
-      <td>Short PL</td>
-      <td class="number">{{'{:,}'.format(params['shortPL'])}}</td>
-      <td>Short Topix O/P</td>
-      <td class="number">{{'{:.2f}%'.format(params['shortIndexOP'])}}</td>
-      <td>Short Beta O/P</td>
-      <td class="number">{{'{:.2f}%'.format(params['shortBetaOP'])}}</td>
-    </tr>
-  </tbody>
-  <tfoot class="overlineTfoot">
-    <tr>
-      <td>Total Turnover</td>
-      <td class="number">{{'{:,}'.format(params['longTurnover']+params['shortTurnover'])}}</td>
-      <td class="number">{{'{:.1f}%'.format((params['totalLong']+params['totalShort'])/2)}}</td>
-      <td>Total PL</td>
-      <td class="number">{{'{:,}'.format(params['longPL']+params['shortPL'])}}</td>
-      <td>Total Topix O/P</td>
-      <td class="number">{{'{:.2f}%'.format(params['longIndexOP']+params['shortIndexOP'])}}</td>
-      <td>Total Beta O/P</td>
-      <td class="number">{{'{:.2f}%'.format(params['longBetaOP']+params['shortBetaOP'])}}</td>
-    </tr>
-  </tfoot>
-</table>
-<table class="inlineTable col-1-3">
-  <thead class="underlineTh">
-    <tr>
-      <td><strong>Exposure</strong></td>
-      <td><strong>AUM</strong></td>
-      <td><strong>Rank</strong></td>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-      <td>Average Long</td>
-      <td class="number">7.5%</td>
-      <td class="number">4</td>
-    </tr>
-    <tr>
-      <td>Average Short</td>
-      <td class="number">7.9%</td>
-      <td class="number">5</td>
-    </tr>
-  </tbody>
-</table>
-<table class="inlineTable col-2-3">
-  <tbody>
-    <tr>
-      <td>Long Return</td>
-      <td class="number">{{'{:.1f}%'.format(params['longReturn'])}}</td>
-    </tr>
-    <tr>
-      <td>Short Return</td>
-      <td class="number">{{'{:.1f}%'.format(params['shortReturn'])}}</td>
-    </tr>
-  </tbody>
-</table>
-<div class="group">
-<table class="inlineTable col-1-3">
-  <caption>Hit Rate</caption>
-  <tbody>
-    <tr>   <td>Long</td>     <td class="number">{{'{:.2f}%'.format(params['longHitRate'])}}</td>     </tr>
-    <tr>   <td>Short</td>    <td class="number">{{'{:.2f}%'.format(params['shortHitRate'])}}</td>     </tr>
-</tbody>
-<tfoot class="overlineTfoot">
-  <tr>    <td>Total</td>   <td class="number">{{'{:.2f}%'.format((params['longHitRate']+params['shortHitRate'])/2)}}</td>  </tr>
-</tfoot><!--
+    <table>
+        <tbody>
+        <tr>
+            <td></td>
+            <td></td>
+            <td>Total</td>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td></td>
+        </tr>
+        <tr>
+            <td>Long Turnover</td>
+            <td class="number">{{'{:,}'.format(params['longTurnover'])}}</td>
+            <td class="number">{{'{:.1f}%'.format(params['totalLong'])}}</td>
+            <td>Long PL</td>
+            <td class="number">{{'{:,}'.format(params['longPL'])}}</td>
+            <td>Long Topix O/P</td>
+            <td class="number">{{'{:.2f}%'.format(params['longIndexOP'])}}</td>
+            <td>Long Beta O/P</td>
+            <td class="number">{{'{:.2f}%'.format(params['longBetaOP'])}}</td>
+        </tr>
+        <tr>
+            <td>Short Turnover</td>
+            <td class="number">{{'{:,}'.format(params['shortTurnover'])}}</td>
+            <td class="number">{{'{:.1f}%'.format(params['totalShort'])}}</td>
+            <td>Short PL</td>
+            <td class="number">{{'{:,}'.format(params['shortPL'])}}</td>
+            <td>Short Topix O/P</td>
+            <td class="number">{{'{:.2f}%'.format(params['shortIndexOP'])}}</td>
+            <td>Short Beta O/P</td>
+            <td class="number">{{'{:.2f}%'.format(params['shortBetaOP'])}}</td>
+        </tr>
+        </tbody>
+        <tfoot class="overlineTfoot">
+        <tr>
+            <td>Total Turnover</td>
+            <td class="number">{{'{:,}'.format(params['longTurnover']+params['shortTurnover'])}}</td>
+            <td class="number">{{'{:.1f}%'.format((params['totalLong']+params['totalShort'])/2)}}</td>
+            <td>Total PL</td>
+            <td class="number">{{'{:,}'.format(params['longPL']+params['shortPL'])}}</td>
+            <td>Total Topix O/P</td>
+            <td class="number">{{'{:.2f}%'.format(params['longIndexOP']+params['shortIndexOP'])}}</td>
+            <td>Total Beta O/P</td>
+            <td class="number">{{'{:.2f}%'.format(params['longBetaOP']+params['shortBetaOP'])}}</td>
+        </tr>
+        </tfoot>
+    </table>
+    <table class="inlineTable col-1-3">
+        <thead class="underlineTh">
+        <tr>
+            <td><strong>Exposure</strong></td>
+            <td><strong>AUM</strong></td>
+            <td><strong>Rank</strong></td>
+        </tr>
+        </thead>
+        <tbody>
+        <tr>
+            <td>Average Long</td>
+            <td class="number">{{'{:.1f}%'.format(params['exposure_avg_long'])}}</td>
+            <td class="number">{{'{:.0f}'.format(params['rank_long'])}}</td>
+        </tr>
+        <tr>
+            <td>Average Short</td>
+            <td class="number">{{'{:.1f}%'.format(params['exposure_avg_short'])}}</td>
+            <td class="number">{{'{:.0f}'.format(params['rank_short'])}}</td>
+        </tr>
+        </tbody>
+    </table>
+    <table class="inlineTable col-2-3">
+        <tbody>
+        <tr>
+            <td>Long Return</td>
+            <td class="number">{{'{:.1f}%'.format(params['longReturn'])}}</td>
+        </tr>
+        <tr>
+            <td>Short Return</td>
+            <td class="number">{{'{:.1f}%'.format(params['shortReturn'])}}</td>
+        </tr>
+        </tbody>
+    </table>
+    <div class="group">
+        <table class="inlineTable col-1-3">
+            <caption>Hit Rate</caption>
+            <tbody>
+            <tr>
+                <td>Long</td>
+                <td class="number">{{'{:.2f}%'.format(params['longHitRate'])}}</td>
+            </tr>
+            <tr>
+                <td>Short</td>
+                <td class="number">{{'{:.2f}%'.format(params['shortHitRate'])}}</td>
+            </tr>
+            </tbody>
+            <tfoot class="overlineTfoot">
+            <tr>
+                <td>Total</td>
+                <td class="number">{{'{:.2f}%'.format((params['longHitRate']+params['shortHitRate'])/2)}}</td>
+            </tr>
+            </tfoot><!--
 --></table>
-<table class="inlineTable borderTable col-2-3">
-  <caption>Total Fund PL in Bps</caption>
-  <thead>
-    <tr> <th>Fund</th>  <th>Long</th>  <th>Short</th>  <th>Grand Total</th> </tr>
-  </thead>
-  <tbody>
-    <tr> <td>Rockhampton</td>  <td class="number">0.37%</td>  <td class="number">0.32%</td> <td class="number">0.72%</td>  </tr>
-    <tr> <td>Yaraka</td>  <td class="number">0.37%</td>  <td class="number">0.32%</td> <td class="number">0.72%</td>  </tr>
-    <tr> <td>LongReach</td> <td class="number">0.37%</td>  <td class="number">0.32%</td> <td class="number">0.72%</td>  </tr>
-  </tbody>
-</table>
-</div>
-<div id="plGraph" style="width:750px;height:400;"></div>
+        <table class="inlineTable borderTable col-2-3">
+            <caption>Total Fund PL in Bps</caption>
+            <thead>
+            <tr>
+                <th>Fund</th>
+                <th>Long</th>
+                <th>Short</th>
+                <th>Grand Total</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr>
+                <td>Rockhampton</td>
+                <td class="number">{{'{:.2f}%'.format(params['rhBpsLong'])}}</td>
+                <td class="number">{{'{:.2f}%'.format(params['rhBpsShort'])}}</td>
+                <td class="number">{{'{:.2f}%'.format(params['rhBpsLong']+params['rhBpsShort'])}}</td>
+            </tr>
+            <tr>
+                <td>Yaraka</td>
+                <td class="number">{{'{:.2f}%'.format(params['yaBpsLong'])}}</td>
+                <td class="number">{{'{:.2f}%'.format(params['yaBpsShort'])}}</td>
+                <td class="number">{{'{:.2f}%'.format(params['yaBpsLong']+params['yaBpsShort'])}}</td>
+            </tr>
+            <tr>
+                <td>LongReach</td>
+                <td class="number">{{'{:.2f}%'.format(params['lrBpsLong'])}}</td>
+                <td class="number">{{'{:.2f}%'.format(params['lrBpsShort'])}}</td>
+                <td class="number">{{'{:.2f}%'.format(params['lrBpsLong']+params['lrBpsShort'])}}</td>
+            </tr>
+            </tbody>
+        </table>
+    </div>
 
-<script>
+    <div id="plGraph" style="width:{{params['graph_width']}};height:{{params['graph_height']}};"></div>
+    <div id="netopGraph" style="width:{{params['graph_width']}};height:{{params['graph_height']}};"></div>
+    <div id="betaopGraph" style="width:{{params['graph_width']}};height:{{params['graph_height']}};"></div>
+</section>
+<section class="sheet padding-10mm">
+
+
+    <div id="exposureGraph" style="width:{{params['graph_width']}};height:{{params['graph_height']}};"></div>
+    <div id="opGraph" style="width:{{params['graph_width']}};height:{{params['graph_height']}};"></div>
+    <div id="grossExposureGraph" style="width:{{params['graph_width']}};height:{{params['graph_height']}};"></div>
+    <div id="shortExposureGraph" style="width:{{params['graph_width']}};height:{{params['graph_height']}};"></div>
+</section>
+<section class="sheet padding-10mm">
+
+    <div id="namesGraph" style="width:{{params['graph_width']}};height:{{params['graph_height']}};"></div>
+
+    {{params['gics_table'] | safe }}
+    {{params['sector_table'] | safe }}
+    {{params['topix_table'] | safe }}
+</section>
+<section class="sheet padding-10mm">
+    {{params['strategy_table'] | safe}}
+
+</section>
+<section class="sheet padding-10mm">
+    {{params['position_table'] | safe }}
+</section>
+
+    <script>
   TESTER = document.getElementById('plGraph');
   Plotly.plot( TESTER, [
-    {% for col in csAttrDf['columns'] %}
+    {% for col in pl_graph['columns'] %}
       {
-        x: {{csAttrDf.index | safe}},
-        y: {{csAttrDf['columns'][col] | safe }},
+        x: {{pl_graph.index | safe}},
+        y: {{pl_graph['columns'][col] | safe }},
         name: '{{col + ' PL' }}',
-        line: { width: 3 }
+        line: { width: {{params['graph_line_width']}} }
+      },
+    {% endfor %}
+      {
+        x: {{pl_graph.index | safe}},
+        y: {{pl_graph.market | safe }},
+        name: 'Index',
+        fill: 'tozeroy',
+        line: { width: 0}
+     }
+  ], {
+  margin: { t: 0 },
+   width: {{params['graph_width']}},
+   height: {{params['graph_height']}}
+   } );
+
+  netopGraph = document.getElementById('netopGraph');
+  Plotly.plot( netopGraph, [
+    {% for col in params['netop_graph']['columns'] %}
+      {
+        x: {{params['netop_graph'].index | safe}},
+        y: {{params['netop_graph']['columns'][col] | safe }},
+        name: '{{col + ' Net OP' }}',
+        line: { width: {{params['graph_line_width']}} }
       },
     {% endfor %}
   ], {
-  margin: { t: 0 } } );
-</script>
-  {{params['test']}}
-</section>
+  margin: { t: 0 },
+   width: {{params['graph_width']}},
+   height: {{params['graph_height']}}
+   } );
+
+  betaopGraph = document.getElementById('betaopGraph');
+  Plotly.plot( betaopGraph, [
+    {% for col in params['betaop_graph']['columns'] %}
+      {
+        x: {{params['betaop_graph'].index | safe}},
+        y: {{params['betaop_graph']['columns'][col] | safe }},
+        name: '{{col + ' Beta OP' }}',
+        line: { width: {{params['graph_line_width']}} }
+      },
+    {% endfor %}
+  ], {
+  margin: { t: 0 },
+   width: {{params['graph_width']}},
+   height: {{params['graph_height']}}
+   } );
+
+
+   exposureGraph = document.getElementById('exposureGraph');
+  Plotly.plot( exposureGraph, [
+    {% for col in params['exposure_graph']['columns'] %}
+      {
+        x: {{params['exposure_graph'].index | safe}},
+        y: {{params['exposure_graph']['columns'][col] | safe }},
+        name: '{{ 'Long Exposure' if (col == 'L') else 'Short Exposure' }}',
+        line: { width: {{params['graph_line_width']}} }
+      },
+    {% endfor %}
+  ], {
+  margin: { t: 0 },
+   width: {{params['graph_width']}},
+   height: {{params['graph_height']}}
+   } );
+
+
+   opGraph = document.getElementById('opGraph');
+  Plotly.plot( opGraph, [
+    {% for col in params['op_graph']['columns'] %}
+      {
+        x: {{params['op_graph'].index | safe}},
+        y: {{params['op_graph']['columns'][col] | safe }},
+        name: '{{ col }}',
+        type: 'bar'
+      },
+    {% endfor %}
+  ], {
+  margin: { t: 0 },
+   width: {{params['graph_width']}},
+   height: {{params['graph_height']}}
+   } );
+
+    grossExposureGraph = document.getElementById('grossExposureGraph');
+  Plotly.plot( grossExposureGraph, {{params['gross_exposure_graph'] | safe}} , {
+  margin: { t: 0 },
+   width: {{params['graph_width']}},
+   height: {{params['graph_height']}},
+   title: 'Gross Exposure',
+   } );
+
+   shortExposureGraph = document.getElementById('shortExposureGraph');
+  Plotly.plot( shortExposureGraph, {{params['short_exposure_graph'] | safe}} , {
+  margin: { t: 0 },
+   width: {{params['graph_width']}},
+   height: {{params['graph_height']}},
+   title: 'Short Exposure (As a Percent of all non-index short exposure)'
+   } );
+
+   namesGraph = document.getElementById('namesGraph');
+  Plotly.plot( namesGraph, {{params['names_graph'] | safe}} , {
+  margin: { t: 0 },
+   width: {{params['graph_width']}},
+   height: {{params['graph_height']}},
+   title: 'Number of Names'
+   } );
+
+
+
+    </script>
 {% endblock %}
