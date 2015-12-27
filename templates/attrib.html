@@ -223,7 +223,10 @@
   ], {
    margin: { t: 0,b:15,l:{{params['margin_left']}},r:{{params['margin_right']}} },
    width: {{params['graph_width']}},
-   height: {{params['graph_height']}}
+   height: {{params['graph_height']}},
+   yaxis: {
+     ticksuffix: '%'
+   }
    } );
 
   betaopGraph = document.getElementById('betaopGraph');
@@ -239,7 +242,10 @@
   ], {
    margin: { t: 0,b:15,l:{{params['margin_left']}},r:{{params['margin_right']}} },
    width: {{params['graph_width']}},
-   height: {{params['graph_height']}}
+   height: {{params['graph_height']}},
+   yaxis: {
+     ticksuffix: '%'
+   }
    } );
 
 
@@ -273,7 +279,10 @@
   ], {
    margin: { t: {{params['margin_top']}},b:{{params['margin_bottom']}},l:{{params['margin_left']}},r:{{params['margin_right']}} },
    width: {{params['graph_width']}},
-   height: {{params['graph_height']}}
+   height: {{params['graph_height']}},
+   yaxis: {
+     ticksuffix: '%'
+   }
    } );
 
     grossExposureGraph = document.getElementById('grossExposureGraph');
@@ -282,6 +291,9 @@
    width: {{params['graph_width']}},
    height: {{params['graph_height']}},
    title: 'Gross Exposure',
+   yaxis: {
+     ticksuffix: '%'
+   }
    } );
 
    shortExposureGraph = document.getElementById('shortExposureGraph');
@@ -289,7 +301,10 @@
    margin: { t: {{params['margin_top']}},b:{{params['margin_bottom']}},l:{{params['margin_left']}},r:{{params['margin_right']}} },
    width: {{params['graph_width']}},
    height: {{params['graph_height']}},
-   title: 'Short Exposure (As a Percent of all non-index short exposure)'
+   title: 'Short Exposure (As a Percent of all non-index short exposure)',
+   yaxis: {
+     ticksuffix: '%'
+   }
    } );
 
    namesGraph = document.getElementById('namesGraph');
