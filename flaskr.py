@@ -143,32 +143,35 @@ def attrib():
     sqlFxDf = DataFrame(avgRate, index=avgRate['base'])
 
     # there is some trades on 2014/12/31 both long and short sides, which is not in database table
-    sqlTurnoverDf = sql.read_sql('''#A15_Turnover
+    sqlTurnoverDf = sql.read_sql('''
         SELECT aa.tradeDate, aa.code,
         aa.currencyCode, aa.side,
         ABS(Notl) AS Turnover, e.advisor, e.strategy, e.sector,
         f.value AS GICS,
-        IF(g.value IS NOT NULL, g.value, 'Non-Japan') AS TOPIX
+        IF(g.value IS NOT NULL, g.value, 'Non-Japan') AS TOPIX,
+        aa.firstTradeDate
         FROM (
         SELECT b.code,
         d.currencyCode,
         b.side,
-        IF(orderType="B",1,-1)*quantity AS Qty,
-        IF(orderType="B",-1,1)*net AS Notl,
+        IF(orderType="B",1,-1)*b.quantity AS Qty,
+        IF(orderType="B",-1,1)*b.net AS Notl,
         MAX(a.adviseDate) AS `MaxOfDate`,
         b.reconcileID,
         b.tradeDate,
         b.equityType,
         c.instrumentType,
         c.instrumentID,
-        b.orderType
+        b.orderType,
+        IF (z.side='L', firstTradeDateLong, firstTradeDateShort) AS firstTradeDate
         FROM t08AdvisorTag a
         INNER JOIN t08Reconcile b ON a.code = b.code
         INNER JOIN t01Instrument c ON (b.equityType = c.instrumentType) AND (b.code = c.quick)
         INNER JOIN t02Currency d ON c.currencyID = d.currencyID
+        LEFT JOIN t05PortfolioResponsibilities z ON z.instrumentID = c.instrumentID AND z.processDate = b.processDate
         WHERE a.adviseDate<= b.processDate
-    AND b.processDate >= '%s' # Grab Analyst Trades start date
-      AND b.equityType<>"OP"
+            AND b.processDate >= '%s' AND b.processDate < '%s' # Grab Analyst Trades start date
+            AND b.equityType<>"OP"
         AND b.srcFlag="K"
         GROUP BY c.instrumentID, b.tradeDate, b.orderType, b.reconcileID, b.side, Qty, Notl, b.code
         ORDER BY b.code
@@ -179,7 +182,7 @@ def attrib():
         WHERE (aa.side="L" AND aa.orderType="B") OR (aa.side="S" AND aa.orderType="S")
         ORDER BY aa.tradeDate
         ;
-         ''' % g.fromDate, g.con, parse_dates=['tradeDate'], coerce_float=True, index_col='tradeDate')
+         ''' % (g.fromDate, g.endDate), g.con, parse_dates=['tradeDate'], coerce_float=True, index_col='tradeDate')
 
     df20141231 = pd.read_csv('turnover20141231.csv', index_col=0, parse_dates=0)
 
@@ -255,11 +258,11 @@ def attrib():
     sqlPlDf = sql.read_sql('''SELECT processDate,advisor, side, quick, attribution,
                           RHAttribution AS RHAttr,
                           YAAttribution AS YAAttr,
-                          LRAttribution AS LRAttr, GICS, TPX,strategy
+                          LRAttribution AS LRAttr, GICS, TPX,strategy, firstTradeDateLong, firstTradeDateShort
                           FROM `t05PortfolioResponsibilities`
                           WHERE processDate >= '%s' AND processDate < '%s'
-                          AND quick NOT LIKE "*DIV"
-                            AND quick NOT LIKE "FX*"
+                          AND quick NOT LIKE "DIV%%"
+                            AND quick NOT LIKE "FX%%"
                           AND advisor <> ''
                           ;''' % (g.fromDate, g.endDate), g.con, coerce_float=True,
                            parse_dates=['processDate'])  # ,index_col = 'processDate')
@@ -397,6 +400,55 @@ def attrib():
 
                        }
                    } for col in names_df.index.levels[1] if not col in g.dropList]
+    firstTradeDate = np.where(sqlPlDf['side'] == 'L',sqlPlDf['firstTradeDateLong'],sqlPlDf['firstTradeDateShort'])
+
+    marketCapDf = pd.read_csv('marketCap.csv',index_col=0, dtype= { 'FirstTrade': str}).fillna('')
+    marketCapDf['FirstTrade'] = marketCapDf['FirstTrade'].map(lambda x: datetime.strptime(x, '%d-%b-%y').strftime('%Y-%m-%d') if (x != '') else x)
+
+    positionDf = sqlPlDf.groupby(['quick',firstTradeDate,'advisor','side','strategy']).sum()
+    positionDf.index.names = [u'quick', 'tradedate', u'advisor', u'side', u'strategy']
+    positionDf = positionDf.reset_index()
+
+    positionDf['tradedate'] = positionDf['tradedate'].map(lambda x: x.strftime('%Y-%m-%d'))
+
+    positionDf = positionDf.merge(marketCapDf,left_on=['quick','side','tradedate'], right_on=['quick','side','FirstTrade'], how='inner').drop_duplicates()
+
+    # attribution for each fund: number is correct
+    fundScale = positionDf.groupby(['advisor','Cap']).sum()[['RHAttr','YAAttr','LRAttr']].loc[(slice(g.reportAdvisor, g.reportAdvisor),slice(None)),:].reset_index().drop('advisor',1).set_index('Cap')
+    # pl for each side
+    scalePl = positionDf.groupby(['advisor','Cap','side']).sum()[['attribution']].loc[(slice(g.reportAdvisor, g.reportAdvisor),slice(None)),:].unstack()['attribution'].reset_index().drop('advisor',1).set_index('Cap').fillna(0)
+
+    # try to assign cap to each trade turnover as Micro,.., Large
+    scaleTable = turnover_merged_df.truncate(after=g.endDate).reset_index()
+    #app.logger.debug(scaleTable)
+    scaleTable['firstTradeDate'] = scaleTable['firstTradeDate'].map(lambda x: x if (type(x) is str) else x.strftime('%Y-%m-%d'))
+
+    sizeTable = scaleTable.merge(marketCapDf, left_on=['code', 'firstTradeDate'], right_on = ['quick', 'FirstTrade'], how='left').drop_duplicates()
+
+    sizeTurnover = sizeTable.groupby(["advisor","Cap"]).sum()[['JPYPL']].loc[(slice(g.reportAdvisor, g.reportAdvisor),slice(None)),:].reset_index().drop('advisor',1).set_index('Cap')
+    sizeTurnover = sizeTurnover.merge(fundScale,left_index=True, right_index=True).merge(scalePl, left_index=True, right_index=True)
+    totalTurnOver = sizeTurnover['JPYPL'].sum()
+    sizeTurnover['TO'] = sizeTurnover['JPYPL']/totalTurnOver
+    percent_fmt = lambda x : '{:.2f}%'.format(x*100)
+    percent1_fmt = lambda x : '{:.1f}%'.format(x*100)
+    money_fmt = lambda x : '{:,.0f}'.format(x)
+
+    sizeTurnover = sizeTurnover.reindex(['Micro', 'Small', 'Mid', 'Large', 'Mega', 'Index'], fill_value=0)
+    totalSeries = sizeTurnover.sum()
+    totalSeries.name = 'Total'
+    scaleTotal = pd.DataFrame(totalSeries).T
+    scaleTable = pd.concat([sizeTurnover, scaleTotal])
+    scaleTable['Return'] = (scaleTable['L']+scaleTable['S'])/scaleTable['JPYPL']
+    scaleTable['Return'].fillna(0, inplace=True)
+    scaleTable = scaleTable[['RHAttr','YAAttr','LRAttr','L','S','JPYPL','TO','Return']]
+
+    scaleTable = scaleTable.rename(columns={'JPYPL': 'Turnover', 'RHAttr': 'Rockhampton', 'YAAttr': 'Yaraka', 'LRAttr': 'Longreach', 'L':'LongPL',
+                              'S': 'ShortPL', 'TO': 'TO %'})
+    frmt_map = {'LongPL':money_fmt,'ShortPL':money_fmt, 'Turnover': money_fmt,'Rockhampton':percent_fmt, 'Yaraka': percent_fmt, 'Longreach':percent_fmt,
+                'TO %': percent1_fmt, 'Return': percent1_fmt}
+    frmt = {col:frmt_map[col] for col in scaleTable.columns if col in frmt_map.keys()}
+
+    scale_table_html = scaleTable.reset_index().to_html(index_names=False, formatters=frmt, classes="borderTable", index=False)
 
     gicsTable = turnover_merged_df.truncate(after=g.endDate).groupby(["advisor", "GICS"]).sum()[['JPYPL']].loc[
                 (slice(g.reportAdvisor, g.reportAdvisor), slice(None)), :].reset_index().drop('advisor', 1).set_index(
@@ -413,9 +465,6 @@ def attrib():
     totalTurnOver = gicsTable['JPYPL'].sum()
     gicsTable['TO'] = gicsTable['JPYPL'] / totalTurnOver
 
-    percent_fmt = lambda x: '{:.2f}%'.format(x * 100)
-    percent1_fmt = lambda x: '{:.1f}%'.format(x * 100)
-    money_fmt = lambda x: '{:,.0f}'.format(x)
     frmt_map = {'LongPL': money_fmt, 'ShortPL': money_fmt, 'Turnover': money_fmt, 'Rockhampton': percent_fmt,
                 'Yaraka': percent_fmt, 'Longreach': percent_fmt, 'TO %': percent1_fmt, 'Return': percent1_fmt}
 
@@ -430,7 +479,7 @@ def attrib():
                      'L': 'LongPL',
                      'S': 'ShortPL', 'TO': 'TO %'})
     frmt = {col: frmt_map[col] for col in gicsTable.columns if col in frmt_map.keys()}
-    gics_table_html = gicsTable.to_html(index_names=False, formatters=frmt, classes="borderTable")
+    gics_table_html = gicsTable.reset_index().to_html(index_names=False, formatters=frmt, classes="borderTable", index=False)
 
     codeBetaDf['code'] = codeBetaDf[['code']].applymap(str.upper)[
         'code']  # some code has inconsistent format like xxxx Hk instead of HK
@@ -468,7 +517,7 @@ def attrib():
             columns={'JPYPL': 'Turnover', 'RHAttr': 'Rockhampton', 'YAAttr': 'Yaraka', 'LRAttr': 'Longreach',
                      'L': 'LongPL',
                      'S': 'ShortPL', 'TO': 'TO %'})
-    sectorTableHtml = sectorTable.to_html(index_names=False, formatters=frmt, classes="borderTable")
+    sectorTableHtml = sectorTable.reset_index().to_html(index_names=False, formatters=frmt, classes="borderTable", index=False)
 
     topixTable = turnover_merged_df.truncate(after=g.endDate).groupby(["advisor", "TOPIX"]).sum()[['JPYPL']].loc[
                  (slice(g.reportAdvisor, g.reportAdvisor), slice(None)), :].reset_index().drop('advisor', 1).set_index(
@@ -497,7 +546,7 @@ def attrib():
                      'L': 'LongPL',
                      'S': 'ShortPL', 'TO': 'TO %'})
 
-    topixTableHtml = topixTable.to_html(index_names=False, formatters=frmt, classes="borderTable")
+    topixTableHtml = topixTable.reset_index().to_html(index_names=False, formatters=frmt, classes="borderTable", index=False)
 
     strategyTable = turnover_merged_df.truncate(after=g.endDate).groupby(["advisor", "strategy"]).sum()[['JPYPL']].loc[
                     (slice(g.reportAdvisor, g.reportAdvisor), slice(None)), :].reset_index().drop('advisor',
@@ -529,7 +578,7 @@ def attrib():
             columns={'JPYPL': 'Turnover', 'RHAttr': 'Rockhampton', 'YAAttr': 'Yaraka', 'LRAttr': 'Longreach',
                      'L': 'LongPL',
                      'S': 'ShortPL', 'TO': 'TO %'})
-    strategy_table_html = strategyTable.to_html(index_names=False, formatters=frmt, classes="borderTable")
+    strategy_table_html = strategyTable.reset_index().to_html(index_names=False, formatters=frmt, classes="borderTable", index=False)
 
     positionTable = turnover_merged_df.truncate(after=g.endDate).groupby(["advisor", "code"]).sum()[['JPYPL']].loc[
                     (slice(g.reportAdvisor, g.reportAdvisor), slice(None)), :].reset_index().drop('advisor',
@@ -558,7 +607,6 @@ def attrib():
                      'L': 'LongPL',
                      'S': 'ShortPL', 'TO': 'TO %'})
 
-    position_table_csv = positionTable.to_csv()
     rows = positionTable.to_csv().split('\n')
     count = 0
     position_table_html = '<section class="sheet padding-10mm"><table class="dataframe borderTable" border="1">'
@@ -632,13 +680,14 @@ def attrib():
     render_obj['gross_exposure_graph'] = gross_exposure_graph
     render_obj['short_exposure_graph'] = short_exposure_graph
     render_obj['names_graph'] = names_graph
+    render_obj['scale_table'] = scale_table_html
     render_obj['gics_table'] = gics_table_html
     render_obj['sector_table'] = sectorTableHtml
     render_obj['topix_table'] = topixTableHtml
     render_obj['strategy_table'] = strategy_table_html
     render_obj['position_table'] = position_table_html
 
-    # renderObj['test'] = long_short_return
+    #render_obj['test'] = scaleTable
 
     return render_template('attrib.html', params=render_obj, pl_graph=pl_graph)
 
@@ -662,4 +711,5 @@ def logout():
 
 # default port 5000
 if __name__ == '__main__':
+    app.debug = True
     app.run(host='0.0.0.0')

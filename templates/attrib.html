@@ -173,7 +173,7 @@
 <section class="sheet padding-10mm">
 
     <div id="namesGraph" style="width:{{params['graph_width']}};height:{{params['graph_height']}};"></div>
-
+    {{params['scale_table'] | safe }}
     {{params['gics_table'] | safe }}
     {{params['sector_table'] | safe }}
     {{params['topix_table'] | safe }}
