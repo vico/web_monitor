@@ -8,20 +8,29 @@
     {% endif %}
 </div>
 <section class="sheet padding-10mm">
-
+    <form action="/attrib" method="GET">
     <table>
         <tr>
             <th>Analyst</th>
-            <td><strong>{{params['analyst']}}</strong></td>
+            <td><strong><select onchange="this.form.submit()" name="analyst">
+                {% for analyst in params['analyst_list'] %}
+                    {% if analyst is equalto params['analyst'] %}
+                        <option value="{{analyst}}" selected>{{analyst}}</option>
+                    {% else %}
+                        <option value="{{analyst}}">{{analyst}}</option>
+                    {% endif %}
+                {% endfor %}
+                </select>
+            </strong></td>
             <td>Index</td>
             <td>{{params['index']}}</td>
             <th>Start</th>
-            <td><strong>{{params['startDate']}}</strong></td>
+            <td><strong><input type="date" value="{{params['startDate']}}" min="2014-12-31"  name="startDate"></strong></td>
             <th>End</th>
-            <td><strong>{{params['endDate']}}</strong></td>
+            <td><strong><input type="date" value="{{params['endDate']}}" name="endDate" onchange="this.form.submit()"></strong></td>
         </tr>
     </table>
-
+    </form>
     <table>
         <tbody>
         <tr>
@@ -173,96 +182,46 @@
 <section class="sheet padding-10mm">
 
     <div id="namesGraph" style="width:{{params['graph_width']}};height:{{params['graph_height']}};"></div>
-    {{params['scale_table'] | safe }}
-    {{params['gics_table'] | safe }}
-    {{params['sector_table'] | safe }}
-    {{params['topix_table'] | safe }}
-</section>
-<section class="sheet padding-10mm">
-    {{params['strategy_table'] | safe}}
+    {{params['tables_html'] | safe }}
 
-</section>
 
-    {{params['position_table'] | safe }}
 
 
     <script>
-  TESTER = document.getElementById('plGraph');
-  Plotly.plot( TESTER, [
-    {% for col in pl_graph['columns'] %}
-      {
-        x: {{pl_graph.index | safe}},
-        y: {{pl_graph['columns'][col] | safe }},
-        name: '{{col + ' PL' }}',
-        line: { width: {{params['graph_line_width']}} }
-      },
-    {% endfor %}
-      {
-        x: {{pl_graph.index | safe}},
-        y: {{pl_graph.market | safe }},
-        name: 'Index',
-        fill: 'tozeroy',
-        line: { width: 0}
-     }
-  ], {
-   margin: { t: 0,b:15,l:{{params['margin_left']}},r:{{params['margin_right']}} },
-   width: {{params['graph_width']}},
-   height: {{params['graph_height']}}
-   } );
-
-  netopGraph = document.getElementById('netopGraph');
-  Plotly.plot( netopGraph, [
-    {% for col in params['netop_graph']['columns'] %}
-      {
-        x: {{params['netop_graph'].index | safe}},
-        y: {{params['netop_graph']['columns'][col] | safe }},
-        name: '{{col + ' Net OP' }}',
-        line: { width: {{params['graph_line_width']}} }
-      },
-    {% endfor %}
-  ], {
-   margin: { t: 0,b:15,l:{{params['margin_left']}},r:{{params['margin_right']}} },
+  plGraph = document.getElementById('plGraph');
+  Plotly.plot( plGraph, {{params['pl_graph'] | safe}} , {
+   margin: { t: {{params['margin_top']}},b:{{params['margin_bottom']}},l:{{params['margin_left']}},r:{{params['margin_right']}} },
    width: {{params['graph_width']}},
    height: {{params['graph_height']}},
-   yaxis: {
-     ticksuffix: '%'
-   }
+   } );
+
+
+  netopGraph = document.getElementById('netopGraph');
+  Plotly.plot( netopGraph, {{params['netop_graph'] | safe}} , {
+        margin: { t: 0,b:15,l:{{params['margin_left']}},r:{{params['margin_right']}} },
+        width: {{params['graph_width']}},
+        height: {{params['graph_height']}},
+        yaxis: {
+         ticksuffix: '%'
+        }
    } );
 
   betaopGraph = document.getElementById('betaopGraph');
-  Plotly.plot( betaopGraph, [
-    {% for col in params['betaop_graph']['columns'] %}
-      {
-        x: {{params['betaop_graph'].index | safe}},
-        y: {{params['betaop_graph']['columns'][col] | safe }},
-        name: '{{col + ' Beta OP' }}',
-        line: { width: {{params['graph_line_width']}} }
-      },
-    {% endfor %}
-  ], {
-   margin: { t: 0,b:15,l:{{params['margin_left']}},r:{{params['margin_right']}} },
-   width: {{params['graph_width']}},
-   height: {{params['graph_height']}},
-   yaxis: {
-     ticksuffix: '%'
-   }
+  Plotly.plot( betaopGraph, {{params['betaop_graph'] | safe}} , {
+       margin: { t: 0,b:15,l:{{params['margin_left']}},r:{{params['margin_right']}} },
+       width: {{params['graph_width']}},
+       height: {{params['graph_height']}},
+       yaxis: {
+         ticksuffix: '%'
+       }
    } );
 
 
    exposureGraph = document.getElementById('exposureGraph');
-  Plotly.plot( exposureGraph, [
-    {% for col in params['exposure_graph']['columns'] %}
-      {
-        x: {{params['exposure_graph'].index | safe}},
-        y: {{params['exposure_graph']['columns'][col] | safe }},
-        name: '{{ 'Long Exposure' if (col == 'L') else 'Short Exposure' }}',
-        line: { width: {{params['graph_line_width']}} }
-      },
-    {% endfor %}
-  ], {
-   margin: { t: {{params['margin_top']}},b:{{params['margin_bottom']}},l:{{params['margin_left']}},r:{{params['margin_right']}} },
-   width: {{params['graph_width']}},
-   height: {{params['graph_height']}}
+  Plotly.plot( exposureGraph, {{params['exposure_graph'] | safe}} , {
+       margin: { t: {{params['margin_top']}},b:{{params['margin_bottom']}},l:{{params['margin_left']}},r:{{params['margin_right']}} },
+       width: {{params['graph_width']}},
+       height: {{params['graph_height']}}
    } );
 
 
