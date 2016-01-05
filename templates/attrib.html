@@ -1,12 +1,5 @@
 {% extends "layout.html" %}
 {% block body %}
-<div class=metanav>
-    {% if not session.logged_in %}
-    <a href="{{ url_for('login') }}">log in</a>
-    {% else %}
-    <a href="{{ url_for('logout') }}">log out</a>
-    {% endif %}
-</div>
 <section class="sheet padding-10mm">
     <form action="/attrib" method="GET">
     <table>

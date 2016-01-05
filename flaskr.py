@@ -8,9 +8,7 @@ from werkzeug.contrib.cache import SimpleCache
 import pandas as pd
 from pandas import DataFrame
 from pandas.io import sql
-from pandas.tseries.offsets import *
 import numpy as np
-from numpy.random import randn
 import pymysql
 from datetime import datetime, timedelta
 from decimal import *
@@ -21,7 +19,7 @@ DEBUG = True
 SECRET_KEY = 'development key'
 USERNAME = 'admin'
 PASSWORD = 'default'
-TIMEOUT  = 5*60
+TIMEOUT = 5 * 60
 NUMBER_OF_ROW_PER_PAGE = 41
 NUMBER_OF_TOP_POSITIONS = 8
 
@@ -59,7 +57,8 @@ def break_into_page(df, start_new_page=True, finalize_last_page=True,
     rows = df.to_csv().split('\n')
     if start_new_page:
         table_html = '</section><section class="sheet padding-10mm">'
-    table_header = ('<table %s><thead><tr>' % style) + ''.join(['<th>' + h + '</th>' for h in rows[0].split(',')]) + '</tr></thead>'
+    table_header = ('<table %s><thead><tr>' % style) + ''.join(
+            ['<th>' + h + '</th>' for h in rows[0].split(',')]) + '</tr></thead>'
     if table_caption != '':
         table_header += '<caption>' + table_caption + '</caption><tbody>'
     else:
@@ -70,12 +69,14 @@ def break_into_page(df, start_new_page=True, finalize_last_page=True,
     total_rows = 1
     for r in rows[1:]:
         if is_first_page and count > number_of_row_to_break_first_page and r != '':
-            table_html += ('</tbody></table></section><section class="sheet padding-10mm"><table %s>' % style) + table_header
+            table_html += (
+                          '</tbody></table></section><section class="sheet padding-10mm"><table %s>' % style) + table_header
             count = 0
             total_rows += 1
             is_first_page = False
         elif count > NUMBER_OF_ROW_PER_PAGE and r != '':
-            table_html += ('</tbody></table></section><section class="sheet padding-10mm"><table %s>' % style) + table_header
+            table_html += (
+                          '</tbody></table></section><section class="sheet padding-10mm"><table %s>' % style) + table_header
             count = 0
             total_rows += 1
         if (r != ''):
@@ -83,14 +84,16 @@ def break_into_page(df, start_new_page=True, finalize_last_page=True,
             if table_type == 'summary':
                 table_html += '<tr>' + ''.join(['<th>' + elements[0] + '</th>'] + [
                     '<td>' + '{:.2f}%'.format(float(h) * 100) + '</td>' for h in elements[1:4]] + [
-                                               '<td>' + '{:,.0f}'.format(float(h)) + '</td>' for h in elements[4:7]] + [
-                                               '<td>' + '{:.1f}%'.format(float(h) * 100) + '</td>' for h in elements[7:]
-                                               ]) + '</tr>'
+                                                   '<td>' + '{:,.0f}'.format(float(h)) + '</td>' for h in
+                                                   elements[4:7]] + [
+                                                   '<td>' + '{:.1f}%'.format(float(h) * 100) + '</td>' for h in
+                                                   elements[7:]
+                                                   ]) + '</tr>'
             elif table_type == 'ranking':
                 table_html += '<tr>' + ''.join(['<th>' + elements[0] + '</th>'] + [
                     '<td>' + h + '</td>' for h in elements[1:-1]] + [
-                    '<td>' + '{:,.0f}'.format(float(h)) for h in elements[-1:]
-                ]) + '</tr>'
+                                                   '<td>' + '{:,.0f}'.format(float(h)) for h in elements[-1:]
+                                                   ]) + '</tr>'
 
             total_rows += 1
         count += 1
@@ -102,7 +105,7 @@ def break_into_page(df, start_new_page=True, finalize_last_page=True,
 
 def add_to_page(df, current_page, remaining_row_number, table_type='summary', table_caption=''):
     return_html, r_count = break_into_page(df, start_new_page=False, finalize_last_page=False,
-                                                          number_of_row_to_break_first_page=remaining_row_number,
+                                           number_of_row_to_break_first_page=remaining_row_number,
                                            table_type=table_type, table_caption=table_caption)
     if r_count < remaining_row_number:
         remaining_row_number -= r_count
@@ -189,7 +192,7 @@ def get_turnover_df(from_date, end_date):
     turnover_df = cache.get('tunrover_df')
     if turnover_df is None:
         turnover_df = calculate_turnover_df(from_date, end_date)
-        cache.set('turnover_df', turnover_df, timeout= TIMEOUT)
+        cache.set('turnover_df', turnover_df, timeout=TIMEOUT)
     return turnover_df
 
 
@@ -247,7 +250,7 @@ def get_hit_rate_df(from_date, end_date):
     hit_rate_df = cache.get('hit_rate_df')
     if hit_rate_df is None:
         hit_rate_df = calculate_hit_rate_df(from_date, end_date)
-        cache.set('hit_rate_df', hit_rate_df, timeout= TIMEOUT)
+        cache.set('hit_rate_df', hit_rate_df, timeout=TIMEOUT)
     return hit_rate_df
 
 
@@ -333,7 +336,8 @@ def attrib():
     total_turnover = turnover_merged_df.truncate(after=g.endDate).groupby(["side"]).sum()['JPYPL']
 
     # calculate turnover for each advisor
-    sumTurnoverPerAdv = turnover_merged_df.truncate(after=g.endDate).groupby(["advisor", "side"]).sum()['JPYPL'].unstack()
+    sumTurnoverPerAdv = turnover_merged_df.truncate(after=g.endDate).groupby(["advisor", "side"]).sum()[
+        'JPYPL'].unstack()
 
     totalRatio = sumTurnoverPerAdv * 100 / total_turnover['L']  # % TOTAL
 
@@ -413,7 +417,6 @@ def attrib():
   ;''' % (g.fromDate, g.endDate), g.con, coerce_float=True, parse_dates=['priceDate'])
     pIndexDf = index_df.pivot('priceDate', 'indexCode', 'close')
     indexReturn = pIndexDf / pIndexDf.shift(1) - 1
-    csIndexReturn = pIndexDf / pIndexDf.ix[1] - 1
 
     tExposure = tExposureDf[:, param_advisor].unstack().shift(1)
 
@@ -457,43 +460,44 @@ def attrib():
             'processDate')
 
     pl_graph = [{
-        'x': [pd.to_datetime(str(i)).strftime('%Y-%m-%d') for i in cs_attr_df.index],
-        'y': cs_attr_df[col].values.tolist(),
-        'name': ('Long' if col == 'L' else ('Short' if col == 'S' else col)) + ' PL',
-        'line': {'width': g.lineWidth}
-        } for col in cs_attr_df.columns
-    ] + [{
+                    'x': [pd.to_datetime(str(i)).strftime('%Y-%m-%d') for i in cs_attr_df.index],
+                    'y': cs_attr_df[col].values.tolist(),
+                    'name': ('Long' if col == 'L' else ('Short' if col == 'S' else col)) + ' PL',
+                    'line': {'width': g.lineWidth}
+                } for col in cs_attr_df.columns
+                ] + [{
         'x': [pd.to_datetime(str(i)).strftime('%Y-%m-%d') for i in pIndexDf.index],
-        'y': ((tExposure['L']+tExposure['S']) * indexReturn[g.indexMapping[param_advisor]]).sub(pIndexDf[g.indexMapping[param_advisor]], axis=0).cumsum().fillna(0).values.tolist(),
+        'y': ((tExposure['L'] + tExposure['S']) * indexReturn[g.indexMapping[param_advisor]]).sub(
+                pIndexDf[g.indexMapping[param_advisor]], axis=0).cumsum().fillna(0).values.tolist(),
         'name': g.indexMapping[param_advisor],
         'fill': 'tozeroy',
         'line': {'width': 0}
-        }]
+    }]
 
     netop_graph = [{
-        'x': [pd.to_datetime(str(i)).strftime('%Y-%m-%d') for i in net_op.index],
-        'y': (net_op[col]*100).values.tolist(),
-        'name': ('Long Net' if col == 'L' else ('Short Net' if col == 'S' else col)) + ' O/P',
-        'line': {'width': g.lineWidth}
-        } for col in net_op.columns
-    ]
+                       'x': [pd.to_datetime(str(i)).strftime('%Y-%m-%d') for i in net_op.index],
+                       'y': (net_op[col] * 100).values.tolist(),
+                       'name': ('Long Net' if col == 'L' else ('Short Net' if col == 'S' else col)) + ' O/P',
+                       'line': {'width': g.lineWidth}
+                   } for col in net_op.columns
+                   ]
 
     beta_graph = [{
-        'x': [pd.to_datetime(str(i)).strftime('%Y-%m-%d') for i in beta_op.index],
-        'y': (beta_op[col]*100).fillna(0).values.tolist(),
-        'name': ('Long Beta' if col == 'L' else ('Short Beta' if col == 'S' else col)) + ' O/P',
-        'line': {'width': g.lineWidth}
-        } for col in beta_op.columns
-    ]
+                      'x': [pd.to_datetime(str(i)).strftime('%Y-%m-%d') for i in beta_op.index],
+                      'y': (beta_op[col] * 100).fillna(0).values.tolist(),
+                      'name': ('Long Beta' if col == 'L' else ('Short Beta' if col == 'S' else col)) + ' O/P',
+                      'line': {'width': g.lineWidth}
+                  } for col in beta_op.columns
+                  ]
 
     exposureGraphDf = tExposureDf[:, param_advisor].unstack().reindex(tExposureDf.index.levels[0]).fillna(0)
     exposure_graph = [{
-        'x': [pd.to_datetime(str(i)).strftime('%Y-%m-%d') for i in exposureGraphDf.index],
-        'y': exposureGraphDf[col].values.tolist(),
-        'name': 'Long Exposure' if col == 'L' else ('Short Exposure' if col == 'S' else col),
-        'line': {'width': g.lineWidth}
-        } for col in ['L', 'S']
-    ]
+                          'x': [pd.to_datetime(str(i)).strftime('%Y-%m-%d') for i in exposureGraphDf.index],
+                          'y': exposureGraphDf[col].values.tolist(),
+                          'name': 'Long Exposure' if col == 'L' else ('Short Exposure' if col == 'S' else col),
+                          'line': {'width': g.lineWidth}
+                      } for col in ['L', 'S']
+                      ]
 
     bm_index = pd.date_range(start=g.fromDate, end=g.endDate, freq='BM')
     bm_net_op = net_op.reindex(bm_index)
@@ -501,10 +505,10 @@ def attrib():
     bm_net_op = bm_net_op - bm_net_op.shift(1)
     bm_beta_op = bm_beta_op - bm_beta_op.shift(1)
     graph_op = DataFrame()
-    graph_op['Long OP'] = bm_net_op['L'].fillna(0)*100
-    graph_op['Long Beta OP'] = bm_beta_op['L'].fillna(0)*100
-    graph_op['Short OP'] = bm_net_op['S'].fillna(0)*100
-    graph_op['Short Beta OP'] = bm_beta_op['S'].fillna(0)*100
+    graph_op['Long OP'] = bm_net_op['L'].fillna(0) * 100
+    graph_op['Long Beta OP'] = bm_beta_op['L'].fillna(0) * 100
+    graph_op['Short OP'] = bm_net_op['S'].fillna(0) * 100
+    graph_op['Short Beta OP'] = bm_beta_op['S'].fillna(0) * 100
 
     op_graph = dict()
     op_graph['index'] = [x.strftime('%Y-%m') for x in graph_op.index]
@@ -543,53 +547,65 @@ def attrib():
 
                        }
                    } for col in names_df.index.levels[1] if not col in g.dropList]
-    firstTradeDate = np.where(sqlPlDf['side'] == 'L',sqlPlDf['firstTradeDateLong'],sqlPlDf['firstTradeDateShort'])
+    firstTradeDate = np.where(sqlPlDf['side'] == 'L', sqlPlDf['firstTradeDateLong'], sqlPlDf['firstTradeDateShort'])
 
-    marketCapDf = pd.read_csv('marketCap.csv',index_col=0, dtype= { 'FirstTrade': str}).fillna('')
-    marketCapDf['FirstTrade'] = marketCapDf['FirstTrade'].map(lambda x: datetime.strptime(x, '%d-%b-%y').strftime('%Y-%m-%d') if (x != '') else x)
+    marketCapDf = pd.read_csv('marketCap.csv', index_col=0, dtype={'FirstTrade': str}).fillna('')
+    marketCapDf['FirstTrade'] = marketCapDf['FirstTrade'].map(
+        lambda x: datetime.strptime(x, '%d-%b-%y').strftime('%Y-%m-%d') if (x != '') else x)
 
-    positionDf = sqlPlDf.groupby(['quick',firstTradeDate,'advisor','side','strategy']).sum()
+    positionDf = sqlPlDf.groupby(['quick', firstTradeDate, 'advisor', 'side', 'strategy']).sum()
     positionDf.index.names = [u'quick', 'tradedate', u'advisor', u'side', u'strategy']
     positionDf = positionDf.reset_index()
 
     positionDf['tradedate'] = positionDf['tradedate'].map(lambda x: x.strftime('%Y-%m-%d'))
 
-    positionDf = positionDf.merge(marketCapDf,left_on=['quick','side','tradedate'], right_on=['quick','side','FirstTrade'], how='inner').drop_duplicates()
+    positionDf = positionDf.merge(marketCapDf, left_on=['quick', 'side', 'tradedate'],
+                                  right_on=['quick', 'side', 'FirstTrade'], how='inner').drop_duplicates()
 
     # attribution for each fund: number is correct
-    fundScale = positionDf.groupby(['advisor','Cap']).sum()[['RHAttr','YAAttr','LRAttr']].loc[(slice(param_advisor, param_advisor),slice(None)),:].reset_index().drop('advisor',1).set_index('Cap')
+    fundScale = positionDf.groupby(['advisor', 'Cap']).sum()[['RHAttr', 'YAAttr', 'LRAttr']].loc[
+                (slice(param_advisor, param_advisor), slice(None)), :].reset_index().drop('advisor', 1).set_index('Cap')
     # pl for each side
-    scalePl = positionDf.groupby(['advisor','Cap','side']).sum()[['attribution']].loc[(slice(param_advisor, param_advisor),slice(None)),:].unstack()['attribution'].reset_index().drop('advisor',1).set_index('Cap').fillna(0)
+    scalePl = positionDf.groupby(['advisor', 'Cap', 'side']).sum()[['attribution']].loc[
+              (slice(param_advisor, param_advisor), slice(None)), :].unstack()['attribution'].reset_index().drop(
+        'advisor', 1).set_index('Cap').fillna(0)
 
     # try to assign cap to each trade turnover as Micro,.., Large
     scaleTable = turnover_merged_df.truncate(after=g.endDate).reset_index()
 
-    scaleTable['firstTradeDate'] = scaleTable['firstTradeDate'].map(lambda x: x if (type(x) is str) else x.strftime('%Y-%m-%d'))
+    scaleTable['firstTradeDate'] = scaleTable['firstTradeDate'].map(
+        lambda x: x if (type(x) is str) else x.strftime('%Y-%m-%d'))
 
-    sizeTable = scaleTable.merge(marketCapDf, left_on=['code', 'firstTradeDate'], right_on = ['quick', 'FirstTrade'], how='left').drop_duplicates()
+    sizeTable = scaleTable.merge(marketCapDf, left_on=['code', 'firstTradeDate'], right_on=['quick', 'FirstTrade'],
+                                 how='left'
+                                 ).drop_duplicates()
 
-    sizeTurnover = sizeTable.groupby(["advisor","Cap"]).sum()[['JPYPL']].loc[(slice(param_advisor, param_advisor),slice(None)),:].reset_index().drop('advisor',1).set_index('Cap')
-    sizeTurnover = sizeTurnover.merge(fundScale,left_index=True, right_index=True).merge(scalePl, left_index=True, right_index=True)
+    sizeTurnover = sizeTable.groupby(["advisor", "Cap"]).sum()[['JPYPL']].loc[
+                   (slice(param_advisor, param_advisor), slice(None)), :].reset_index().drop('advisor', 1).set_index(
+        'Cap')
+    sizeTurnover = sizeTurnover.merge(fundScale, left_index=True, right_index=True).merge(scalePl, left_index=True,
+                                                                                          right_index=True)
     totalTurnOver = sizeTurnover['JPYPL'].sum()
-    sizeTurnover['TO'] = sizeTurnover['JPYPL']/totalTurnOver
-    percent_fmt = lambda x: '{:.2f}%'.format(x*100)
-    percent1_fmt = lambda x: '{:.1f}%'.format(x*100)
-    money_fmt = lambda x: '{:,.0f}'.format(x)
+    sizeTurnover['TO'] = sizeTurnover['JPYPL'] / totalTurnOver
+    # percent_fmt = lambda x: '{:.2f}%'.format(x*100)
+    # percent1_fmt = lambda x: '{:.1f}%'.format(x*100)
+    # money_fmt = lambda x: '{:,.0f}'.format(x)
 
     sizeTurnover = sizeTurnover.reindex(['Micro', 'Small', 'Mid', 'Large', 'Mega', 'Index'], fill_value=0)
     totalSeries = sizeTurnover.sum()
     totalSeries.name = 'Total'
     scaleTotal = pd.DataFrame(totalSeries).T
     scaleTable = pd.concat([sizeTurnover, scaleTotal])
-    scaleTable['Return'] = (scaleTable['L']+scaleTable['S'])/scaleTable['JPYPL']
+    scaleTable['Return'] = (scaleTable['L'] + scaleTable['S']) / scaleTable['JPYPL']
     scaleTable['Return'].fillna(0, inplace=True)
-    scaleTable = scaleTable[['RHAttr','YAAttr','LRAttr','L','S','JPYPL','TO','Return']]
+    scaleTable = scaleTable[['RHAttr', 'YAAttr', 'LRAttr', 'L', 'S', 'JPYPL', 'TO', 'Return']]
 
-    scaleTable = scaleTable.rename(columns={'JPYPL': 'Turnover', 'RHAttr': 'Rockhampton', 'YAAttr': 'Yaraka', 'LRAttr': 'Longreach', 'L':'LongPL',
-                              'S': 'ShortPL', 'TO': 'TO %'})
-    frmt_map = {'LongPL':money_fmt,'ShortPL':money_fmt, 'Turnover': money_fmt,'Rockhampton':percent_fmt, 'Yaraka': percent_fmt, 'Longreach':percent_fmt,
-                'TO %': percent1_fmt, 'Return': percent1_fmt}
-    frmt = {col:frmt_map[col] for col in scaleTable.columns if col in frmt_map.keys()}
+    scaleTable = scaleTable.rename(
+        columns={'JPYPL': 'Turnover', 'RHAttr': 'Rockhampton', 'YAAttr': 'Yaraka', 'LRAttr': 'Longreach', 'L': 'LongPL',
+                 'S': 'ShortPL', 'TO': 'TO %'})
+    # frmt_map = {'LongPL':money_fmt,'ShortPL':money_fmt, 'Turnover': money_fmt,'Rockhampton':percent_fmt, 'Yaraka': percent_fmt, 'Longreach':percent_fmt,
+    #            'TO %': percent1_fmt, 'Return': percent1_fmt}
+    # frmt = {col:frmt_map[col] for col in scaleTable.columns if col in frmt_map.keys()}
 
     gicsTable = turnover_merged_df.truncate(after=g.endDate).groupby(["advisor", "GICS"]).sum()[['JPYPL']].loc[
                 (slice(param_advisor, param_advisor), slice(None)), :].reset_index().drop('advisor', 1).set_index(
@@ -601,13 +617,14 @@ def attrib():
              (slice(param_advisor, param_advisor), slice(None)), :].unstack()['attribution'].reset_index().drop(
             'advisor', 1).set_index('GICS').fillna(0)
     gicsTable = gicsTable.merge(fundGics, left_index=True, right_index=True, how='outer').merge(gicsPl, left_index=True,
-                                                                                   right_index=True, how='outer').fillna(0)
+                                                                                                right_index=True,
+                                                                                                how='outer').fillna(0)
 
     totalTurnOver = gicsTable['JPYPL'].sum()
     gicsTable['TO'] = gicsTable['JPYPL'] / totalTurnOver
 
-    frmt_map = {'LongPL': money_fmt, 'ShortPL': money_fmt, 'Turnover': money_fmt, 'Rockhampton': percent_fmt,
-                'Yaraka': percent_fmt, 'Longreach': percent_fmt, 'TO %': percent1_fmt, 'Return': percent1_fmt}
+    # frmt_map = {'LongPL': money_fmt, 'ShortPL': money_fmt, 'Turnover': money_fmt, 'Rockhampton': percent_fmt,
+    #            'Yaraka': percent_fmt, 'Longreach': percent_fmt, 'TO %': percent1_fmt, 'Return': percent1_fmt}
 
     total_series = gicsTable.sum()
     total_series.name = 'Total'
@@ -619,7 +636,7 @@ def attrib():
             columns={'JPYPL': 'Turnover', 'RHAttr': 'Rockhampton', 'YAAttr': 'Yaraka', 'LRAttr': 'Longreach',
                      'L': 'LongPL',
                      'S': 'ShortPL', 'TO': 'TO %'})
-    frmt = {col: frmt_map[col] for col in gicsTable.columns if col in frmt_map.keys()}
+    # frmt = {col: frmt_map[col] for col in gicsTable.columns if col in frmt_map.keys()}
 
 
 
@@ -673,7 +690,8 @@ def attrib():
     top_positions.index = top_positions.index + 1
 
     bottom_positions = sqlPlDf[['quick', 'advisor', 'attribution', 'name', 'side']].groupby(
-            ['advisor', 'quick', 'name', 'side']).sum().sort_values(by='attribution').ix[param_advisor].head(NUMBER_OF_TOP_POSITIONS)
+            ['advisor', 'quick', 'name', 'side']).sum().sort_values(by='attribution').ix[param_advisor].head(
+        NUMBER_OF_TOP_POSITIONS)
     bottom_positions = bottom_positions.reset_index().drop('quick', axis=1)
     bottom_positions.index = bottom_positions.index + 1
 
@@ -697,7 +715,8 @@ def attrib():
     topixSeries.name = 'Total'
     topixTotal = pd.DataFrame(topixSeries).T
     topixTable = pd.concat([topixTable, topixTotal])
-    topixTable['Return'] = ((topixTable['L'] + topixTable['S'].fillna(0)) / topixTable['JPYPL']).replace([np.nan, np.inf, -np.inf], 0)
+    topixTable['Return'] = ((topixTable['L'] + topixTable['S'].fillna(0)) / topixTable['JPYPL']).replace(
+            [np.nan, np.inf, -np.inf], 0)
     topixTable = topixTable[['RHAttr', 'YAAttr', 'LRAttr', 'L', 'S', 'JPYPL', 'TO', 'Return']]
     topixTable = topixTable.rename(
             columns={'JPYPL': 'Turnover', 'RHAttr': 'Rockhampton', 'YAAttr': 'Yaraka', 'LRAttr': 'Longreach',
@@ -706,11 +725,11 @@ def attrib():
 
     strategyTable = turnover_merged_df.truncate(after=g.endDate).groupby(["advisor", "strategy"]).sum()[['JPYPL']].loc[
                     (slice(param_advisor, param_advisor), slice(None)), :].reset_index().drop('advisor',
-                                                                                                  1).set_index(
+                                                                                              1).set_index(
             'strategy')
     fundStrategy = sqlPlDf.groupby(['advisor', 'strategy']).sum()[['RHAttr', 'YAAttr', 'LRAttr']].loc[
                    (slice(param_advisor, param_advisor), slice(None)), :].reset_index().drop('advisor',
-                                                                                                 1).set_index(
+                                                                                             1).set_index(
             'strategy')
     fundStrategy = fundStrategy.fillna(0)
     strategyPl = sqlPlDf.groupby(['advisor', 'strategy', 'side']).sum()[['attribution']].loc[
@@ -719,7 +738,8 @@ def attrib():
     strategyPl = strategyPl.fillna(0)
     strategyTable = strategyTable.merge(fundStrategy, left_index=True, right_index=True).merge(strategyPl,
                                                                                                left_index=True,
-                                                                                               right_index=True, how='outer').fillna(0)
+                                                                                               right_index=True,
+                                                                                               how='outer').fillna(0)
 
     totalStrategyTurnOver = strategyTable['JPYPL'].sum()
     strategyTable['TO'] = strategyTable['JPYPL'] / totalStrategyTurnOver
@@ -728,7 +748,8 @@ def attrib():
     strategySeries.name = 'Total'
     strategyTotal = pd.DataFrame(strategySeries).T
     strategyTable = pd.concat([strategyTable, strategyTotal])
-    strategyTable['Return'] = ((strategyTable['L']+strategyTable['S'].fillna(0))/strategyTable['JPYPL']).replace([np.inf, -np.inf], 0)
+    strategyTable['Return'] = ((strategyTable['L'] + strategyTable['S'].fillna(0)) / strategyTable['JPYPL']).replace(
+            [np.inf, -np.inf], 0)
     strategyTable = strategyTable[['RHAttr', 'YAAttr', 'LRAttr', 'L', 'S', 'JPYPL', 'TO', 'Return']]
     strategyTable = strategyTable.rename(
             columns={'JPYPL': 'Turnover', 'RHAttr': 'Rockhampton', 'YAAttr': 'Yaraka', 'LRAttr': 'Longreach',
@@ -736,14 +757,14 @@ def attrib():
                      'S': 'ShortPL', 'TO': 'TO %'})
     positionTable = turnover_merged_df.truncate(after=g.endDate).groupby(["advisor", "code"]).sum()[['JPYPL']].loc[
                     (slice(param_advisor, param_advisor), slice(None)), :].reset_index().drop('advisor',
-                                                                                                  1).set_index('code')
+                                                                                              1).set_index('code')
     positionPl = sqlPlDf.groupby(['advisor', 'quick', 'name']).sum()[['RHAttr', 'YAAttr', 'LRAttr']].loc[
                  (slice(param_advisor, param_advisor), slice(None)), :].reset_index().drop('advisor', 1).set_index(
             'quick')
     sidePl = sqlPlDf.groupby(['advisor', 'quick', 'side']).sum()[['attribution']].loc[
              (slice(param_advisor, param_advisor), slice(None)), :].unstack()['attribution'].reset_index().drop(
             'advisor', 1).set_index('quick').fillna(0)
-    positionTable = positionTable.merge(positionPl, left_index=True, right_index=True, how='outer').\
+    positionTable = positionTable.merge(positionPl, left_index=True, right_index=True, how='outer'). \
         merge(sidePl, left_index=True, right_index=True, how='outer').fillna(0)
 
     totalPositionTurnOver = positionTable['JPYPL'].sum()
@@ -754,8 +775,9 @@ def attrib():
     positionTotal = pd.DataFrame(positionSeries).T
 
     positionTable = pd.concat([positionTable, positionTotal])
-    positionTable['Return'] = ((positionTable['L']+positionTable['S'].fillna(0))/positionTable['JPYPL'].replace(0,
-                                                                np.nan)).replace([np.nan,np.inf,-np.inf], 0)
+    positionTable['Return'] = ((positionTable['L'] + positionTable['S'].fillna(0)) / positionTable['JPYPL'].replace(0,
+                                                                                                                    np.nan)).replace(
+            [np.nan, np.inf, -np.inf], 0)
     positionTable = positionTable[['RHAttr', 'YAAttr', 'LRAttr', 'L', 'S', 'JPYPL', 'TO', 'Return']]
     positionTable = positionTable.rename(
             columns={'JPYPL': 'Turnover', 'RHAttr': 'Rockhampton', 'YAAttr': 'Yaraka', 'LRAttr': 'Longreach',
@@ -767,11 +789,15 @@ def attrib():
     for df in [scaleTable, gicsTable, sectorTable]:
         tables_html, remaining_row_number = add_to_page(df, tables_html, remaining_row_number)
 
-    tables_html, remaining_row_number = add_to_page(top_positions, tables_html, remaining_row_number, 'ranking', 'Top %s Trades' % NUMBER_OF_TOP_POSITIONS)
-    tables_html, remaining_row_number = add_to_page(bottom_positions, tables_html, remaining_row_number, 'ranking', 'Bottom %s Trades' % NUMBER_OF_TOP_POSITIONS)
+    tables_html, remaining_row_number = add_to_page(top_positions, tables_html, remaining_row_number, 'ranking',
+                                                    'Top %s Trades' % NUMBER_OF_TOP_POSITIONS)
+    tables_html, remaining_row_number = add_to_page(bottom_positions, tables_html, remaining_row_number, 'ranking',
+                                                    'Bottom %s Trades' % NUMBER_OF_TOP_POSITIONS)
 
-    remaining_row_number -= 2 + 1 # 2 titles of ranking tables
-    for df in [topixTable, strategyTable, positionTable]:
+    remaining_row_number -= 2 + 1  # 2 titles of ranking tables
+    table_list = [topixTable, strategyTable, positionTable] if g.indexMapping[param_advisor] == 'TPX' else [
+        strategyTable, positionTable]
+    for df in table_list:
         tables_html, remaining_row_number = add_to_page(df, tables_html, remaining_row_number)
 
     render_obj = dict()
@@ -779,19 +805,19 @@ def attrib():
     render_obj['graph_height'] = 240
     render_obj['graph_line_width'] = g.lineWidth
     render_obj['margin_left'] = 40
-    render_obj['margin_top']  = 40
+    render_obj['margin_top'] = 40
     render_obj['margin_bottom'] = 30
     render_obj['margin_right'] = 5
-    render_obj['graph_font']  = 'Calibri'
+    render_obj['graph_font'] = 'Calibri'
     render_obj['graph_font_size'] = 10
     render_obj['analyst'] = param_advisor
     render_obj['index'] = g.indexMapping[param_advisor]
     render_obj['startDate'] = g.fromDate
     render_obj['endDate'] = g.endDate
     render_obj['longTurnover'] = Decimal(sumTurnoverPerAdv.ix[param_advisor]['L']).quantize(Decimal('1.'),
-                                                                                              rounding=ROUND_HALF_UP)
+                                                                                            rounding=ROUND_HALF_UP)
     render_obj['shortTurnover'] = Decimal(sumTurnoverPerAdv.ix[param_advisor]['S']).quantize(Decimal('1.'),
-                                                                                               rounding=ROUND_HALF_UP)
+                                                                                             rounding=ROUND_HALF_UP)
     render_obj['totalLong'] = totalRatio.ix[param_advisor]['L']
     render_obj['totalShort'] = totalRatio.ix[param_advisor]['S']
     render_obj['longPL'] = Decimal(cs_attr_df['L'].iloc[-1]).quantize(Decimal('1.'), rounding=ROUND_HALF_UP)
@@ -829,7 +855,7 @@ def attrib():
     render_obj['tables_html'] = tables_html
     render_obj['analyst_list'] = g.indexMapping.keys()
 
-    #render_obj['test'] = scaleTable
+    # render_obj['test'] = scaleTable
 
     return render_template('attrib.html', params=render_obj)
 
@@ -839,9 +865,220 @@ def test():
     return render_template('test.html')
 
 
+def getSumTurnover(from_date, end_date):
+    sumTurnoverPerAdv = cache.get('sumTurnoverPerAdv')
+    totalRatio = cache.get('totalRatio')
+    if sumTurnoverPerAdv is None or totalRatio is None:
+        sqlFxDf = get_fx_df(from_date, end_date)
+
+        turnover_df = get_turnover_df(from_date, end_date)
+
+        # merge with FX df to get to-JPY-fx rate
+        turnover_merged_df = turnover_df.merge(sqlFxDf, left_on='currencyCode', right_index=True).sort_index()
+        # create new column which contain turnover in JPY
+        turnover_merged_df['JPYPL'] = (turnover_merged_df['Turnover'] * turnover_merged_df['AvgOfrate']).values
+
+        # calculate total turnover for each side
+        total_turnover = turnover_merged_df.truncate(after=g.endDate).groupby(["side"]).sum()['JPYPL']
+
+        # calculate turnover for each advisor
+        sumTurnoverPerAdv = turnover_merged_df.truncate(after=g.endDate).groupby(["advisor", "side"]).sum()[
+            'JPYPL'].unstack()
+
+        totalRatio = sumTurnoverPerAdv * 100 / total_turnover['L']
+
+        cache.set('sumTurnoverPerAdv', sumTurnoverPerAdv, timeout=TIMEOUT)
+        cache.set('totalRatio', totalRatio, timeout=TIMEOUT)
+
+    return sumTurnoverPerAdv, totalRatio
+
+
+def get_attr_df(from_date, end_date):
+    attr_df = cache.get('attr_df')
+    long_short_return = cache.get('long_short_return')
+
+    if attr_df is None:
+        code_name_map = sql.read_sql('''SELECT quick, name FROM t01Instrument;''', g.con)
+        sqlPlDf = get_pl_df(from_date, end_date)
+        sqlPlDf = sqlPlDf.merge(code_name_map, left_on='quick', right_on='quick')
+
+        attr_df = sqlPlDf.groupby(['advisor', 'side']).sum()
+
+        sumTurnoverPerAdv, totalRatio = getSumTurnover(g.fromDate, g.endDate)
+
+        long_short_return = sqlPlDf.groupby(["advisor", "side"]).sum().drop(['RHAttr', 'YAAttr', 'LRAttr'],
+                                                                        axis=1).unstack().div(sumTurnoverPerAdv,
+                                                                                              axis=0) * 100
+        cache.set('attr_df', attr_df)
+        cache.set('long_short_return', long_short_return)
+
+    return attr_df, long_short_return
+
+
+def getTurnoverValue(advisor, side):
+    '''
+    :param advisor: advisor abbreviation
+    :param side: 'L' or 'S'
+    :return: sum of turnover
+    '''
+
+    sumTurnoverPerAdv, totalRatio = getSumTurnover(g.fromDate, g.endDate)
+
+    return Decimal(sumTurnoverPerAdv.ix[advisor][side]).quantize(Decimal('1.'), rounding=ROUND_HALF_UP)
+
+
+def getTurnoverRatio(advisor, side):
+    sumTurnoverPerAdv, totalRatio = getSumTurnover(g.fromDate, g.endDate)
+    return totalRatio.ix[advisor][side]
+
+
+def get_pl(advisor, side, type):
+    attr_df, long_short_return = get_attr_df(g.fromDate, g.endDate)
+    if type =='pl':
+        return Decimal(attr_df.ix[(advisor, side)]['attribution']).quantize(Decimal('1.'), rounding=ROUND_HALF_UP)
+    elif type == 'return':
+        return long_short_return['attribution'][side].ix[advisor]
+    elif type == 'rhpl':
+        return attr_df.ix[(advisor, side)]['RHAttr']
+    elif type == 'yapl':
+        return attr_df.ix[(advisor, side)]['YAAttr']
+    elif type == 'lrpl':
+        return attr_df.ix[(advisor, side)]['LRAttr']
+
+
+def get_aum_df(from_date, end_date):
+    aum_df = cache.get('aum_df')
+    if aum_df is None:
+        aum_df = sql.read_sql('''SELECT processDate, MAX(RHAUM) AS RHAUM, MAX(YAAUM) AS YAAUM, MAX(LRAUM) AS LRAUM
+      FROM (
+      SELECT processDate,portfolioID,
+        AVG(CASE portfolioID WHEN 1 THEN `value` END) AS RHAUM,
+          AVG(CASE portfolioID WHEN 2 THEN `value` END) AS YAAUM,
+            AVG(CASE portfolioID WHEN 3 THEN `value` END) AS LRAUM
+            FROM t05PortfolioReport
+            WHERE processDate>='%s' AND processDate < '%s' AND portfolioID>0 AND dataType="PSTJNAV"
+            GROUP BY processDate, portfolioID
+            ) a
+            GROUP BY processDate
+            ;''' % (g.fromDate, g.endDate), g.con, coerce_float=True, parse_dates=['processDate'], index_col='processDate')
+
+        aum_df['Total'] = aum_df['RHAUM'] + aum_df['YAAUM'] + aum_df['LRAUM']
+        cache.set('aum_df', aum_df)
+
+    return aum_df
+
+def get_code_beta():
+    code_beta_df = cache.get('code_beta_df')
+    if code_beta_df is None:
+        code_beta_df = sql.read_sql('''SELECT a.code, a.beta, a.sector
+          FROM t08AdvisorTag a,
+            (SELECT advisorTagID, code, MAX(t08AdvisorTag.adviseDate) AS MaxOfadviseDate
+            FROM t08AdvisorTag
+            GROUP BY t08AdvisorTag.code) b
+            WHERE #a.advisorTagID = b.advisorTagID
+            a.code = b.code
+            AND b.MaxOfadviseDate = a.adviseDate
+            ;''', g.con, coerce_float=True)
+        cache.set('code_beta_df', code_beta_df)
+
+    return code_beta_df
+
+
+def get_exposure_df(from_date, end_date):
+    exposure_df = cache.get('exposure_df')
+    if exposure_df is None:
+        exposure_df = sql.read_sql('''SELECT processDate, advisor, quick,
+         side, RHExposure, YAExposure, LRExposure
+         FROM `t05PortfolioResponsibilities`
+         WHERE processDate >= '%s' AND processDate < '%s'
+         AND advisor <> ''
+         ;''' % (from_date, end_date), g.con, coerce_float=True, parse_dates=['processDate'])
+
+        cache.set('exposure_df', exposure_df)
+
+    return exposure_df
+
+def get_avg_exposure(from_date, end_date):
+
+    exposure_avg = cache.get('exposure_avg')
+    aumDf = get_aum_df(from_date, end_date)
+
+    if exposure_avg is None:
+
+        codeBetaDf = get_code_beta()
+
+        fExposureDf = get_exposure_df(g.fromDate, g.endDate)
+
+        names_df = fExposureDf.groupby(by=['processDate', 'advisor']).count()['quick']
+
+        mfExposureDf = fExposureDf.merge(codeBetaDf, how='left', left_on='quick', right_on='code')
+        sumExposureDf = mfExposureDf.groupby(['processDate', 'advisor', 'side']).sum()[
+            ['RHExposure', 'YAExposure', 'LRExposure']]
+
+        temp2 = mfExposureDf.set_index(['processDate', 'advisor', 'side'])
+
+        t2 = (temp2['RHExposure'].mul(aumDf['RHAUM'], axis=0).mul(temp2['beta'].fillna(0), axis=0) +
+              temp2['YAExposure'].mul(aumDf['YAAUM'], axis=0).mul(temp2['beta'].fillna(0), axis=0) +
+              temp2['LRExposure'].mul(aumDf['LRAUM'], axis=0).mul(temp2['beta'].fillna(0), axis=0))
+
+        t3 = t2.reset_index()  # .drop('quick',1)
+        t4 = t3.groupby(['processDate', 'advisor', 'side']).sum()
+        t4.columns = ['exposure']
+
+        betaExposure = t4['exposure']
+        tExposureDf = (sumExposureDf['RHExposure'].mul(aumDf['RHAUM'], axis=0) +
+                       sumExposureDf['YAExposure'].mul(aumDf['YAAUM'], axis=0) +
+                       sumExposureDf['LRExposure'].mul(aumDf['LRAUM'], axis=0))
+
+        tExposureDf.columns = ['Exposure']
+
+        exposure_avg = DataFrame(tExposureDf).reset_index()
+
+        cache.set('exposure_avg', exposure_avg)
+
+    return exposure_avg, aumDf
+
+
+def get_exposure(adviser, side):
+    exposure_avg, aum_df = get_avg_exposure(g.fromDate, g.endDate)
+    return (exposure_avg[(exposure_avg['advisor'] == adviser) & (exposure_avg['side'] == side)].mean() * 100 / aum_df[
+            'Total'].mean()).iloc[0]
+
+
 @app.route('/test2')
 def test2():
-    return render_template('test2.html')
+    param_advisor = request.args.get('analyst', g.reportAdvisor)
+
+    hitRateDf = get_hit_rate_df(g.fromDate, g.endDate)
+
+    render_obj = dict()
+    render_obj['analyst'] = param_advisor
+    render_obj['analyst_list'] = g.indexMapping.keys()
+    render_obj['longTurnover'] = getTurnoverValue(param_advisor, 'L')
+    render_obj['shortTurnover'] = getTurnoverValue(param_advisor, 'S')
+    render_obj['totalLong'] = getTurnoverRatio(param_advisor, 'L')
+    render_obj['totalShort'] = getTurnoverRatio(param_advisor, 'S')
+
+    render_obj['longPL'] = get_pl(param_advisor, 'L', 'pl')
+    render_obj['shortPL'] = get_pl(param_advisor, 'S', 'pl')
+
+    render_obj['longHitRate'] = hitRateDf['LongsHR'].ix[param_advisor]
+    render_obj['shortHitRate'] = hitRateDf['ShortsHR'].ix[param_advisor]
+
+    render_obj['longReturn'] = get_pl(param_advisor, 'L', 'return')
+    render_obj['shortReturn'] = get_pl(param_advisor, 'S', 'return')
+
+    render_obj['rhBpsLong'] = get_pl(param_advisor, 'L', 'rhpl') * 100
+    render_obj['rhBpsShort'] = get_pl(param_advisor, 'S', 'rhpl') * 100
+    render_obj['yaBpsLong'] = get_pl(param_advisor, 'L', 'yapl') * 100
+    render_obj['yaBpsShort'] = get_pl(param_advisor, 'S', 'yapl') * 100
+    render_obj['lrBpsLong'] = get_pl(param_advisor, 'L', 'lrpl') * 100
+    render_obj['lrBpsShort'] = get_pl(param_advisor, 'S', 'lrpl') * 100
+
+    render_obj['exposure_avg_long'] = get_exposure(param_advisor, 'L')
+    render_obj['exposure_avg_short'] = get_exposure(param_advisor, 'S')
+
+    return render_template('test2.html', params=render_obj)
 
 
 @app.route('/logout')
