@@ -5,7 +5,7 @@
     <table>
         <tr>
             <th>Analyst</th>
-            <td><strong><select onchange="this.form.submit()" name="analyst">
+            <td><strong><select name="analyst">
                 {% for analyst in params['analyst_list'] %}
                     {% if analyst is equalto params['analyst'] %}
                         <option value="{{analyst}}" selected>{{analyst}}</option>
@@ -20,7 +20,10 @@
             <th>Start</th>
             <td><strong><input type="date" value="{{params['startDate']}}" min="2014-12-31"  name="startDate"></strong></td>
             <th>End</th>
-            <td><strong><input type="date" value="{{params['endDate']}}" name="endDate" onchange="this.form.submit()"></strong></td>
+            <td><strong><input type="date" value="{{params['endDate']}}" name="endDate" onchange="this.form.submit()"></strong>
+                <input type="submit" value="Go"/>
+            </td>
+
         </tr>
     </table>
     </form>
@@ -183,10 +186,20 @@
     <script>
   plGraph = document.getElementById('plGraph');
   Plotly.plot( plGraph, {{params['pl_graph'] | safe}} , {
-   margin: { t: {{params['margin_top']}},b:{{params['margin_bottom']}},l:{{params['margin_left']}},r:{{params['margin_right']}} },
+   margin: { t: 0,b:15,l:{{params['margin_left']}},r:{{params['margin_right']}} },
    width: {{params['graph_width']}},
    height: {{params['graph_height']}},
-   } );
+   yaxis: { title: 'PL', tickfont: {size: {{params['tick_font_size']}} } },
+   yaxis2: {
+    overlaying:'y',
+    side: 'right',
+    title: 'Index',
+    ticksuffix: '%',
+    showgrid:false,
+    tickfont: {size: {{params['tick_font_size']}} }
+   }
+  }
+  );
 
 
   netopGraph = document.getElementById('netopGraph');
@@ -195,7 +208,7 @@
         width: {{params['graph_width']}},
         height: {{params['graph_height']}},
         yaxis: {
-         ticksuffix: '%'
+         ticksuffix: '%', tickfont: {size: {{params['tick_font_size']}}}
         }
    } );
 
@@ -205,7 +218,7 @@
        width: {{params['graph_width']}},
        height: {{params['graph_height']}},
        yaxis: {
-         ticksuffix: '%'
+         ticksuffix: '%', tickfont: {size: {{params['tick_font_size']}} }
        }
    } );
 
@@ -214,7 +227,8 @@
   Plotly.plot( exposureGraph, {{params['exposure_graph'] | safe}} , {
        margin: { t: {{params['margin_top']}},b:{{params['margin_bottom']}},l:{{params['margin_left']}},r:{{params['margin_right']}} },
        width: {{params['graph_width']}},
-       height: {{params['graph_height']}}
+       height: {{params['graph_height']}},
+       yaxis: {tickfont: {size: {{params['tick_font_size']}} }}
    } );
 
 
@@ -233,7 +247,7 @@
    width: {{params['graph_width']}},
    height: {{params['graph_height']}},
    yaxis: {
-     ticksuffix: '%'
+     ticksuffix: '%', tickfont: {size: {{params['tick_font_size']}} }
    }
    } );
 
@@ -244,7 +258,7 @@
    height: {{params['graph_height']}},
    title: 'Gross Exposure',
    yaxis: {
-     ticksuffix: '%'
+     ticksuffix: '%', tickfont: {size: {{params['tick_font_size']}} }
    }
    } );
 
@@ -255,7 +269,7 @@
    height: {{params['graph_height']}},
    title: 'Short Exposure (As a Percent of all non-index short exposure)',
    yaxis: {
-     ticksuffix: '%'
+     ticksuffix: '%', tickfont: {size: {{params['tick_font_size']}} }
    }
    } );
 
@@ -264,7 +278,8 @@
    margin: { t: {{params['margin_top']}},b:{{params['margin_bottom']}},l:{{params['margin_left']}},r:{{params['margin_right']}} },
    width: {{params['graph_width']}},
    height: {{params['graph_height']}},
-   title: 'Number of Names'
+   title: 'Number of Names',
+   yaxis: {tickfont: {size: {{params['tick_font_size']}} }}
    } );
 
 

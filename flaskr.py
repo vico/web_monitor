@@ -56,12 +56,13 @@ def break_into_page(df, start_new_page=True, finalize_last_page=True,
     table_html = ''
     style = 'border="1" class="dataframe borderTable"'
     is_first_page = True
+    field_separator = '!'
     df.index = df.index.map(lambda x: str(x)[:12])
-    rows = df.to_csv().split('\n')
+    rows = df.to_csv(sep=field_separator).split('\n')
     if start_new_page:
         table_html = '</section><section class="sheet padding-10mm">'
     table_header = ('<table %s><thead><tr>' % style) + ''.join(
-            ['<th>' + h + '</th>' for h in rows[0].split(',')]) + '</tr></thead>'
+            ['<th>' + h + '</th>' for h in rows[0].split(field_separator)]) + '</tr></thead>'
     if table_caption != '':
         table_header += '<caption>' + table_caption + '</caption><tbody>'
     else:
@@ -83,8 +84,9 @@ def break_into_page(df, start_new_page=True, finalize_last_page=True,
             count = 0
             total_rows += 1
         if (r != ''):
-            elements = r.split(',')
+            elements = r.split(field_separator)
             if table_type == 'summary':
+                app.logger.debug(r)
                 table_html += '<tr>' + ''.join(['<th>' + elements[0] + '</th>'] + [
                     '<td>' + '{:.2f}%'.format(float(h) * 100) + '</td>' for h in elements[1:4]] + [
                                                    '<td>' + '{:,.0f}'.format(float(h)) + '</td>' for h in
@@ -400,7 +402,8 @@ def attrib():
     t4.columns = ['exposure']
 
     betaExposure = t4['exposure']
-    tExposureDf = (sumExposureDf['RHExposure'].mul(aumDf['RHAUM'], axis=0) +
+    tExposureDf = (sumExposureDf['RHExposure'
+                   ].mul(aumDf['RHAUM'], axis=0) +
                    sumExposureDf['YAExposure'].mul(aumDf['YAAUM'], axis=0) +
                    sumExposureDf['LRExposure'].mul(aumDf['LRAUM'], axis=0))
 
@@ -660,7 +663,7 @@ def attrib():
             'advisor', 1).set_index('sector').fillna(0)
 
     sectorTable = sectorTable.merge(fundSector, left_index=True,
-                                    right_index=True, how='left').merge(sectorPl,
+                                    right_index=True, how='right').fillna(0).merge(sectorPl,
                                     left_index=True,
                                     right_index=True,
                                     how='left').fillna(0)
@@ -710,7 +713,7 @@ def attrib():
               (slice(param_adviser, param_adviser), slice(None)), :].unstack()['attribution'].reset_index().drop(
             'advisor', 1).set_index('TPX')
     topixPl = topixPl.rename(index={'Warehousing  and  Harbor Transpo': 'Warehousing  and  Harbor Transport'})
-    topixTable = topixTable.merge(fundTopix, left_index=True, right_index=True).merge(topixPl.fillna(0),
+    topixTable = topixTable.merge(fundTopix, left_index=True, right_index=True, how='right').fillna(0).merge(topixPl.fillna(0),
                                                                                       left_index=True, right_index=True)
     totalTurnOver = topixTable['JPYPL'].sum()
     topixTable['TO'] = topixTable['JPYPL'] / totalTurnOver
@@ -740,10 +743,10 @@ def attrib():
                  (slice(param_adviser, param_adviser), slice(None)), :].unstack()['attribution'].reset_index().drop(
             'advisor', 1).set_index('strategy')
     strategyPl = strategyPl.fillna(0)
-    strategyTable = strategyTable.merge(fundStrategy, left_index=True, right_index=True).merge(strategyPl,
+    strategyTable = strategyTable.merge(fundStrategy, left_index=True, right_index=True, how='outer').fillna(0).merge(strategyPl,
                                                                                                left_index=True,
                                                                                                right_index=True,
-                                                                                               how='outer').fillna(0)
+                                                                                               how='left').fillna(0)
 
     totalStrategyTurnOver = strategyTable['JPYPL'].sum()
     strategyTable['TO'] = strategyTable['JPYPL'] / totalStrategyTurnOver
@@ -769,7 +772,7 @@ def attrib():
              (slice(param_adviser, param_adviser), slice(None)), :].unstack()['attribution'].reset_index().drop(
             'advisor', 1).set_index('quick').fillna(0)
     positionTable = positionTable.merge(positionPl, left_index=True, right_index=True, how='outer'). \
-        merge(sidePl, left_index=True, right_index=True, how='outer').fillna(0)
+        merge(sidePl, left_index=True, right_index=True, how='left').fillna(0)
 
     totalPositionTurnOver = positionTable['JPYPL'].sum()
     positionTable['TO'] = positionTable['JPYPL'] / totalPositionTurnOver
