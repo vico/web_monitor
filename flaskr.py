@@ -14,6 +14,7 @@ from datetime import datetime, timedelta
 from decimal import *
 #import plotly.plotly as py
 #import base64
+from flask.ext.cache import Cache
 
 # configuration
 DATABASE = '/tmp/flaskr.db'
@@ -29,7 +30,7 @@ NUMBER_OF_TOP_POSITIONS = 8
 app = Flask(__name__)
 app.config.from_object(__name__)
 
-cache = SimpleCache()
+cache = Cache(app, config={'CACHE_TYPE': 'simple'})
 
 
 def connect_db():
@@ -124,7 +125,7 @@ def add_to_page(df, current_page, remaining_row_number, table_type='summary', ta
 def before_request():
     g.db = connect_db()
     g.con = pymysql.connect(host='127.0.0.1', user='root', passwd='root', db='hkg02p')
-    g.fromDate = '2014-12-31'  # not include
+    g.startDate = '2014-12-31'  # not include
     g.endDate = '2015-12-01'  # not include
     g.reportAdvisor = 'AP'
     g.lineWidth = 3
@@ -190,15 +191,8 @@ def login():
     return render_template('login.html', error=error)
 
 
+@cache.memoize(TIMEOUT)
 def get_turnover_df(from_date, end_date):
-    turnover_df = cache.get('tunrover_df')
-    if turnover_df is None:
-        turnover_df = calculate_turnover_df(from_date, end_date)
-        cache.set('turnover_df', turnover_df, timeout=TIMEOUT)
-    return turnover_df
-
-
-def calculate_turnover_df(from_date, end_date):
     # there is some trades on 2014/12/31 both long and short sides, which is not in database table
     sql_turnover_df = sql.read_sql('''
         SELECT aa.tradeDate, aa.code,
@@ -248,15 +242,8 @@ def calculate_turnover_df(from_date, end_date):
     return turnover_df
 
 
+@cache.memoize(TIMEOUT)
 def get_hit_rate_df(from_date, end_date):
-    hit_rate_df = cache.get('hit_rate_df')
-    if hit_rate_df is None:
-        hit_rate_df = calculate_hit_rate_df(from_date, end_date)
-        cache.set('hit_rate_df', hit_rate_df, timeout=TIMEOUT)
-    return hit_rate_df
-
-
-def calculate_hit_rate_df(from_date, end_date):
     hit_rate_df = sql.read_sql('''select advisor, SUM(IF(RHAttr > 0 AND side='L',1,0)) as LongsWin,
         SUM(IF(side='L' and RHAttr <> 0,1,0)) as Longs,
         SUM(if(RHAttr > 0 and side='L',1,0))*100/sum(if(side='L' AND RHAttr <> 0,1,0)) as LongsHR,
@@ -275,15 +262,8 @@ def calculate_hit_rate_df(from_date, end_date):
     return hit_rate_df
 
 
+@cache.memoize(TIMEOUT)
 def get_pl_df(from_date, end_date):
-    pl_df = cache.get('pl_df')
-    if pl_df is None:
-        pl_df = calculate_pl_df(from_date, end_date)
-        cache.set('pl_df', pl_df)
-    return pl_df
-
-
-def calculate_pl_df(from_date, end_date):
     pl_df = sql.read_sql('''SELECT processDate,advisor, side, quick, attribution,
                           RHAttribution AS RHAttr,
                           YAAttribution AS YAAttr,
@@ -297,15 +277,8 @@ def calculate_pl_df(from_date, end_date):
     return pl_df
 
 
+@cache.memoize(TIMEOUT)
 def get_fx_df(from_date, end_date):
-    fx_df = cache.get('fx_df')
-    if fx_df is None:
-        fx_df = calculate_fx_df(from_date, end_date)
-        cache.set('fx_df', fx_df)
-    return fx_df
-
-
-def calculate_fx_df(from_date, end_date):
     fx_df = sql.read_sql('''SELECT a.base, AVG(a.rate) AS AvgOfrate
                 FROM (
                 SELECT t06DailyCrossRate.priceDate, t06DailyCrossRate.base, t06DailyCrossRate.quote, t06DailyCrossRate.Rate
@@ -317,10 +290,9 @@ def calculate_fx_df(from_date, end_date):
     return fx_df
 
 
+@cache.memoize(TIMEOUT)
 def get_aum_df(from_date, end_date):
-    aum_df = cache.get('aum_df')
-    if aum_df is None:
-        aum_df = sql.read_sql('''SELECT processDate, MAX(RHAUM) AS RHAUM, MAX(YAAUM) AS YAAUM, MAX(LRAUM) AS LRAUM
+    aum_df = sql.read_sql('''SELECT processDate, MAX(RHAUM) AS RHAUM, MAX(YAAUM) AS YAAUM, MAX(LRAUM) AS LRAUM
       FROM (
       SELECT processDate,portfolioID,
         AVG(CASE portfolioID WHEN 1 THEN `value` END) AS RHAUM,
@@ -331,18 +303,15 @@ def get_aum_df(from_date, end_date):
             GROUP BY processDate, portfolioID
             ) a
             GROUP BY processDate
-            ;''' % (g.fromDate, g.endDate), g.con, coerce_float=True, parse_dates=['processDate'], index_col='processDate')
+            ;''' % (from_date, end_date), g.con, coerce_float=True, parse_dates=['processDate'], index_col='processDate')
 
-        aum_df['Total'] = aum_df['RHAUM'] + aum_df['YAAUM'] + aum_df['LRAUM']
-        cache.set('aum_df', aum_df)
-
+    aum_df['Total'] = aum_df['RHAUM'] + aum_df['YAAUM'] + aum_df['LRAUM']
     return aum_df
 
 
+@cache.memoize(TIMEOUT)
 def get_code_beta():
-    code_beta_df = cache.get('code_beta_df')
-    if code_beta_df is None:
-        code_beta_df = sql.read_sql('''SELECT a.code, a.beta, a.sector
+    code_beta_df = sql.read_sql('''SELECT a.code, a.beta, a.sector
           FROM t08AdvisorTag a,
             (SELECT advisorTagID, code, MAX(t08AdvisorTag.adviseDate) AS MaxOfadviseDate
             FROM t08AdvisorTag
@@ -351,26 +320,23 @@ def get_code_beta():
             a.code = b.code
             AND b.MaxOfadviseDate = a.adviseDate
             ;''', g.con, coerce_float=True)
-        cache.set('code_beta_df', code_beta_df)
 
     return code_beta_df
 
 
+@cache.memoize(TIMEOUT)
 def get_exposure_df(from_date, end_date):
-    exposure_df = cache.get('exposure_df')
-    if exposure_df is None:
-        exposure_df = sql.read_sql('''SELECT processDate, advisor, quick,
+    exposure_df = sql.read_sql('''SELECT processDate, advisor, quick,
          side, RHExposure, YAExposure, LRExposure
          FROM `t05PortfolioResponsibilities`
          WHERE processDate >= '%s' AND processDate < '%s'
          AND advisor <> ''
          ;''' % (from_date, end_date), g.con, coerce_float=True, parse_dates=['processDate'])
 
-        cache.set('exposure_df', exposure_df)
-
     return exposure_df
 
 
+@cache.memoize(TIMEOUT)
 def get_index_return(from_date, end_date):
     index_df = sql.read_sql('''SELECT b.priceDate, a.indexCode, b.close
       FROM `t07Index` a, `t06DailyIndex` b
@@ -383,18 +349,19 @@ def get_index_return(from_date, end_date):
     return indexReturn, pIndexDf
 
 
-
 @app.route('/attrib', methods=['GET'])
 def attrib():
-    param_advisor = request.args.get('analyst', g.reportAdvisor)
+    param_adviser = request.args.get('analyst', g.reportAdvisor)
+    start_date = request.args.get('startDate', g.startDate)
+    end_date = request.args.get('endDate', g.endDate)
 
     code_name_map = sql.read_sql('''SELECT quick, name FROM t01Instrument;''', g.con)
 
-    hitRateDf = get_hit_rate_df(g.fromDate, g.endDate)
+    hitRateDf = get_hit_rate_df(start_date, end_date)
 
-    sqlFxDf = get_fx_df(g.fromDate, g.endDate)
+    sqlFxDf = get_fx_df(start_date, end_date)
 
-    turnover_df = get_turnover_df(g.fromDate, g.endDate)
+    turnover_df = get_turnover_df(start_date, end_date)
 
     # merge with FX df to get to-JPY-fx rate
     turnover_merged_df = turnover_df.merge(sqlFxDf, left_on='currencyCode', right_index=True).sort_index()
@@ -402,19 +369,19 @@ def attrib():
     turnover_merged_df['JPYPL'] = (turnover_merged_df['Turnover'] * turnover_merged_df['AvgOfrate']).values
 
     # calculate total turnover for each side
-    total_turnover = turnover_merged_df.truncate(after=g.endDate).groupby(["side"]).sum()['JPYPL']
+    total_turnover = turnover_merged_df.truncate(after=end_date).groupby(["side"]).sum()['JPYPL']
 
     # calculate turnover for each advisor
-    sumTurnoverPerAdv = turnover_merged_df.truncate(after=g.endDate).groupby(["advisor", "side"]).sum()[
+    sumTurnoverPerAdv = turnover_merged_df.truncate(after=end_date).groupby(["advisor", "side"]).sum()[
         'JPYPL'].unstack()
 
     totalRatio = sumTurnoverPerAdv * 100 / total_turnover['L']  # % TOTAL
 
-    aumDf = get_aum_df(g.fromDate, g.endDate)
+    aumDf = get_aum_df(start_date, end_date)
 
     codeBetaDf = get_code_beta()
 
-    fExposureDf = get_exposure_df(g.fromDate, g.endDate)
+    fExposureDf = get_exposure_df(start_date, end_date)
 
     names_df = fExposureDf.groupby(by=['processDate', 'advisor']).count()['quick']
 
@@ -438,13 +405,14 @@ def attrib():
                    sumExposureDf['LRExposure'].mul(aumDf['LRAUM'], axis=0))
 
     tExposureDf.columns = ['Exposure']
-    sqlPlDf = get_pl_df(g.fromDate, g.endDate)
+
+    sqlPlDf = get_pl_df(start_date, end_date)
     sqlPlDf = sqlPlDf.merge(code_name_map, left_on='quick', right_on='quick')
 
     t = sqlPlDf.groupby(['processDate', 'advisor', 'side']).sum().drop(['RHAttr', 'YAAttr', 'LRAttr'],
                                                                        axis=1).unstack().reset_index().set_index(
             'processDate')
-    attr_df = t[t['advisor'] == param_advisor]['attribution']
+    attr_df = t[t['advisor'] == param_adviser]['attribution']
     attr_df['Total'] = attr_df['L'] + attr_df['S']
     cs_attr_df = attr_df
     cs_attr_df = cs_attr_df.cumsum().fillna(0)
@@ -453,9 +421,9 @@ def attrib():
                                                                         axis=1).unstack().div(sumTurnoverPerAdv,
                                                                                               axis=0) * 100
 
-    indexReturn, pIndexDf = get_index_return(g.fromDate, g.endDate)
+    indexReturn, pIndexDf = get_index_return(start_date, end_date)
 
-    tExposure = tExposureDf[:, param_advisor].unstack().shift(1)
+    tExposure = tExposureDf[:, param_adviser].unstack().shift(1)
 
     exposure_avg = DataFrame(tExposureDf).reset_index()
 
@@ -465,7 +433,7 @@ def attrib():
     t3 = DataFrame(
             t[t['side'] == 'S'].set_index(['processDate', 'advisor'])[0].div(aumDf['Total'], axis=0)).reset_index()
     t3[t3['advisor'] == 'Bal'] = 0
-    t4 = t3.groupby(by='processDate')[0].sum().truncate(before=g.fromDate)
+    t4 = t3.groupby(by='processDate')[0].sum().truncate(before=start_date)
     short_exposure = t2.div(t4, axis=0)
 
     rankLongDf = exposure_avg[(exposure_avg['side'] == 'L')].groupby(by='advisor').mean() * 100 / aumDf['Total'].mean()
@@ -474,20 +442,21 @@ def attrib():
     rankShortDf = rankShortDf.drop(g.dropList, errors='ignore').rank(ascending=False)
 
     net_op = DataFrame()
-    net_op['L'] = attr_df['L'].sub(tExposure['L'].mul(indexReturn[g.indexMapping[param_advisor]], axis=0),
+
+    net_op['L'] = attr_df['L'].sub(tExposure['L'].mul(indexReturn[g.indexMapping[param_adviser]], axis=0),
                                    axis=0).div(
             aumDf.shift(1)['Total'], axis=0)
-    net_op['S'] = attr_df['S'].sub((tExposure['S'] * -1).mul(indexReturn[g.indexMapping[param_advisor]], axis=0),
+    net_op['S'] = attr_df['S'].sub((tExposure['S'] * -1).mul(indexReturn[g.indexMapping[param_adviser]], axis=0),
                                    axis=0).div(aumDf.shift(1)['Total'], axis=0)
-    net_op.ix[g.fromDate] = 0
+    net_op.ix[start_date] = 0
     net_op = net_op.cumsum().fillna(0)
     net_op['Total'] = net_op['L'] + net_op['S']
 
-    btExposure = betaExposure[:, param_advisor].unstack().shift(1)
+    btExposure = betaExposure[:, param_adviser].unstack().shift(1)
     beta_op = DataFrame()
-    beta_op['L'] = attr_df['L'].sub(btExposure['L'].mul(indexReturn[g.indexMapping[param_advisor]], axis=0),
+    beta_op['L'] = attr_df['L'].sub(btExposure['L'].mul(indexReturn[g.indexMapping[param_adviser]], axis=0),
                                     axis=0).div(aumDf.shift(1)['Total'], axis=0)
-    beta_op['S'] = attr_df['S'].sub((btExposure['S'] * -1).mul(indexReturn[g.indexMapping[param_advisor]], axis=0),
+    beta_op['S'] = attr_df['S'].sub((btExposure['S'] * -1).mul(indexReturn[g.indexMapping[param_adviser]], axis=0),
                                     axis=0).div(aumDf.shift(1)['Total'], axis=0)
     beta_op = beta_op.cumsum().fillna(0)
     beta_op['Total'] = beta_op['L'] + beta_op['S']
@@ -496,6 +465,7 @@ def attrib():
                                                                                axis=1).unstack().reset_index().set_index(
             'processDate')
 
+    csIndexReturn = pIndexDf/pIndexDf.ix[1]-1
     pl_graph = [{
                     'x': [pd.to_datetime(str(i)).strftime('%Y-%m-%d') for i in cs_attr_df.index],
                     'y': cs_attr_df[col].values.tolist(),
@@ -504,11 +474,11 @@ def attrib():
                 } for col in cs_attr_df.columns
                 ] + [{
         'x': [pd.to_datetime(str(i)).strftime('%Y-%m-%d') for i in pIndexDf.index],
-        'y': ((tExposure['L'] + tExposure['S']) * indexReturn[g.indexMapping[param_advisor]]).sub(
-                pIndexDf[g.indexMapping[param_advisor]], axis=0).cumsum().fillna(0).values.tolist(),
-        'name': g.indexMapping[param_advisor],
+        'y': (csIndexReturn[g.indexMapping[param_adviser]]*100).values.tolist(),
+        'name': g.indexMapping[param_adviser],
         'fill': 'tozeroy',
-        'line': {'width': 0}
+        'line': {'width': 0},
+        'yaxis': 'y2'
     }]
 
     netop_graph = [{
@@ -527,7 +497,7 @@ def attrib():
                   } for col in beta_op.columns
                   ]
 
-    exposureGraphDf = tExposureDf[:, param_advisor].unstack().reindex(tExposureDf.index.levels[0]).fillna(0)
+    exposureGraphDf = tExposureDf[:, param_adviser].unstack().reindex(tExposureDf.index.levels[0]).fillna(0)
     exposure_graph = [{
                           'x': [pd.to_datetime(str(i)).strftime('%Y-%m-%d') for i in exposureGraphDf.index],
                           'y': exposureGraphDf[col].values.tolist(),
@@ -536,7 +506,7 @@ def attrib():
                       } for col in ['L', 'S']
                       ]
 
-    bm_index = pd.date_range(start=g.fromDate, end=g.endDate, freq='BM')
+    bm_index = pd.date_range(start=start_date, end=end_date, freq='BM')
     bm_net_op = net_op.reindex(bm_index)
     bm_beta_op = beta_op.reindex(bm_index)
     bm_net_op = bm_net_op - bm_net_op.shift(1)
@@ -557,8 +527,8 @@ def attrib():
                                 'y': (gross_exposure[:, col] * 100).values.tolist(),
                                 'name': col,
                                 'line': {
-                                    'color': "rgb(214, 39, 40)" if (col == param_advisor) else "rgb(190, 190, 190)",
-                                    'width': g.lineWidth if (col == param_advisor) else g.thinLineWidth
+                                    'color': "rgb(214, 39, 40)" if (col == param_adviser) else "rgb(190, 190, 190)",
+                                    'width': g.lineWidth if (col == param_adviser) else g.thinLineWidth
                                 }
                             } for col in gross_exposure.index.levels[1] if not col in g.dropList]
 
@@ -568,8 +538,8 @@ def attrib():
                                 'y': (short_exposure[:, col] * 100).values.tolist(),
                                 'name': col,
                                 'line': {
-                                    'color': "rgb(214, 39, 40)" if (col == param_advisor) else "rgb(190, 190, 190)",
-                                    'width': g.lineWidth if (col == param_advisor) else g.thinLineWidth
+                                    'color': "rgb(214, 39, 40)" if (col == param_adviser) else "rgb(190, 190, 190)",
+                                    'width': g.lineWidth if (col == param_adviser) else g.thinLineWidth
 
                                 }
                             } for col in short_exposure.index.levels[1] if not col in g.dropList]
@@ -579,8 +549,8 @@ def attrib():
                        'y': (names_df[:, col]).values.tolist(),
                        'name': col,
                        'line': {
-                           'color': "rgb(214, 39, 40)" if (col == param_advisor) else "rgb(190, 190, 190)",
-                           'width': g.lineWidth if (col == param_advisor) else g.thinLineWidth
+                           'color': "rgb(214, 39, 40)" if (col == param_adviser) else "rgb(190, 190, 190)",
+                           'width': g.lineWidth if (col == param_adviser) else g.thinLineWidth
 
                        }
                    } for col in names_df.index.levels[1] if not col in g.dropList]
@@ -601,14 +571,14 @@ def attrib():
 
     # attribution for each fund: number is correct
     fundScale = positionDf.groupby(['advisor', 'Cap']).sum()[['RHAttr', 'YAAttr', 'LRAttr']].loc[
-                (slice(param_advisor, param_advisor), slice(None)), :].reset_index().drop('advisor', 1).set_index('Cap')
+                (slice(param_adviser, param_adviser), slice(None)), :].reset_index().drop('advisor', 1).set_index('Cap')
     # pl for each side
     scalePl = positionDf.groupby(['advisor', 'Cap', 'side']).sum()[['attribution']].loc[
-              (slice(param_advisor, param_advisor), slice(None)), :].unstack()['attribution'].reset_index().drop(
+              (slice(param_adviser, param_adviser), slice(None)), :].unstack()['attribution'].reset_index().drop(
         'advisor', 1).set_index('Cap').fillna(0)
 
     # try to assign cap to each trade turnover as Micro,.., Large
-    scaleTable = turnover_merged_df.truncate(after=g.endDate).reset_index()
+    scaleTable = turnover_merged_df.truncate(after=end_date).reset_index()
 
     scaleTable['firstTradeDate'] = scaleTable['firstTradeDate'].map(
         lambda x: x if (type(x) is str) else x.strftime('%Y-%m-%d'))
@@ -618,7 +588,7 @@ def attrib():
                                  ).drop_duplicates()
 
     sizeTurnover = sizeTable.groupby(["advisor", "Cap"]).sum()[['JPYPL']].loc[
-                   (slice(param_advisor, param_advisor), slice(None)), :].reset_index().drop('advisor', 1).set_index(
+                   (slice(param_adviser, param_adviser), slice(None)), :].reset_index().drop('advisor', 1).set_index(
         'Cap')
     sizeTurnover = sizeTurnover.merge(fundScale, left_index=True, right_index=True).merge(scalePl, left_index=True,
                                                                                           right_index=True)
@@ -644,14 +614,14 @@ def attrib():
     #            'TO %': percent1_fmt, 'Return': percent1_fmt}
     # frmt = {col:frmt_map[col] for col in scaleTable.columns if col in frmt_map.keys()}
 
-    gicsTable = turnover_merged_df.truncate(after=g.endDate).groupby(["advisor", "GICS"]).sum()[['JPYPL']].loc[
-                (slice(param_advisor, param_advisor), slice(None)), :].reset_index().drop('advisor', 1).set_index(
+    gicsTable = turnover_merged_df.truncate(after=end_date).groupby(["advisor", "GICS"]).sum()[['JPYPL']].loc[
+                (slice(param_adviser, param_adviser), slice(None)), :].reset_index().drop('advisor', 1).set_index(
             'GICS')
     fundGics = sqlPlDf.groupby(['advisor', 'GICS']).sum()[['RHAttr', 'YAAttr', 'LRAttr']].loc[
-               (slice(param_advisor, param_advisor), slice(None)), :].reset_index().drop('advisor', 1).set_index(
+               (slice(param_adviser, param_adviser), slice(None)), :].reset_index().drop('advisor', 1).set_index(
             'GICS')
     gicsPl = sqlPlDf.groupby(['advisor', 'GICS', 'side']).sum()[['attribution']].loc[
-             (slice(param_advisor, param_advisor), slice(None)), :].unstack()['attribution'].reset_index().drop(
+             (slice(param_adviser, param_adviser), slice(None)), :].unstack()['attribution'].reset_index().drop(
             'advisor', 1).set_index('GICS').fillna(0)
     gicsTable = gicsTable.merge(fundGics, left_index=True, right_index=True, how='outer').merge(gicsPl, left_index=True,
                                                                                                 right_index=True,
@@ -678,22 +648,22 @@ def attrib():
     codeBetaDf['code'] = codeBetaDf[['code']].applymap(str.upper)[
         'code']  # some code has inconsistent format like xxxx Hk instead of HK
     t = sqlPlDf.merge(codeBetaDf, left_on='quick', right_on='code', how='left')
-    sectorTable = turnover_merged_df.truncate(after=g.endDate).groupby(["advisor", "sector"]).sum()[['JPYPL']].loc[
-                  (slice(param_advisor, param_advisor), slice(None)), :].reset_index().drop('advisor', 1).set_index(
+    sectorTable = turnover_merged_df.truncate(after=end_date).groupby(["advisor", "sector"]).sum()[['JPYPL']].loc[
+                  (slice(param_adviser, param_adviser), slice(None)), :].reset_index().drop('advisor', 1).set_index(
             'sector')
     fundSector = t.groupby(['advisor', 'sector']).sum()[['RHAttr', 'YAAttr', 'LRAttr']].loc[
-                 (slice(param_advisor, param_advisor), slice(None)), :].reset_index().drop('advisor', 1).set_index(
+                 (slice(param_adviser, param_adviser), slice(None)), :].reset_index().drop('advisor', 1).set_index(
             'sector')
 
     sectorPl = t.groupby(['advisor', 'sector', 'side']).sum()[['attribution']].loc[
-               (slice(param_advisor, param_advisor), slice(None)), :].unstack()['attribution'].reset_index().drop(
+               (slice(param_adviser, param_adviser), slice(None)), :].unstack()['attribution'].reset_index().drop(
             'advisor', 1).set_index('sector').fillna(0)
 
-    sectorTable = sectorTable.merge(fundSector, left_index=True, right_index=True, how='left').merge(sectorPl,
-                                                                                                     left_index=True,
-                                                                                                     right_index=True,
-                                                                                                     how='left').fillna(
-            0)
+    sectorTable = sectorTable.merge(fundSector, left_index=True,
+                                    right_index=True, how='left').merge(sectorPl,
+                                    left_index=True,
+                                    right_index=True,
+                                    how='left').fillna(0)
 
     sectorTotalTurnOver = sectorTable['JPYPL'].sum()
 
@@ -719,25 +689,25 @@ def attrib():
 
     top_positions = sqlPlDf[['quick', 'advisor', 'attribution', 'name', 'side', 'processDate']].groupby(
             ['advisor', 'quick', 'name', 'side']).sum().sort_values(by='attribution', ascending=False).ix[
-        param_advisor].head(NUMBER_OF_TOP_POSITIONS)
+        param_adviser].head(NUMBER_OF_TOP_POSITIONS)
     top_positions = top_positions.reset_index().drop('quick', axis=1)
     top_positions.index = top_positions.index + 1
 
     bottom_positions = sqlPlDf[['quick', 'advisor', 'attribution', 'name', 'side']].groupby(
-            ['advisor', 'quick', 'name', 'side']).sum().sort_values(by='attribution').ix[param_advisor].head(
+            ['advisor', 'quick', 'name', 'side']).sum().sort_values(by='attribution').ix[param_adviser].head(
         NUMBER_OF_TOP_POSITIONS)
     bottom_positions = bottom_positions.reset_index().drop('quick', axis=1)
     bottom_positions.index = bottom_positions.index + 1
 
-    topixTable = turnover_merged_df.truncate(after=g.endDate).groupby(["advisor", "TOPIX"]).sum()[['JPYPL']].loc[
-                 (slice(param_advisor, param_advisor), slice(None)), :].reset_index().drop('advisor', 1).set_index(
+    topixTable = turnover_merged_df.truncate(after=end_date).groupby(["advisor", "TOPIX"]).sum()[['JPYPL']].loc[
+                 (slice(param_adviser, param_adviser), slice(None)), :].reset_index().drop('advisor', 1).set_index(
             'TOPIX')
     fundTopix = sqlPlDf.groupby(['advisor', 'TPX']).sum()[['RHAttr', 'YAAttr', 'LRAttr']].loc[
-                (slice(param_advisor, param_advisor), slice(None)), :].reset_index().drop('advisor', 1).set_index(
+                (slice(param_adviser, param_adviser), slice(None)), :].reset_index().drop('advisor', 1).set_index(
             'TPX')
     fundTopix = fundTopix.rename(index={'Warehousing  and  Harbor Transpo': 'Warehousing  and  Harbor Transport'})
     topixPl = sqlPlDf.groupby(['advisor', 'TPX', 'side']).sum()[['attribution']].loc[
-              (slice(param_advisor, param_advisor), slice(None)), :].unstack()['attribution'].reset_index().drop(
+              (slice(param_adviser, param_adviser), slice(None)), :].unstack()['attribution'].reset_index().drop(
             'advisor', 1).set_index('TPX')
     topixPl = topixPl.rename(index={'Warehousing  and  Harbor Transpo': 'Warehousing  and  Harbor Transport'})
     topixTable = topixTable.merge(fundTopix, left_index=True, right_index=True).merge(topixPl.fillna(0),
@@ -757,17 +727,17 @@ def attrib():
                      'L': 'LongPL',
                      'S': 'ShortPL', 'TO': 'TO %'})
 
-    strategyTable = turnover_merged_df.truncate(after=g.endDate).groupby(["advisor", "strategy"]).sum()[['JPYPL']].loc[
-                    (slice(param_advisor, param_advisor), slice(None)), :].reset_index().drop('advisor',
+    strategyTable = turnover_merged_df.truncate(after=end_date).groupby(["advisor", "strategy"]).sum()[['JPYPL']].loc[
+                    (slice(param_adviser, param_adviser), slice(None)), :].reset_index().drop('advisor',
                                                                                               1).set_index(
             'strategy')
     fundStrategy = sqlPlDf.groupby(['advisor', 'strategy']).sum()[['RHAttr', 'YAAttr', 'LRAttr']].loc[
-                   (slice(param_advisor, param_advisor), slice(None)), :].reset_index().drop('advisor',
+                   (slice(param_adviser, param_adviser), slice(None)), :].reset_index().drop('advisor',
                                                                                              1).set_index(
             'strategy')
     fundStrategy = fundStrategy.fillna(0)
     strategyPl = sqlPlDf.groupby(['advisor', 'strategy', 'side']).sum()[['attribution']].loc[
-                 (slice(param_advisor, param_advisor), slice(None)), :].unstack()['attribution'].reset_index().drop(
+                 (slice(param_adviser, param_adviser), slice(None)), :].unstack()['attribution'].reset_index().drop(
             'advisor', 1).set_index('strategy')
     strategyPl = strategyPl.fillna(0)
     strategyTable = strategyTable.merge(fundStrategy, left_index=True, right_index=True).merge(strategyPl,
@@ -789,14 +759,14 @@ def attrib():
             columns={'JPYPL': 'Turnover', 'RHAttr': 'Rockhampton', 'YAAttr': 'Yaraka', 'LRAttr': 'Longreach',
                      'L': 'LongPL',
                      'S': 'ShortPL', 'TO': 'TO %'})
-    positionTable = turnover_merged_df.truncate(after=g.endDate).groupby(["advisor", "code"]).sum()[['JPYPL']].loc[
-                    (slice(param_advisor, param_advisor), slice(None)), :].reset_index().drop('advisor',
+    positionTable = turnover_merged_df.truncate(after=end_date).groupby(["advisor", "code"]).sum()[['JPYPL']].loc[
+                    (slice(param_adviser, param_adviser), slice(None)), :].reset_index().drop('advisor',
                                                                                               1).set_index('code')
     positionPl = sqlPlDf.groupby(['advisor', 'quick', 'name']).sum()[['RHAttr', 'YAAttr', 'LRAttr']].loc[
-                 (slice(param_advisor, param_advisor), slice(None)), :].reset_index().drop('advisor', 1).set_index(
+                 (slice(param_adviser, param_adviser), slice(None)), :].reset_index().drop('advisor', 1).set_index(
             'quick')
     sidePl = sqlPlDf.groupby(['advisor', 'quick', 'side']).sum()[['attribution']].loc[
-             (slice(param_advisor, param_advisor), slice(None)), :].unstack()['attribution'].reset_index().drop(
+             (slice(param_adviser, param_adviser), slice(None)), :].unstack()['attribution'].reset_index().drop(
             'advisor', 1).set_index('quick').fillna(0)
     positionTable = positionTable.merge(positionPl, left_index=True, right_index=True, how='outer'). \
         merge(sidePl, left_index=True, right_index=True, how='outer').fillna(0)
@@ -829,7 +799,7 @@ def attrib():
                                                     'Bottom %s Trades' % NUMBER_OF_TOP_POSITIONS)
 
     remaining_row_number -= 2 + 1  # 2 titles of ranking tables
-    table_list = [topixTable, strategyTable, positionTable] if g.indexMapping[param_advisor] == 'TPX' else [
+    table_list = [topixTable, strategyTable, positionTable] if g.indexMapping[param_adviser] == 'TPX' else [
         strategyTable, positionTable]
     for df in table_list:
         tables_html, remaining_row_number = add_to_page(df, tables_html, remaining_row_number)
@@ -843,41 +813,41 @@ def attrib():
     render_obj['margin_bottom'] = 30
     render_obj['margin_right'] = 5
     render_obj['graph_font'] = 'Calibri'
-    render_obj['graph_font_size'] = 10
-    render_obj['analyst'] = param_advisor
-    render_obj['index'] = g.indexMapping[param_advisor]
-    render_obj['startDate'] = g.fromDate
-    render_obj['endDate'] = g.endDate
-    render_obj['longTurnover'] = Decimal(sumTurnoverPerAdv.ix[param_advisor]['L']).quantize(Decimal('1.'),
+    render_obj['tick_font_size'] = 10
+    render_obj['analyst'] = param_adviser
+    render_obj['index'] = g.indexMapping[param_adviser]
+    render_obj['startDate'] = start_date
+    render_obj['endDate'] = end_date
+    render_obj['longTurnover'] = Decimal(sumTurnoverPerAdv.ix[param_adviser]['L']).quantize(Decimal('1.'),
                                                                                             rounding=ROUND_HALF_UP)
-    render_obj['shortTurnover'] = Decimal(sumTurnoverPerAdv.ix[param_advisor]['S']).quantize(Decimal('1.'),
+    render_obj['shortTurnover'] = Decimal(sumTurnoverPerAdv.ix[param_adviser]['S']).quantize(Decimal('1.'),
                                                                                              rounding=ROUND_HALF_UP)
-    render_obj['totalLong'] = totalRatio.ix[param_advisor]['L']
-    render_obj['totalShort'] = totalRatio.ix[param_advisor]['S']
+    render_obj['totalLong'] = totalRatio.ix[param_adviser]['L']
+    render_obj['totalShort'] = totalRatio.ix[param_adviser]['S']
     render_obj['longPL'] = Decimal(cs_attr_df['L'].iloc[-1]).quantize(Decimal('1.'), rounding=ROUND_HALF_UP)
     render_obj['shortPL'] = Decimal(cs_attr_df['S'].iloc[-1]).quantize(Decimal('1.'), rounding=ROUND_HALF_UP)
     render_obj['longIndexOP'] = net_op['L'].iloc[-1] * 100
     render_obj['shortIndexOP'] = net_op['S'].iloc[-1] * 100
     render_obj['longBetaOP'] = beta_op['L'].iloc[-1] * 100
     render_obj['shortBetaOP'] = beta_op['S'].iloc[-1] * 100
-    render_obj['longHitRate'] = hitRateDf['LongsHR'].ix[param_advisor]
-    render_obj['shortHitRate'] = hitRateDf['ShortsHR'].ix[param_advisor]
-    render_obj['longReturn'] = long_short_return['attribution']['L'].ix[param_advisor]
-    render_obj['shortReturn'] = long_short_return['attribution']['S'].ix[param_advisor]
-    render_obj['rhBpsLong'] = totalFund[totalFund['advisor'] == param_advisor].sum()['RHAttr']['L'] * 100
-    render_obj['rhBpsShort'] = totalFund[totalFund['advisor'] == param_advisor].sum()['RHAttr']['S'] * 100
-    render_obj['yaBpsLong'] = totalFund[totalFund['advisor'] == param_advisor].sum()['YAAttr']['L'] * 100
-    render_obj['yaBpsShort'] = totalFund[totalFund['advisor'] == param_advisor].sum()['YAAttr']['S'] * 100
-    render_obj['lrBpsLong'] = totalFund[totalFund['advisor'] == param_advisor].sum()['LRAttr']['L'] * 100
-    render_obj['lrBpsShort'] = totalFund[totalFund['advisor'] == param_advisor].sum()['LRAttr']['S'] * 100
+    render_obj['longHitRate'] = hitRateDf['LongsHR'].ix[param_adviser]
+    render_obj['shortHitRate'] = hitRateDf['ShortsHR'].ix[param_adviser]
+    render_obj['longReturn'] = long_short_return['attribution']['L'].ix[param_adviser]
+    render_obj['shortReturn'] = long_short_return['attribution']['S'].ix[param_adviser]
+    render_obj['rhBpsLong'] = totalFund[totalFund['advisor'] == param_adviser].sum()['RHAttr']['L'] * 100
+    render_obj['rhBpsShort'] = totalFund[totalFund['advisor'] == param_adviser].sum()['RHAttr']['S'] * 100
+    render_obj['yaBpsLong'] = totalFund[totalFund['advisor'] == param_adviser].sum()['YAAttr']['L'] * 100
+    render_obj['yaBpsShort'] = totalFund[totalFund['advisor'] == param_adviser].sum()['YAAttr']['S'] * 100
+    render_obj['lrBpsLong'] = totalFund[totalFund['advisor'] == param_adviser].sum()['LRAttr']['L'] * 100
+    render_obj['lrBpsShort'] = totalFund[totalFund['advisor'] == param_adviser].sum()['LRAttr']['S'] * 100
     render_obj['exposure_avg_long'] = (
-        exposure_avg[(exposure_avg['advisor'] == param_advisor) & (exposure_avg['side'] == 'L')].mean() * 100 / aumDf[
+        exposure_avg[(exposure_avg['advisor'] == param_adviser) & (exposure_avg['side'] == 'L')].mean() * 100 / aumDf[
             'Total'].mean()).iloc[0]
     render_obj['exposure_avg_short'] = (
-        exposure_avg[(exposure_avg['advisor'] == param_advisor) & (exposure_avg['side'] == 'S')].mean() * 100 / aumDf[
+        exposure_avg[(exposure_avg['advisor'] == param_adviser) & (exposure_avg['side'] == 'S')].mean() * 100 / aumDf[
             'Total'].mean()).iloc[0]
-    render_obj['rank_long'] = rankLongDf.ix[param_advisor][0]
-    render_obj['rank_short'] = rankShortDf.ix[param_advisor][0]
+    render_obj['rank_long'] = rankLongDf.ix[param_adviser][0]
+    render_obj['rank_short'] = rankShortDf.ix[param_adviser][0]
     render_obj['pl_graph'] = pl_graph
     render_obj['netop_graph'] = netop_graph
     render_obj['betaop_graph'] = beta_graph
@@ -913,10 +883,10 @@ def getSumTurnover(from_date, end_date):
         turnover_merged_df['JPYPL'] = (turnover_merged_df['Turnover'] * turnover_merged_df['AvgOfrate']).values
 
         # calculate total turnover for each side
-        total_turnover = turnover_merged_df.truncate(after=g.endDate).groupby(["side"]).sum()['JPYPL']
+        total_turnover = turnover_merged_df.truncate(after=end_date).groupby(["side"]).sum()['JPYPL']
 
         # calculate turnover for each advisor
-        sumTurnoverPerAdv = turnover_merged_df.truncate(after=g.endDate).groupby(["advisor", "side"]).sum()[
+        sumTurnoverPerAdv = turnover_merged_df.truncate(after=end_date).groupby(["advisor", "side"]).sum()[
             'JPYPL'].unstack()
 
         totalRatio = sumTurnoverPerAdv * 100 / total_turnover['L']
@@ -938,7 +908,7 @@ def get_attr_df(from_date, end_date):
         sqlPlDf = get_pl_df(from_date, end_date)
         sqlPlDf = sqlPlDf.merge(code_name_map, left_on='quick', right_on='quick')
 
-        sumTurnoverPerAdv, totalRatio = getSumTurnover(g.fromDate, g.endDate)
+        sumTurnoverPerAdv, totalRatio = getSumTurnover(from_date, end_date)
 
         long_short_return = sqlPlDf.groupby(["advisor", "side"]).sum().drop(['RHAttr', 'YAAttr', 'LRAttr'],
                                                                         axis=1).unstack().div(sumTurnoverPerAdv,
@@ -957,18 +927,18 @@ def getTurnoverValue(advisor, side):
     :return: sum of turnover
     '''
 
-    sumTurnoverPerAdv, totalRatio = getSumTurnover(g.fromDate, g.endDate)
+    sumTurnoverPerAdv, totalRatio = getSumTurnover(g.startDate, g.endDate)
 
     return Decimal(sumTurnoverPerAdv.ix[advisor][side]).quantize(Decimal('1.'), rounding=ROUND_HALF_UP)
 
 
 def getTurnoverRatio(advisor, side):
-    sumTurnoverPerAdv, totalRatio = getSumTurnover(g.fromDate, g.endDate)
+    sumTurnoverPerAdv, totalRatio = getSumTurnover(g.startDate, g.endDate)
     return totalRatio.ix[advisor][side]
 
 
 def get_pl(advisor, side, type):
-    long_short_return, sqlPlDf = get_attr_df(g.fromDate, g.endDate)
+    long_short_return, sqlPlDf = get_attr_df(g.startDate, g.endDate)
     attr_df = sqlPlDf.groupby(['advisor', 'side']).sum()
     if type =='pl':
         return Decimal(attr_df.ix[(advisor, side)]['attribution']).quantize(Decimal('1.'), rounding=ROUND_HALF_UP)
@@ -993,7 +963,7 @@ def get_avg_exposure(from_date, end_date):
         aumDf = get_aum_df(from_date, end_date)
         codeBetaDf = get_code_beta()
 
-        fExposureDf = get_exposure_df(g.fromDate, g.endDate)
+        fExposureDf = get_exposure_df(g.startDate, end_date)
 
         mfExposureDf = fExposureDf.merge(codeBetaDf, how='left', left_on='quick', right_on='code')
         sumExposureDf = mfExposureDf.groupby(['processDate', 'advisor', 'side']).sum()[
@@ -1029,15 +999,15 @@ def get_avg_exposure(from_date, end_date):
 
 
 def get_exposure(adviser, side):
-    exposure_avg, tExposureDf, betaExposure, gross_exposure = get_avg_exposure(g.fromDate, g.endDate)
-    aum_df = get_aum_df(g.fromDate, g.endDate)
+    exposure_avg, tExposureDf, betaExposure, gross_exposure = get_avg_exposure(g.startDate, g.endDate)
+    aum_df = get_aum_df(g.startDate, g.endDate)
     return (exposure_avg[(exposure_avg['advisor'] == adviser) & (exposure_avg['side'] == side)].mean() * 100 / aum_df[
             'Total'].mean()).iloc[0]
 
 
 def get_rank(adviser, side):
-    exposure_avg, tExposureDf, betaExposure, gross_exposure = get_avg_exposure(g.fromDate, g.endDate)
-    aum_df = get_aum_df(g.fromDate, g.endDate)
+    exposure_avg, tExposureDf, betaExposure, gross_exposure = get_avg_exposure(g.startDate, g.endDate)
+    aum_df = get_aum_df(g.startDate, g.endDate)
     rankLongDf = exposure_avg[(exposure_avg['side'] == 'L')].groupby(by='advisor').mean() * 100 / aum_df['Total'].mean()
     rankShortDf = exposure_avg[(exposure_avg['side'] == 'S')].groupby(by='advisor').mean() * 100 / aum_df['Total'].mean()
     rankLongDf = rankLongDf.drop(g.dropList, errors='ignore').rank(ascending=False)
@@ -1051,10 +1021,10 @@ def get_rank(adviser, side):
 
 def get_net_op(adviser):
 
-    indexReturn, pIndexDf = get_index_return(g.fromDate, g.endDate)
-    exposure_avg, tExposureDf, betaExposure, gross_exposure = get_avg_exposure(g.fromDate, g.endDate)
-    aum_df = get_aum_df(g.fromDate, g.endDate)
-    long_short_return, sqlPlDf = get_attr_df(g.fromDate, g.endDate)
+    indexReturn, pIndexDf = get_index_return(g.startDate, g.endDate)
+    exposure_avg, tExposureDf, betaExposure, gross_exposure = get_avg_exposure(g.startDate, g.endDate)
+    aum_df = get_aum_df(g.startDate, g.endDate)
+    long_short_return, sqlPlDf = get_attr_df(g.startDate, g.endDate)
 
     tExposure = tExposureDf[:, adviser].unstack().shift(1)
 
@@ -1070,7 +1040,7 @@ def get_net_op(adviser):
             aum_df.shift(1)['Total'], axis=0)
     net_op['S'] = attr_df['S'].sub((tExposure['S'] * -1).mul(indexReturn[g.indexMapping[adviser]], axis=0),
                                    axis=0).div(aum_df.shift(1)['Total'], axis=0)
-    net_op.ix[g.fromDate] = 0
+    net_op.ix[g.startDate] = 0
     net_op = net_op.cumsum().fillna(0)
     net_op['Total'] = net_op['L'] + net_op['S']
 
@@ -1087,10 +1057,10 @@ def get_net_op(adviser):
 
 def get_beta_op(adviser):
 
-    indexReturn, pIndexDf = get_index_return(g.fromDate, g.endDate)
-    exposure_avg, tExposureDf, betaExposure, gross_exposure = get_avg_exposure(g.fromDate, g.endDate)
-    long_short_return, sqlPlDf = get_attr_df(g.fromDate, g.endDate)
-    aum_df = get_aum_df(g.fromDate, g.endDate)
+    indexReturn, pIndexDf = get_index_return(g.startDate, g.endDate)
+    exposure_avg, tExposureDf, betaExposure, gross_exposure = get_avg_exposure(g.startDate, g.endDate)
+    long_short_return, sqlPlDf = get_attr_df(g.startDate, g.endDate)
+    aum_df = get_aum_df(g.startDate, g.endDate)
 
     btExposure = betaExposure[:, adviser].unstack().shift(1)
 
@@ -1121,8 +1091,8 @@ def get_beta_op(adviser):
 def get_pl_graph(adviser, margin_top, margin_bottom, margin_left, margin_right, graph_width, graph_height):
     net_op, attr_df, netop_graph = get_net_op(adviser)
     cs_attr_df = attr_df.cumsum().fillna(0)
-    indexReturn, pIndexDf = get_index_return(g.fromDate, g.endDate)
-    exposure_avg, tExposureDf, betaExposure, gross_exposure = get_avg_exposure(g.fromDate, g.endDate)
+    indexReturn, pIndexDf = get_index_return(g.startDate, g.endDate)
+    exposure_avg, tExposureDf, betaExposure, gross_exposure = get_avg_exposure(g.startDate, g.endDate)
 
     tExposure = tExposureDf[:, adviser].unstack().shift(1)
 
@@ -1152,7 +1122,7 @@ def get_pl_graph(adviser, margin_top, margin_bottom, margin_left, margin_right, 
 
 
 def get_exposure_graph(adviser):
-    exposure_avg, tExposureDf, betaExposure, gross_exposure = get_avg_exposure(g.fromDate, g.endDate)
+    exposure_avg, tExposureDf, betaExposure, gross_exposure = get_avg_exposure(g.startDate, g.endDate)
     exposureGraphDf = tExposureDf[:, adviser].unstack().reindex(tExposureDf.index.levels[0]).fillna(0)
     exposure_graph = [{
                           'x': [pd.to_datetime(str(i)).strftime('%Y-%m-%d') for i in exposureGraphDf.index],
@@ -1165,7 +1135,7 @@ def get_exposure_graph(adviser):
 
 
 def get_name_graph(adviser):
-    fExposureDf = get_exposure_df(g.fromDate, g.endDate)
+    fExposureDf = get_exposure_df(g.startDate, g.endDate)
 
     names_df = fExposureDf.groupby(by=['processDate', 'advisor']).count()['quick']
     names_graph = [{
@@ -1186,7 +1156,7 @@ def get_op_graph(adviser):
     net_op, attr_df, netop_graph = get_net_op(adviser)
     beta_op, beta_graph = get_beta_op(adviser)
 
-    bm_index = pd.date_range(start=g.fromDate, end=g.endDate, freq='BM')
+    bm_index = pd.date_range(start=g.startDate, end=g.endDate, freq='BM')
     bm_net_op = net_op.reindex(bm_index)
     bm_beta_op = beta_op.reindex(bm_index)
     bm_net_op = bm_net_op - bm_net_op.shift(1)
@@ -1205,7 +1175,7 @@ def get_op_graph(adviser):
 
 
 def get_gross_exposure_graph(adviser):
-    exposure_avg, tExposureDf, betaExposure, gross_exposure = get_avg_exposure(g.fromDate, g.endDate)
+    exposure_avg, tExposureDf, betaExposure, gross_exposure = get_avg_exposure(g.startDate, g.endDate)
     gross_exposure_graph = [{
                                 'x': [pd.to_datetime(str(i)).strftime('%Y-%m-%d') for i in
                                       gross_exposure[:, col].index],
@@ -1220,14 +1190,14 @@ def get_gross_exposure_graph(adviser):
 
 
 def get_short_exposure_graph(adviser):
-    exposure_avg, tExposureDf, betaExposure, gross_exposure = get_avg_exposure(g.fromDate, g.endDate)
-    aum_df = get_aum_df(g.fromDate, g.endDate)
+    exposure_avg, tExposureDf, betaExposure, gross_exposure = get_avg_exposure(g.startDate, g.endDate)
+    aum_df = get_aum_df(g.startDate, g.endDate)
     t = DataFrame(tExposureDf).reset_index()
     t2 = t[t['side'] == 'S'].set_index(['processDate', 'advisor'])[0].div(aum_df['Total'], axis=0)
     t3 = DataFrame(
             t[t['side'] == 'S'].set_index(['processDate', 'advisor'])[0].div(aum_df['Total'], axis=0)).reset_index()
     t3[t3['advisor'] == 'Bal'] = 0
-    t4 = t3.groupby(by='processDate')[0].sum().truncate(before=g.fromDate)
+    t4 = t3.groupby(by='processDate')[0].sum().truncate(before=g.startDate)
     short_exposure = t2.div(t4, axis=0)
     short_exposure_graph = [{
                                 'x': [pd.to_datetime(str(i)).strftime('%Y-%m-%d') for i in
@@ -1245,26 +1215,26 @@ def get_short_exposure_graph(adviser):
 
 @app.route('/test2')
 def test2():
-    param_advisor = request.args.get('analyst', g.reportAdvisor)
+    param_adviser = request.args.get('analyst', g.reportAdvisor)
 
-    hitRateDf = get_hit_rate_df(g.fromDate, g.endDate)
+    hitRateDf = get_hit_rate_df(g.startDate, g.endDate)
 
-    net_op, attr_df, netop_graph = get_net_op(param_advisor)
-    beta_op, beta_graph = get_beta_op(param_advisor)
+    net_op, attr_df, netop_graph = get_net_op(param_adviser)
+    beta_op, beta_graph = get_beta_op(param_adviser)
 
     render_obj = dict()
-    render_obj['analyst'] = param_advisor
-    render_obj['index'] = g.indexMapping[param_advisor]
-    render_obj['startDate'] = g.fromDate
+    render_obj['analyst'] = param_adviser
+    render_obj['index'] = g.indexMapping[param_adviser]
+    render_obj['startDate'] = g.startDate
     render_obj['endDate'] = g.endDate
     render_obj['analyst_list'] = g.indexMapping.keys()
-    render_obj['longTurnover'] = getTurnoverValue(param_advisor, 'L')
-    render_obj['shortTurnover'] = getTurnoverValue(param_advisor, 'S')
-    render_obj['totalLong'] = getTurnoverRatio(param_advisor, 'L')
-    render_obj['totalShort'] = getTurnoverRatio(param_advisor, 'S')
+    render_obj['longTurnover'] = getTurnoverValue(param_adviser, 'L')
+    render_obj['shortTurnover'] = getTurnoverValue(param_adviser, 'S')
+    render_obj['totalLong'] = getTurnoverRatio(param_adviser, 'L')
+    render_obj['totalShort'] = getTurnoverRatio(param_adviser, 'S')
 
-    render_obj['longPL'] = get_pl(param_advisor, 'L', 'pl')
-    render_obj['shortPL'] = get_pl(param_advisor, 'S', 'pl')
+    render_obj['longPL'] = get_pl(param_adviser, 'L', 'pl')
+    render_obj['shortPL'] = get_pl(param_adviser, 'S', 'pl')
 
     render_obj['longIndexOP'] = net_op['L'].iloc[-1] * 100
     render_obj['shortIndexOP'] = net_op['S'].iloc[-1] * 100
@@ -1272,24 +1242,24 @@ def test2():
     render_obj['longBetaOP'] = beta_op['L'].iloc[-1] * 100
     render_obj['shortBetaOP'] = beta_op['S'].iloc[-1] * 100
 
-    render_obj['longHitRate'] = hitRateDf['LongsHR'].ix[param_advisor]
-    render_obj['shortHitRate'] = hitRateDf['ShortsHR'].ix[param_advisor]
+    render_obj['longHitRate'] = hitRateDf['LongsHR'].ix[param_adviser]
+    render_obj['shortHitRate'] = hitRateDf['ShortsHR'].ix[param_adviser]
 
-    render_obj['longReturn'] = get_pl(param_advisor, 'L', 'return')
-    render_obj['shortReturn'] = get_pl(param_advisor, 'S', 'return')
+    render_obj['longReturn'] = get_pl(param_adviser, 'L', 'return')
+    render_obj['shortReturn'] = get_pl(param_adviser, 'S', 'return')
 
-    render_obj['rhBpsLong'] = get_pl(param_advisor, 'L', 'rhpl') * 100
-    render_obj['rhBpsShort'] = get_pl(param_advisor, 'S', 'rhpl') * 100
-    render_obj['yaBpsLong'] = get_pl(param_advisor, 'L', 'yapl') * 100
-    render_obj['yaBpsShort'] = get_pl(param_advisor, 'S', 'yapl') * 100
-    render_obj['lrBpsLong'] = get_pl(param_advisor, 'L', 'lrpl') * 100
-    render_obj['lrBpsShort'] = get_pl(param_advisor, 'S', 'lrpl') * 100
+    render_obj['rhBpsLong'] = get_pl(param_adviser, 'L', 'rhpl') * 100
+    render_obj['rhBpsShort'] = get_pl(param_adviser, 'S', 'rhpl') * 100
+    render_obj['yaBpsLong'] = get_pl(param_adviser, 'L', 'yapl') * 100
+    render_obj['yaBpsShort'] = get_pl(param_adviser, 'S', 'yapl') * 100
+    render_obj['lrBpsLong'] = get_pl(param_adviser, 'L', 'lrpl') * 100
+    render_obj['lrBpsShort'] = get_pl(param_adviser, 'S', 'lrpl') * 100
 
-    render_obj['exposure_avg_long'] = get_exposure(param_advisor, 'L')
-    render_obj['exposure_avg_short'] = get_exposure(param_advisor, 'S')
+    render_obj['exposure_avg_long'] = get_exposure(param_adviser, 'L')
+    render_obj['exposure_avg_short'] = get_exposure(param_adviser, 'S')
 
-    render_obj['rank_long'] = get_rank(param_advisor, 'L')
-    render_obj['rank_short'] = get_rank(param_advisor, 'S')
+    render_obj['rank_long'] = get_rank(param_adviser, 'L')
+    render_obj['rank_short'] = get_rank(param_adviser, 'S')
 
     render_obj['graph_width'] = 750
     render_obj['graph_height'] = 240
@@ -1301,16 +1271,16 @@ def test2():
     render_obj['graph_font'] = 'Calibri'
     render_obj['graph_font_size'] = 10
 
-    render_obj['pl_graph'] = get_pl_graph(param_advisor, render_obj['margin_top'], render_obj['margin_bottom'],
+    render_obj['pl_graph'] = get_pl_graph(param_adviser, render_obj['margin_top'], render_obj['margin_bottom'],
                                           render_obj['margin_left'], render_obj['margin_right'],
                                           render_obj['graph_width'], render_obj['graph_height'])
     render_obj['netop_graph'] = netop_graph
     render_obj['betaop_graph'] = beta_graph
-    render_obj['exposure_graph'] = get_exposure_graph(param_advisor)
-    render_obj['op_graph'] = get_op_graph(param_advisor)
-    render_obj['gross_exposure_graph'] = get_gross_exposure_graph(param_advisor)
-    render_obj['short_exposure_graph'] = get_short_exposure_graph(param_advisor)
-    render_obj['names_graph'] = get_name_graph(param_advisor)
+    render_obj['exposure_graph'] = get_exposure_graph(param_adviser)
+    render_obj['op_graph'] = get_op_graph(param_adviser)
+    render_obj['gross_exposure_graph'] = get_gross_exposure_graph(param_adviser)
+    render_obj['short_exposure_graph'] = get_short_exposure_graph(param_adviser)
+    render_obj['names_graph'] = get_name_graph(param_adviser)
 
     return render_template('test2.html', params=render_obj)
 

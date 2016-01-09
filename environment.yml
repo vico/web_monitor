@@ -10,3 +10,4 @@ dependencies:
     - qrcode
     - plotly
     - xhtml2pdf
+    - Flask-Cache
