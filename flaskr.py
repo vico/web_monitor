@@ -89,15 +89,15 @@ def break_into_page(df, start_new_page=True, finalize_last_page=True,
                 app.logger.debug(r)
                 table_html += '<tr>' + ''.join(['<th>' + elements[0] + '</th>'] + [
                     '<td>' + '{:.2f}%'.format(float(h) * 100) + '</td>' for h in elements[1:4]] + [
-                                                   '<td>' + '{:,.0f}'.format(float(h)) + '</td>' for h in
+                                                   '<td>' + ('0' if h == '' else '{:,.0f}'.format(float(h))) + '</td>' for h in
                                                    elements[4:7]] + [
-                                                   '<td>' + '{:.1f}%'.format(float(h) * 100) + '</td>' for h in
+                                                   '<td>' + ('0' if h == '' else '{:.1f}%'.format(float(h) * 100)) + '</td>' for h in
                                                    elements[7:]
                                                    ]) + '</tr>'
             elif table_type == 'ranking':
                 table_html += '<tr>' + ''.join(['<th>' + elements[0] + '</th>'] + [
                     '<td>' + h + '</td>' for h in elements[1:-1]] + [
-                                                   '<td>' + '{:,.0f}'.format(float(h)) for h in elements[-1:]
+                                                   '<td>' + ('0' if h == '' else '{:,.0f}'.format(float(h)))+'</td>' for h in elements[-1:]
                                                    ]) + '</tr>'
 
             total_rows += 1
@@ -139,7 +139,9 @@ def before_request():
         'HA': 'TPX',
         'RW': 'TPX',
         'SJ': 'TPX',
+        'TNi': 'TPX',
         'TI': 'TPX',
+        'TT': 'TPX',
         'AQ': 'HSCEI',
         'DH': 'HSCEI',
         'EL': 'TWSE',
@@ -236,7 +238,7 @@ def get_turnover_df(from_date, end_date):
         ORDER BY aa.tradeDate
         ;
          ''' % (from_date, end_date), g.con, parse_dates=['tradeDate'], coerce_float=True, index_col='tradeDate')
-
+    # TODO: update exposure df for 2016, specifically MktCap information
     df20141231 = pd.read_csv('turnover20141231.csv', index_col=0, parse_dates=0)
 
     # concat with data in Access DB
@@ -351,13 +353,27 @@ def get_index_return(from_date, end_date):
     return indexReturn, pIndexDf
 
 
+@cache.memoize(TIMEOUT)
+def get_code_name_map():
+    code_name_map = sql.read_sql('''SELECT quick, name FROM t01Instrument;''', g.con)
+    return code_name_map
+
+
 @app.route('/attrib', methods=['GET'])
 def attrib():
+    # TODO: change all double quotes to single quote for consistence
+    # TODO: verify cache invalidate
+    # TODO: test Redis as cache backend
+    # TODO: find a good way to reduce first access turn around time
+    # TODO: add email verification, Clef as 2 factor authentication
+    # TODO: add send PDFs to specified email
+    # TODO: add checker view (should have pie graph to see what is missing)
+    # TODO: add 1 year summary attribution page
     param_adviser = request.args.get('analyst', g.reportAdvisor)
     start_date = request.args.get('startDate', g.startDate)
     end_date = request.args.get('endDate', g.endDate)
 
-    code_name_map = sql.read_sql('''SELECT quick, name FROM t01Instrument;''', g.con)
+    code_name_map = get_code_name_map()
 
     hitRateDf = get_hit_rate_df(start_date, end_date)
 
@@ -484,6 +500,8 @@ def attrib():
         'yaxis': 'y2'
     }]
 
+    # TODO: fix TNi pl_graph
+
     netop_graph = [{
                        'x': [pd.to_datetime(str(i)).strftime('%Y-%m-%d') for i in net_op.index],
                        'y': (net_op[col] * 100).values.tolist(),
@@ -583,6 +601,8 @@ def attrib():
     # try to assign cap to each trade turnover as Micro,.., Large
     scaleTable = turnover_merged_df.truncate(after=end_date).reset_index()
 
+    # TODO: analyst=DH&startDate=2014-12-31&endDate=2015-10-01, has incorrect value? for Long PL
+
     scaleTable['firstTradeDate'] = scaleTable['firstTradeDate'].map(
         lambda x: x if (type(x) is str) else x.strftime('%Y-%m-%d'))
 
@@ -613,9 +633,6 @@ def attrib():
     scaleTable = scaleTable.rename(
         columns={'JPYPL': 'Turnover', 'RHAttr': 'Rockhampton', 'YAAttr': 'Yaraka', 'LRAttr': 'Longreach', 'L': 'LongPL',
                  'S': 'ShortPL', 'TO': 'TO %'})
-    # frmt_map = {'LongPL':money_fmt,'ShortPL':money_fmt, 'Turnover': money_fmt,'Rockhampton':percent_fmt, 'Yaraka': percent_fmt, 'Longreach':percent_fmt,
-    #            'TO %': percent1_fmt, 'Return': percent1_fmt}
-    # frmt = {col:frmt_map[col] for col in scaleTable.columns if col in frmt_map.keys()}
 
     gicsTable = turnover_merged_df.truncate(after=end_date).groupby(["advisor", "GICS"]).sum()[['JPYPL']].loc[
                 (slice(param_adviser, param_adviser), slice(None)), :].reset_index().drop('advisor', 1).set_index(
@@ -633,20 +650,16 @@ def attrib():
     totalTurnOver = gicsTable['JPYPL'].sum()
     gicsTable['TO'] = gicsTable['JPYPL'] / totalTurnOver
 
-    # frmt_map = {'LongPL': money_fmt, 'ShortPL': money_fmt, 'Turnover': money_fmt, 'Rockhampton': percent_fmt,
-    #            'Yaraka': percent_fmt, 'Longreach': percent_fmt, 'TO %': percent1_fmt, 'Return': percent1_fmt}
-
     total_series = gicsTable.sum()
     total_series.name = 'Total'
     gicsTotal = pd.DataFrame(total_series).T
     gicsTable = pd.concat([gicsTable, gicsTotal])
-    gicsTable['Return'] = ((gicsTable['L'] + gicsTable['S']) / gicsTable['JPYPL']).replace([np.inf, -np.inf], 0)
+    gicsTable['Return'] = ((gicsTable['L'] + gicsTable['S']) / gicsTable['JPYPL']).replace(['', np.nan, np.inf, -np.inf], 0)
     gicsTable = gicsTable[['RHAttr', 'YAAttr', 'LRAttr', 'L', 'S', 'JPYPL', 'TO', 'Return']]
     gicsTable = gicsTable.rename(
             columns={'JPYPL': 'Turnover', 'RHAttr': 'Rockhampton', 'YAAttr': 'Yaraka', 'LRAttr': 'Longreach',
                      'L': 'LongPL',
                      'S': 'ShortPL', 'TO': 'TO %'})
-    # frmt = {col: frmt_map[col] for col in gicsTable.columns if col in frmt_map.keys()}
 
     codeBetaDf['code'] = codeBetaDf[['code']].applymap(str.upper)[
         'code']  # some code has inconsistent format like xxxx Hk instead of HK
@@ -713,8 +726,8 @@ def attrib():
               (slice(param_adviser, param_adviser), slice(None)), :].unstack()['attribution'].reset_index().drop(
             'advisor', 1).set_index('TPX')
     topixPl = topixPl.rename(index={'Warehousing  and  Harbor Transpo': 'Warehousing  and  Harbor Transport'})
-    topixTable = topixTable.merge(fundTopix, left_index=True, right_index=True, how='right').fillna(0).merge(topixPl.fillna(0),
-                                                                                      left_index=True, right_index=True)
+    topixTable = topixTable.merge(fundTopix, left_index=True, right_index=True, how='outer').fillna(0).merge(topixPl.fillna(0),
+                                                                                      left_index=True, right_index=True, how='outer')
     totalTurnOver = topixTable['JPYPL'].sum()
     topixTable['TO'] = topixTable['JPYPL'] / totalTurnOver
 
@@ -861,8 +874,6 @@ def attrib():
     render_obj['names_graph'] = names_graph
     render_obj['tables_html'] = tables_html
     render_obj['analyst_list'] = g.indexMapping.keys()
-
-    # render_obj['test'] = scaleTable
 
     return render_template('attrib.html', params=render_obj)
 
