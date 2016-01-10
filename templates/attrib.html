@@ -189,7 +189,8 @@
    margin: { t: 0,b:15,l:{{params['margin_left']}},r:{{params['margin_right']}} },
    width: {{params['graph_width']}},
    height: {{params['graph_height']}},
-   yaxis: { title: 'PL', tickfont: {size: {{params['tick_font_size']}} } },
+   xaxis: { nticks: {{params['nticks']}}, tickformat: '%b', tickfont: {size: {{params['tick_font_size']}} }},
+   yaxis: { tickfont: {size: {{params['tick_font_size']}} } },
    yaxis2: {
     overlaying:'y',
     side: 'right',
@@ -207,6 +208,7 @@
         margin: { t: 0,b:15,l:{{params['margin_left']}},r:{{params['margin_right']}} },
         width: {{params['graph_width']}},
         height: {{params['graph_height']}},
+        xaxis: { nticks: {{params['nticks']}}, tickformat: '%b', tickfont: {size: {{params['tick_font_size']}} }},
         yaxis: {
          ticksuffix: '%', tickfont: {size: {{params['tick_font_size']}}}
         }
@@ -217,6 +219,7 @@
        margin: { t: 0,b:15,l:{{params['margin_left']}},r:{{params['margin_right']}} },
        width: {{params['graph_width']}},
        height: {{params['graph_height']}},
+       xaxis: { nticks: {{params['nticks']}}, tickformat: '%b', tickfont: {size: {{params['tick_font_size']}} }},
        yaxis: {
          ticksuffix: '%', tickfont: {size: {{params['tick_font_size']}} }
        }
@@ -228,6 +231,7 @@
        margin: { t: {{params['margin_top']}},b:{{params['margin_bottom']}},l:{{params['margin_left']}},r:{{params['margin_right']}} },
        width: {{params['graph_width']}},
        height: {{params['graph_height']}},
+       xaxis: { nticks: {{params['nticks']}}, tickformat: '%b', tickfont: {size: {{params['tick_font_size']}} }},
        yaxis: {tickfont: {size: {{params['tick_font_size']}} }}
    } );
 
@@ -246,6 +250,7 @@
    margin: { t: {{params['margin_top']}},b:{{params['margin_bottom']}},l:{{params['margin_left']}},r:{{params['margin_right']}} },
    width: {{params['graph_width']}},
    height: {{params['graph_height']}},
+   xaxis: { nticks: {{params['nticks']}}, tickformat: '%b', tickfont: {size: {{params['tick_font_size']}} }},
    yaxis: {
      ticksuffix: '%', tickfont: {size: {{params['tick_font_size']}} }
    }
@@ -257,6 +262,7 @@
    width: {{params['graph_width']}},
    height: {{params['graph_height']}},
    title: 'Gross Exposure',
+   xaxis: { nticks: {{params['nticks']}}, tickformat: '%b', tickfont: {size: {{params['tick_font_size']}} }},
    yaxis: {
      ticksuffix: '%', tickfont: {size: {{params['tick_font_size']}} }
    }
@@ -268,6 +274,7 @@
    width: {{params['graph_width']}},
    height: {{params['graph_height']}},
    title: 'Short Exposure (As a Percent of all non-index short exposure)',
+   xaxis: { nticks: {{params['nticks']}}, tickformat: '%b', tickfont: {size: {{params['tick_font_size']}} }},
    yaxis: {
      ticksuffix: '%', tickfont: {size: {{params['tick_font_size']}} }
    }
@@ -279,6 +286,7 @@
    width: {{params['graph_width']}},
    height: {{params['graph_height']}},
    title: 'Number of Names',
+   xaxis: { nticks: {{params['nticks']}}, tickformat: '%b', tickfont: {size: {{params['tick_font_size']}} }},
    yaxis: {tickfont: {size: {{params['tick_font_size']}} }}
    } );
 

@@ -137,6 +137,7 @@ def before_request():
         'CS': 'TPX',
         'SM': 'TPX',
         'HA': 'TPX',
+        'PK': 'TPX',
         'RW': 'TPX',
         'SJ': 'TPX',
         'TNi': 'TPX',
@@ -372,6 +373,7 @@ def attrib():
     param_adviser = request.args.get('analyst', g.reportAdvisor)
     start_date = request.args.get('startDate', g.startDate)
     end_date = request.args.get('endDate', g.endDate)
+    nticks = len(pd.date_range(start_date, end_date, freq='BM'))
 
     code_name_map = get_code_name_map()
 
@@ -434,7 +436,7 @@ def attrib():
     attr_df = t[t['advisor'] == param_adviser]['attribution']
     attr_df['Total'] = attr_df['L'] + attr_df['S']
     cs_attr_df = attr_df
-    cs_attr_df = cs_attr_df.cumsum().fillna(0)
+    cs_attr_df = cs_attr_df.cumsum().fillna(method='ffill')
 
     long_short_return = sqlPlDf.groupby(["advisor", "side"]).sum().drop(['RHAttr', 'YAAttr', 'LRAttr'],
                                                                         axis=1).unstack().div(sumTurnoverPerAdv,
@@ -468,7 +470,7 @@ def attrib():
     net_op['S'] = attr_df['S'].sub((tExposure['S'] * -1).mul(indexReturn[g.indexMapping[param_adviser]], axis=0),
                                    axis=0).div(aumDf.shift(1)['Total'], axis=0)
     net_op.ix[start_date] = 0
-    net_op = net_op.cumsum().fillna(0)
+    net_op = net_op.cumsum().fillna(method='ffill')
     net_op['Total'] = net_op['L'] + net_op['S']
 
     btExposure = betaExposure[:, param_adviser].unstack().shift(1)
@@ -477,7 +479,7 @@ def attrib():
                                     axis=0).div(aumDf.shift(1)['Total'], axis=0)
     beta_op['S'] = attr_df['S'].sub((btExposure['S'] * -1).mul(indexReturn[g.indexMapping[param_adviser]], axis=0),
                                     axis=0).div(aumDf.shift(1)['Total'], axis=0)
-    beta_op = beta_op.cumsum().fillna(0)
+    beta_op = beta_op.cumsum().fillna(method='ffill')
     beta_op['Total'] = beta_op['L'] + beta_op['S']
 
     totalFund = sqlPlDf.groupby(['processDate', 'advisor', 'side']).sum().drop(['attribution'],
@@ -500,7 +502,6 @@ def attrib():
         'yaxis': 'y2'
     }]
 
-    # TODO: fix TNi pl_graph
 
     netop_graph = [{
                        'x': [pd.to_datetime(str(i)).strftime('%Y-%m-%d') for i in net_op.index],
@@ -537,8 +538,10 @@ def attrib():
     graph_op['Long Beta OP'] = bm_beta_op['L'].fillna(0) * 100
     graph_op['Short OP'] = bm_net_op['S'].fillna(0) * 100
     graph_op['Short Beta OP'] = bm_beta_op['S'].fillna(0) * 100
+    graph_op = graph_op[1:]
 
     op_graph = dict()
+    dt_start_date = datetime.strptime(start_date, '%Y-%m-%d')
     op_graph['index'] = [x.strftime('%Y-%m') for x in graph_op.index]
     op_graph['columns'] = {col: (graph_op[col] * 100).values.tolist() for col in graph_op.columns}
 
@@ -826,10 +829,11 @@ def attrib():
     render_obj['graph_line_width'] = g.lineWidth
     render_obj['margin_left'] = 40
     render_obj['margin_top'] = 40
-    render_obj['margin_bottom'] = 30
+    render_obj['margin_bottom'] = 34
     render_obj['margin_right'] = 5
     render_obj['graph_font'] = 'Calibri'
     render_obj['tick_font_size'] = 10
+    render_obj['nticks'] = nticks
     render_obj['analyst'] = param_adviser
     render_obj['index'] = g.indexMapping[param_adviser]
     render_obj['startDate'] = start_date
