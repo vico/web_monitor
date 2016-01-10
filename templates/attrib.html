@@ -198,7 +198,8 @@
     ticksuffix: '%',
     showgrid:false,
     tickfont: {size: {{params['tick_font_size']}} }
-   }
+   },
+   legend: { font: { size: {{params['tick_font_size']}} }, x: 1.05 }
   }
   );
 
@@ -211,7 +212,8 @@
         xaxis: { nticks: {{params['nticks']}}, tickformat: '%b', tickfont: {size: {{params['tick_font_size']}} }},
         yaxis: {
          ticksuffix: '%', tickfont: {size: {{params['tick_font_size']}}}
-        }
+        },
+        legend: { font: { size: {{params['tick_font_size']}} } }
    } );
 
   betaopGraph = document.getElementById('betaopGraph');
@@ -222,7 +224,8 @@
        xaxis: { nticks: {{params['nticks']}}, tickformat: '%b', tickfont: {size: {{params['tick_font_size']}} }},
        yaxis: {
          ticksuffix: '%', tickfont: {size: {{params['tick_font_size']}} }
-       }
+       },
+       legend: { font: { size: {{params['tick_font_size']}} } }
    } );
 
 
@@ -232,7 +235,8 @@
        width: {{params['graph_width']}},
        height: {{params['graph_height']}},
        xaxis: { nticks: {{params['nticks']}}, tickformat: '%b', tickfont: {size: {{params['tick_font_size']}} }},
-       yaxis: {tickfont: {size: {{params['tick_font_size']}} }}
+       yaxis: {tickfont: {size: {{params['tick_font_size']}} }},
+       legend: { font: { size: {{params['tick_font_size']}} } }
    } );
 
 
@@ -253,7 +257,8 @@
    xaxis: { nticks: {{params['nticks']}}, tickformat: '%b', tickfont: {size: {{params['tick_font_size']}} }},
    yaxis: {
      ticksuffix: '%', tickfont: {size: {{params['tick_font_size']}} }
-   }
+   },
+   legend: { font: { size: {{params['tick_font_size']}} } }
    } );
 
     grossExposureGraph = document.getElementById('grossExposureGraph');
@@ -265,7 +270,8 @@
    xaxis: { nticks: {{params['nticks']}}, tickformat: '%b', tickfont: {size: {{params['tick_font_size']}} }},
    yaxis: {
      ticksuffix: '%', tickfont: {size: {{params['tick_font_size']}} }
-   }
+   },
+   legend: { font: { size: {{params['tick_font_size']}} } }
    } );
 
    shortExposureGraph = document.getElementById('shortExposureGraph');
@@ -277,7 +283,8 @@
    xaxis: { nticks: {{params['nticks']}}, tickformat: '%b', tickfont: {size: {{params['tick_font_size']}} }},
    yaxis: {
      ticksuffix: '%', tickfont: {size: {{params['tick_font_size']}} }
-   }
+   },
+   legend: { font: { size: {{params['tick_font_size']}} } }
    } );
 
    namesGraph = document.getElementById('namesGraph');
@@ -287,7 +294,8 @@
    height: {{params['graph_height']}},
    title: 'Number of Names',
    xaxis: { nticks: {{params['nticks']}}, tickformat: '%b', tickfont: {size: {{params['tick_font_size']}} }},
-   yaxis: {tickfont: {size: {{params['tick_font_size']}} }}
+   yaxis: {tickfont: {size: {{params['tick_font_size']}} }},
+   legend: { font: { size: {{params['tick_font_size']}} } }
    } );
 
 
