@@ -22,7 +22,7 @@ DEBUG = True
 SECRET_KEY = 'development key'
 USERNAME = 'admin'
 PASSWORD = 'default'
-TIMEOUT = 5 * 60
+TIMEOUT = 15 * 60
 NUMBER_OF_ROW_PER_PAGE = 41
 NUMBER_OF_TOP_POSITIONS = 8
 
@@ -370,6 +370,7 @@ def attrib():
     # TODO: add send PDFs to specified email
     # TODO: add checker view (should have pie graph to see what is missing)
     # TODO: add 1 year summary attribution page
+    # TODO: switch to use scale from table
     param_adviser = request.args.get('analyst', g.reportAdvisor)
     start_date = request.args.get('startDate', g.startDate)
     end_date = request.args.get('endDate', g.endDate)
@@ -436,7 +437,7 @@ def attrib():
     attr_df = t[t['advisor'] == param_adviser]['attribution']
     attr_df['Total'] = attr_df['L'] + attr_df['S']
     cs_attr_df = attr_df
-    cs_attr_df = cs_attr_df.cumsum().fillna(method='ffill')
+    cs_attr_df = cs_attr_df.cumsum().fillna(method='ffill').fillna(0)
 
     long_short_return = sqlPlDf.groupby(["advisor", "side"]).sum().drop(['RHAttr', 'YAAttr', 'LRAttr'],
                                                                         axis=1).unstack().div(sumTurnoverPerAdv,
@@ -470,7 +471,7 @@ def attrib():
     net_op['S'] = attr_df['S'].sub((tExposure['S'] * -1).mul(indexReturn[g.indexMapping[param_adviser]], axis=0),
                                    axis=0).div(aumDf.shift(1)['Total'], axis=0)
     net_op.ix[start_date] = 0
-    net_op = net_op.cumsum().fillna(method='ffill')
+    net_op = net_op.cumsum().fillna(method='ffill').fillna(0)
     net_op['Total'] = net_op['L'] + net_op['S']
 
     btExposure = betaExposure[:, param_adviser].unstack().shift(1)
@@ -479,7 +480,7 @@ def attrib():
                                     axis=0).div(aumDf.shift(1)['Total'], axis=0)
     beta_op['S'] = attr_df['S'].sub((btExposure['S'] * -1).mul(indexReturn[g.indexMapping[param_adviser]], axis=0),
                                     axis=0).div(aumDf.shift(1)['Total'], axis=0)
-    beta_op = beta_op.cumsum().fillna(method='ffill')
+    beta_op = beta_op.cumsum().fillna(method='ffill').fillna(0)
     beta_op['Total'] = beta_op['L'] + beta_op['S']
 
     totalFund = sqlPlDf.groupby(['processDate', 'advisor', 'side']).sum().drop(['attribution'],
