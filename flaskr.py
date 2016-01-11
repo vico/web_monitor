@@ -205,7 +205,8 @@ def get_turnover_df(from_date, end_date):
         ABS(Notl) AS Turnover, e.advisor, e.strategy, e.sector,
         f.value AS GICS,
         IF(g.value IS NOT NULL, g.value, 'Non-Japan') AS TOPIX,
-        aa.firstTradeDate
+        aa.firstTradeDate,
+        aa.MktCap
         FROM (
         SELECT b.code,
         d.currencyCode,
@@ -219,16 +220,20 @@ def get_turnover_df(from_date, end_date):
         c.instrumentType,
         c.instrumentID,
         b.orderType,
-        IF (z.side='L', firstTradeDateLong, firstTradeDateShort) AS firstTradeDate
+        IF (z.side='L', firstTradeDateLong, firstTradeDateShort) AS firstTradeDate,
+        IF(c.instrumentType <> 'EQ', 'Index', IF(h.value*j.rate < 250000000,'Micro',
+                        IF(h.value*j.rate <1000000000, 'Small', IF(h.value*j.rate <5000000000, 'Mid', IF(h.value*j.rate <20000000000, 'Large', IF(h.value IS NULL, 'Micro','Mega'))) ))) AS MktCap
         FROM t08AdvisorTag a
         INNER JOIN t08Reconcile b ON a.code = b.code
         INNER JOIN t01Instrument c ON (b.equityType = c.instrumentType) AND (b.code = c.quick)
         INNER JOIN t02Currency d ON c.currencyID = d.currencyID
+        INNER JOIN `t06DailyCrossRate` j ON j.priceDate = b.processDate AND j.base=d.currencyCode AND j.quote='USD'
         LEFT JOIN t05PortfolioResponsibilities z ON z.instrumentID = c.instrumentID AND z.processDate = b.processDate
+        LEFT JOIN t06DailyBBStaticSnapshot h ON c.instrumentID = h.instrumentID AND h.dataType = 'CUR_MKT_CAP'
         WHERE a.adviseDate<= b.processDate
             AND b.processDate >= '%s' AND b.processDate < '%s' # Grab Analyst Trades start date
             AND b.equityType<>"OP"
-        AND b.srcFlag="K"
+            AND b.srcFlag="K"
         GROUP BY c.instrumentID, b.tradeDate, b.orderType, b.reconcileID, b.side, Qty, Notl, b.code
         ORDER BY b.code
         ) aa
@@ -269,15 +274,23 @@ def get_hit_rate_df(from_date, end_date):
 
 @cache.memoize(TIMEOUT)
 def get_pl_df(from_date, end_date):
-    pl_df = sql.read_sql('''SELECT processDate,advisor, side, quick, attribution,
-                          RHAttribution AS RHAttr,
-                          YAAttribution AS YAAttr,
-                          LRAttribution AS LRAttr, GICS, TPX,strategy, firstTradeDateLong, firstTradeDateShort
-                          FROM `t05PortfolioResponsibilities`
-                          WHERE processDate > '%s' AND processDate < '%s'
-                          AND quick NOT LIKE "DIV%%"
-                            AND quick NOT LIKE "FX%%"
-                          AND advisor <> ''
+    pl_df = sql.read_sql('''SELECT processDate,advisor, side, a.quick, attribution,
+                            RHAttribution AS RHAttr,
+                            YAAttribution AS YAAttr,
+                            LRAttribution AS LRAttr, GICS, TPX,strategy, firstTradeDateLong, firstTradeDateShort,
+                            IF(c.instrumentType <> 'EQ', 'Index', IF(d.value*b.rate < 250000000,'Micro',
+                                                IF(d.value*b.rate <1000000000, 'Small',
+                                                IF(d.value*b.rate <5000000000, 'Mid',
+                                                IF(d.value*b.rate <20000000000, 'Large',
+                                                IF(d.value IS NULL, 'Micro','Mega'))) ))) AS MktCap
+                FROM `t05PortfolioResponsibilities` a
+                INNER JOIN `t06DailyCrossRate` b ON a.processDate=b.priceDate AND a.CCY=b.base AND b.quote='USD'
+                INNER JOIN t01Instrument c ON c.instrumentID = a.instrumentID
+                LEFT JOIN t06DailyBBStaticSnapshot d ON d.instrumentID = a.instrumentID AND d.dataType = 'CUR_MKT_CAP'
+                WHERE processDate > '%s' AND processDate < '%s'
+                AND advisor <> ''
+                AND a.quick NOT LIKE "DIV%%"
+                AND a.quick NOT LIKE "FX%%"
                           ;''' % (from_date, end_date), g.con, coerce_float=True, parse_dates=['processDate'])
     return pl_df
 
@@ -579,51 +592,43 @@ def attrib():
 
                        }
                    } for col in names_df.index.levels[1] if not col in g.dropList]
-    firstTradeDate = np.where(sqlPlDf['side'] == 'L', sqlPlDf['firstTradeDateLong'], sqlPlDf['firstTradeDateShort'])
-
-    marketCapDf = pd.read_csv('marketCap.csv', index_col=0, dtype={'FirstTrade': str}).fillna('')
-    marketCapDf['FirstTrade'] = marketCapDf['FirstTrade'].map(
-        lambda x: datetime.strptime(x, '%d-%b-%y').strftime('%Y-%m-%d') if (x != '') else x)
-
-    positionDf = sqlPlDf.groupby(['quick', firstTradeDate, 'advisor', 'side', 'strategy']).sum()
-    positionDf.index.names = [u'quick', 'tradedate', u'advisor', u'side', u'strategy']
-    positionDf = positionDf.reset_index()
-
-    positionDf['tradedate'] = positionDf['tradedate'].map(lambda x: x.strftime('%Y-%m-%d'))
-
-    positionDf = positionDf.merge(marketCapDf, left_on=['quick', 'side', 'tradedate'],
-                                  right_on=['quick', 'side', 'FirstTrade'], how='inner').drop_duplicates()
 
     # attribution for each fund: number is correct
-    fundScale = positionDf.groupby(['advisor', 'Cap']).sum()[['RHAttr', 'YAAttr', 'LRAttr']].loc[
-                (slice(param_adviser, param_adviser), slice(None)), :].reset_index().drop('advisor', 1).set_index('Cap')
+    fundScale = sqlPlDf.groupby(['advisor',
+                                 'MktCap']).sum()[['RHAttr',
+                                                   'YAAttr',
+                                                   'LRAttr']].loc[(slice(param_adviser,
+                                                                         param_adviser),slice(None)),:
+                                                                                          ].reset_index().drop('advisor',1).set_index('MktCap')
     # pl for each side
-    scalePl = positionDf.groupby(['advisor', 'Cap', 'side']).sum()[['attribution']].loc[
-              (slice(param_adviser, param_adviser), slice(None)), :].unstack()['attribution'].reset_index().drop(
-        'advisor', 1).set_index('Cap').fillna(0)
+    scalePl = sqlPlDf.groupby(['advisor',
+                               'MktCap',
+                               'side']).sum()[['attribution']].loc[(slice(param_adviser, param_adviser),
+                                                                    slice(None)),:
+                                                                                 ].unstack()['attribution'].reset_index().drop('advisor',
+                                                                                                                               1).set_index('MktCap').fillna(0)
 
     # try to assign cap to each trade turnover as Micro,.., Large
     scaleTable = turnover_merged_df.truncate(after=end_date).reset_index()
+    scaleTable.groupby(['advisor', 'MktCap']).sum()
+
+    # TODO: truncate before?
 
     # TODO: analyst=DH&startDate=2014-12-31&endDate=2015-10-01, has incorrect value? for Long PL
 
-    scaleTable['firstTradeDate'] = scaleTable['firstTradeDate'].map(
-        lambda x: x if (type(x) is str) else x.strftime('%Y-%m-%d'))
+    # TODO: analyst=TT&startDate=2014-12-31&endDate=2015-11-01  turnover and gics
 
-    sizeTable = scaleTable.merge(marketCapDf, left_on=['code', 'firstTradeDate'], right_on=['quick', 'FirstTrade'],
-                                 how='left'
-                                 ).drop_duplicates()
+    # TODO: ranking table not fit page well
 
-    sizeTurnover = sizeTable.groupby(["advisor", "Cap"]).sum()[['JPYPL']].loc[
-                   (slice(param_adviser, param_adviser), slice(None)), :].reset_index().drop('advisor', 1).set_index(
-        'Cap')
-    sizeTurnover = sizeTurnover.merge(fundScale, left_index=True, right_index=True).merge(scalePl, left_index=True,
-                                                                                          right_index=True)
+    sizeTurnover = scaleTable.groupby(["advisor",
+                                       "MktCap"]).sum()[['JPYPL']].loc[(slice(param_adviser,param_adviser),
+                                                                        slice(None)),:].reset_index().drop('advisor',1).set_index('MktCap')
+    sizeTurnover = sizeTurnover.merge(fundScale,
+                                      left_index=True,
+                                      right_index=True,
+                                      how='outer').fillna(0).merge(scalePl, left_index=True, right_index=True, how='outer')
     totalTurnOver = sizeTurnover['JPYPL'].sum()
-    sizeTurnover['TO'] = sizeTurnover['JPYPL'] / totalTurnOver
-    # percent_fmt = lambda x: '{:.2f}%'.format(x*100)
-    # percent1_fmt = lambda x: '{:.1f}%'.format(x*100)
-    # money_fmt = lambda x: '{:,.0f}'.format(x)
+    sizeTurnover['TO'] = (sizeTurnover['JPYPL']/totalTurnOver).replace([np.nan,np.inf,-np.inf],0)
 
     sizeTurnover = sizeTurnover.reindex(['Micro', 'Small', 'Mid', 'Large', 'Mega', 'Index'], fill_value=0)
     totalSeries = sizeTurnover.sum()
@@ -680,10 +685,10 @@ def attrib():
             'advisor', 1).set_index('sector').fillna(0)
 
     sectorTable = sectorTable.merge(fundSector, left_index=True,
-                                    right_index=True, how='right').fillna(0).merge(sectorPl,
+                                    right_index=True, how='outer').fillna(0).merge(sectorPl,
                                     left_index=True,
                                     right_index=True,
-                                    how='left').fillna(0)
+                                    how='outer').fillna(0)
 
     sectorTotalTurnOver = sectorTable['JPYPL'].sum()
 
