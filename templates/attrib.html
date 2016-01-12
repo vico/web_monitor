@@ -116,17 +116,17 @@
             <tbody>
             <tr>
                 <td>Long</td>
-                <td class="number">{{'{:.2f}%'.format(params['longHitRate'])}}</td>
+                <td class="number">{{'{:.1f}%'.format(params['longHitRate'])}}</td>
             </tr>
             <tr>
                 <td>Short</td>
-                <td class="number">{{'{:.2f}%'.format(params['shortHitRate'])}}</td>
+                <td class="number">{{'{:.1f}%'.format(params['shortHitRate'])}}</td>
             </tr>
             </tbody>
             <tfoot class="overlineTfoot">
             <tr>
                 <td>Total</td>
-                <td class="number">{{'{:.2f}%'.format((params['longHitRate']+params['shortHitRate'])/2)}}</td>
+                <td class="number">{{'{:.1f}%'.format((params['longHitRate']+params['shortHitRate'])/2)}}</td>
             </tr>
             </tfoot><!--
 --></table>
@@ -247,7 +247,8 @@
         x: {{params['op_graph'].index | safe}},
         y: {{params['op_graph']['columns'][col] | safe }},
         name: '{{ col }}',
-        type: 'bar'
+        type: 'bar',
+        marker : { color:  {{ '"rgb(102,178,255)"' | safe if col == 'Long OP' else  ( '"rgb(214,39,40)"' | safe if col == 'Short OP' else ('"rgb(255,153,153)"' | safe if col =='Short Beta OP' else '"rgb(27, 93, 225)"' | safe)) }} }
       },
     {% endfor %}
   ], {
@@ -271,7 +272,8 @@
    yaxis: {
      ticksuffix: '%', tickfont: {size: {{params['tick_font_size']}} }
    },
-   legend: { font: { size: {{params['tick_font_size']}} } }
+   legend: { font: { size: {{params['tick_font_size']}} } },
+   showlegend: false
    } );
 
    shortExposureGraph = document.getElementById('shortExposureGraph');
@@ -284,7 +286,9 @@
    yaxis: {
      ticksuffix: '%', tickfont: {size: {{params['tick_font_size']}} }
    },
-   legend: { font: { size: {{params['tick_font_size']}} } }
+   legend: { font: { size: {{params['tick_font_size']}} } },
+    showlegend: false
+
    } );
 
    namesGraph = document.getElementById('namesGraph');
@@ -295,7 +299,8 @@
    title: 'Number of Names',
    xaxis: { nticks: {{params['nticks']}}, tickformat: '%b', tickfont: {size: {{params['tick_font_size']}} }},
    yaxis: {tickfont: {size: {{params['tick_font_size']}} }},
-   legend: { font: { size: {{params['tick_font_size']}} } }
+   legend: { font: { size: {{params['tick_font_size']}} } },
+   showlegend: false
    } );
 
 

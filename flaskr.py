@@ -505,7 +505,9 @@ def attrib():
                     'x': [pd.to_datetime(str(i)).strftime('%Y-%m-%d') for i in cs_attr_df.index],
                     'y': cs_attr_df[col].values.tolist(),
                     'name': ('Long' if col == 'L' else ('Short' if col == 'S' else col)) + ' PL',
-                    'line': {'width': g.lineWidth}
+                    'line': {'width': g.lineWidth,
+                             'color': "rgb(27, 93, 225)" if col == 'L' else ("rgb(214,39,40)" if col == 'S' else "rgb(0,0,0)")
+                             }
                 } for col in cs_attr_df.columns
                 ] + [{
         'x': [pd.to_datetime(str(i)).strftime('%Y-%m-%d') for i in pIndexDf.index],
@@ -521,7 +523,9 @@ def attrib():
                        'x': [pd.to_datetime(str(i)).strftime('%Y-%m-%d') for i in net_op.index],
                        'y': (net_op[col] * 100).values.tolist(),
                        'name': ('Long Net' if col == 'L' else ('Short Net' if col == 'S' else col)) + ' O/P',
-                       'line': {'width': g.lineWidth}
+                       'line': {'width': g.lineWidth,
+                                'color': "rgb(27, 93, 225)" if col == 'L' else ("rgb(214,39,40)" if col == 'S' else "rgb(0,0,0)")
+                                }
                    } for col in net_op.columns
                    ]
 
@@ -529,7 +533,9 @@ def attrib():
                       'x': [pd.to_datetime(str(i)).strftime('%Y-%m-%d') for i in beta_op.index],
                       'y': (beta_op[col] * 100).fillna(0).values.tolist(),
                       'name': ('Long Beta' if col == 'L' else ('Short Beta' if col == 'S' else col)) + ' O/P',
-                      'line': {'width': g.lineWidth}
+                      'line': {'width': g.lineWidth,
+                               'color': "rgb(27, 93, 225)" if col == 'L' else ("rgb(214,39,40)" if col == 'S' else "rgb(0,0,0)")
+                               }
                   } for col in beta_op.columns
                   ]
 
@@ -538,7 +544,9 @@ def attrib():
                           'x': [pd.to_datetime(str(i)).strftime('%Y-%m-%d') for i in exposureGraphDf.index],
                           'y': exposureGraphDf[col].values.tolist(),
                           'name': 'Long Exposure' if col == 'L' else ('Short Exposure' if col == 'S' else col),
-                          'line': {'width': g.lineWidth}
+                          'line': {'width': g.lineWidth,
+                                   'color': "rgb(27, 93, 225)" if col == 'L' else ("rgb(214,39,40)" if col == 'S' else "rgb(0,0,0)")
+                                   }
                       } for col in ['L', 'S']
                       ]
 
