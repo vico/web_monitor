@@ -483,7 +483,6 @@ def attrib():
             aumDf.shift(1)['Total'], axis=0)
     net_op['S'] = attr_df['S'].sub((tExposure['S'] * -1).mul(indexReturn[g.indexMapping[param_adviser]], axis=0),
                                    axis=0).div(aumDf.shift(1)['Total'], axis=0)
-    net_op.ix[start_date] = 0
     net_op = net_op.cumsum().fillna(method='ffill').fillna(0)
     net_op['Total'] = net_op['L'] + net_op['S']
 
@@ -501,7 +500,7 @@ def attrib():
             'processDate')
 
     csIndexReturn = pIndexDf/pIndexDf.ix[1]-1
-    pl_graph = [{
+    pl_graph = { 'data': [{
                     'x': [pd.to_datetime(str(i)).strftime('%Y-%m-%d') for i in cs_attr_df.index],
                     'y': cs_attr_df[col].values.tolist(),
                     'name': ('Long' if col == 'L' else ('Short' if col == 'S' else col)) + ' PL',
@@ -516,7 +515,24 @@ def attrib():
         'fill': 'tozeroy',
         'line': {'width': 0},
         'yaxis': 'y2'
-    }]
+    }],
+        'layout': {
+            'margin': {'t': 0, 'b':15, 'l': 40, 'r': 40},
+           'width': 750,
+           'height': 240,
+           'xaxis': {'tickformat': '%d %b', 'tickfont': {'size': 10 }},
+           'yaxis': { 'tickfont': {'size': 10 } },
+           'yaxis2': {
+            'overlaying':'y',
+            'side': 'right',
+            'title': 'Index',
+            'ticksuffix': '%',
+            'showgrid': 'false',
+            'tickfont': {'size': 10 }
+   },
+    'legend': { 'font': { 'size': 10 }, 'x': 1.05 }
+        }
+                 }
 
 
     netop_graph = [{
@@ -553,14 +569,15 @@ def attrib():
     bm_index = pd.date_range(start=start_date, end=end_date, freq='BM')
     bm_net_op = net_op.reindex(bm_index)
     bm_beta_op = beta_op.reindex(bm_index)
-    bm_net_op = bm_net_op - bm_net_op.shift(1)
-    bm_beta_op = bm_beta_op - bm_beta_op.shift(1)
+    bm_net_op = bm_net_op - bm_net_op.shift(1).fillna(0)
+    bm_beta_op = bm_beta_op - bm_beta_op.shift(1).fillna(0)
     graph_op = DataFrame()
-    graph_op['Long OP'] = bm_net_op['L'].fillna(0) * 100
-    graph_op['Long Beta OP'] = bm_beta_op['L'].fillna(0) * 100
-    graph_op['Short OP'] = bm_net_op['S'].fillna(0) * 100
-    graph_op['Short Beta OP'] = bm_beta_op['S'].fillna(0) * 100
-    graph_op = graph_op[1:]
+    graph_op['Long OP'] = bm_net_op['L'].fillna(0)
+    graph_op['Long Beta OP'] = bm_beta_op['L'].fillna(0)
+    graph_op['Short OP'] = bm_net_op['S'].fillna(0)
+    graph_op['Short Beta OP'] = bm_beta_op['S'].fillna(0)
+    graph_op = graph_op.truncate(before=datetime.strptime(start_date, '%Y-%m-%d')+timedelta(1))
+    # graph_op = graph_op[1:]
 
     op_graph = dict()
     dt_start_date = datetime.strptime(start_date, '%Y-%m-%d')

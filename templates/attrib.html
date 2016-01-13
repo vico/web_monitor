@@ -185,23 +185,7 @@
 
     <script>
   plGraph = document.getElementById('plGraph');
-  Plotly.plot( plGraph, {{params['pl_graph'] | safe}} , {
-   margin: { t: 0,b:15,l:{{params['margin_left']}},r:{{params['margin_right']}} },
-   width: {{params['graph_width']}},
-   height: {{params['graph_height']}},
-   xaxis: { nticks: {{params['nticks']}}, tickformat: '%b', tickfont: {size: {{params['tick_font_size']}} }},
-   yaxis: { tickfont: {size: {{params['tick_font_size']}} } },
-   yaxis2: {
-    overlaying:'y',
-    side: 'right',
-    title: 'Index',
-    ticksuffix: '%',
-    showgrid:false,
-    tickfont: {size: {{params['tick_font_size']}} }
-   },
-   legend: { font: { size: {{params['tick_font_size']}} }, x: 1.05 }
-  }
-  );
+  Plotly.plot( plGraph, {{params['pl_graph'].data | safe}}, {{params['pl_graph'].layout | safe}} );
 
 
   netopGraph = document.getElementById('netopGraph');
@@ -209,7 +193,7 @@
         margin: { t: 0,b:15,l:{{params['margin_left']}},r:{{params['margin_right']}} },
         width: {{params['graph_width']}},
         height: {{params['graph_height']}},
-        xaxis: { nticks: {{params['nticks']}}, tickformat: '%b', tickfont: {size: {{params['tick_font_size']}} }},
+        xaxis: { tickformat: '%d %b', tickfont: {size: {{params['tick_font_size']}} }},
         yaxis: {
          ticksuffix: '%', tickfont: {size: {{params['tick_font_size']}}}
         },
@@ -221,7 +205,7 @@
        margin: { t: 0,b:15,l:{{params['margin_left']}},r:{{params['margin_right']}} },
        width: {{params['graph_width']}},
        height: {{params['graph_height']}},
-       xaxis: { nticks: {{params['nticks']}}, tickformat: '%b', tickfont: {size: {{params['tick_font_size']}} }},
+       xaxis: {tickformat: '%d %b', tickfont: {size: {{params['tick_font_size']}} }},
        yaxis: {
          ticksuffix: '%', tickfont: {size: {{params['tick_font_size']}} }
        },
@@ -234,7 +218,7 @@
        margin: { t: {{params['margin_top']}},b:{{params['margin_bottom']}},l:{{params['margin_left']}},r:{{params['margin_right']}} },
        width: {{params['graph_width']}},
        height: {{params['graph_height']}},
-       xaxis: { nticks: {{params['nticks']}}, tickformat: '%b', tickfont: {size: {{params['tick_font_size']}} }},
+       xaxis: { tickformat: '%d %b', tickfont: {size: {{params['tick_font_size']}} }},
        yaxis: {tickfont: {size: {{params['tick_font_size']}} }},
        legend: { font: { size: {{params['tick_font_size']}} } }
    } );
@@ -255,7 +239,7 @@
    margin: { t: {{params['margin_top']}},b:{{params['margin_bottom']}},l:{{params['margin_left']}},r:{{params['margin_right']}} },
    width: {{params['graph_width']}},
    height: {{params['graph_height']}},
-   xaxis: { nticks: {{params['nticks']}}, tickformat: '%b', tickfont: {size: {{params['tick_font_size']}} }},
+   xaxis: { tickformat: '%b', tickfont: {size: {{params['tick_font_size']}} }},
    yaxis: {
      ticksuffix: '%', tickfont: {size: {{params['tick_font_size']}} }
    },
@@ -264,11 +248,11 @@
 
     grossExposureGraph = document.getElementById('grossExposureGraph');
   Plotly.plot( grossExposureGraph, {{params['gross_exposure_graph'] | safe}} , {
-   margin: { t: {{params['margin_top']}},b:{{params['margin_bottom']}},l:{{params['margin_left']}},r:{{params['margin_right']}} },
+   margin: { t: {{params['margin_top']}},b:{{params['margin_bottom']}},l:{{params['margin_left']}},r:{{params['margin_right']+20}} },
    width: {{params['graph_width']}},
    height: {{params['graph_height']}},
    title: 'Gross Exposure',
-   xaxis: { nticks: {{params['nticks']}}, tickformat: '%b', tickfont: {size: {{params['tick_font_size']}} }},
+   xaxis: { tickformat: '%d %b', tickfont: {size: {{params['tick_font_size']}} }},
    yaxis: {
      ticksuffix: '%', tickfont: {size: {{params['tick_font_size']}} }
    },
@@ -278,11 +262,11 @@
 
    shortExposureGraph = document.getElementById('shortExposureGraph');
   Plotly.plot( shortExposureGraph, {{params['short_exposure_graph'] | safe}} , {
-   margin: { t: {{params['margin_top']}},b:{{params['margin_bottom']}},l:{{params['margin_left']}},r:{{params['margin_right']}} },
+   margin: { t: {{params['margin_top']}},b:{{params['margin_bottom']}},l:{{params['margin_left']}},r:{{params['margin_right']+20}} },
    width: {{params['graph_width']}},
    height: {{params['graph_height']}},
    title: 'Short Exposure (As a Percent of all non-index short exposure)',
-   xaxis: { nticks: {{params['nticks']}}, tickformat: '%b', tickfont: {size: {{params['tick_font_size']}} }},
+   xaxis: { tickformat: '%d %b', tickfont: {size: {{params['tick_font_size']}} }},
    yaxis: {
      ticksuffix: '%', tickfont: {size: {{params['tick_font_size']}} }
    },
@@ -293,11 +277,11 @@
 
    namesGraph = document.getElementById('namesGraph');
   Plotly.plot( namesGraph, {{params['names_graph'] | safe}} , {
-   margin: { t: {{params['margin_top']}},b:{{params['margin_bottom']}},l:{{params['margin_left']}},r:{{params['margin_right']}} },
+   margin: { t: {{params['margin_top']}},b:{{params['margin_bottom']}},l:{{params['margin_left']}},r:{{params['margin_right']+20}} },
    width: {{params['graph_width']}},
    height: {{params['graph_height']}},
    title: 'Number of Names',
-   xaxis: { nticks: {{params['nticks']}}, tickformat: '%b', tickfont: {size: {{params['tick_font_size']}} }},
+   xaxis: { tickformat: '%d %b', tickfont: {size: {{params['tick_font_size']}} }},
    yaxis: {tickfont: {size: {{params['tick_font_size']}} }},
    legend: { font: { size: {{params['tick_font_size']}} } },
    showlegend: false
