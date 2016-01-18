@@ -3,7 +3,6 @@ import sqlite3
 from flask import Flask, request, session, g, redirect, url_for, \
     abort, render_template, flash, Response
 from contextlib import closing
-from werkzeug.contrib.cache import SimpleCache
 
 import pandas as pd
 from pandas import DataFrame
@@ -12,9 +11,12 @@ import numpy as np
 import pymysql
 from datetime import datetime, timedelta
 from decimal import *
-#import plotly.plotly as py
-#import base64
 from flask.ext.cache import Cache
+
+import urlparse
+import pyotp
+import qrcode
+import StringIO
 
 # configuration
 DATABASE = '/tmp/flaskr.db'
@@ -83,10 +85,9 @@ def break_into_page(df, start_new_page=True, finalize_last_page=True,
                           '</tbody></table></section><section class="sheet padding-10mm"><table %s>' % style) + table_header
             count = 0
             total_rows += 1
-        if (r != ''):
+        if r != '':
             elements = r.split(field_separator)
             if table_type == 'summary':
-                app.logger.debug(r)
                 table_html += '<tr>' + ''.join(['<th>' + elements[0] + '</th>'] + [
                     '<td>' + '{:.2f}%'.format(float(h) * 100) + '</td>' for h in elements[1:4]] + [
                                                    '<td>' + ('0' if h == '' else '{:,.0f}'.format(float(h))) + '</td>' for h in
@@ -96,9 +97,12 @@ def break_into_page(df, start_new_page=True, finalize_last_page=True,
                                                    ]) + '</tr>'
             elif table_type == 'ranking':
                 table_html += '<tr>' + ''.join(['<th>' + elements[0] + '</th>'] + [
-                    '<td>' + h + '</td>' for h in elements[1:-1]] + [
-                                                   '<td>' + ('0' if h == '' else '{:,.0f}'.format(float(h)))+'</td>' for h in elements[-1:]
-                                                   ]) + '</tr>'
+                    '<td>' + h + '</td>' for h in elements[1:-2]] + [
+                                                   '<td>' + ('0' if h == '' else '{:,.0f}'.format(float(h)))+'</td>' for h in elements[-2:-1]
+                                                   ] + [
+                    '<td>' + h + '</td>' for h in elements[-1:]
+                ]
+                                               ) + '</tr>'
 
             total_rows += 1
         count += 1
@@ -161,24 +165,6 @@ def teardown_request(exception):
         con.close()
 
 
-@app.route('/')
-def show_entries():
-    cur = g.db.execute('select title, text from entries order by id desc')
-    entries = [dict(title=row[0], text=row[1]) for row in cur.fetchall()]
-    return render_template('show_entries.html', entries=entries)
-
-
-@app.route('/add', methods=['POST'])
-def add_entry():
-    if not session.get('logged_in'):
-        abort(401)
-    g.db.execute('insert into entries (title, text) values (?, ?)',
-                 [request.form['title'], request.form['text']])
-    g.db.commit()
-    flash('New entry was succesfully posted')
-    return redirect(url_for('show_entries'))
-
-
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     error = None
@@ -189,11 +175,46 @@ def login():
             error = 'Invalid password'
         else:
             session['logged_in'] = True
-            flash('You were loggined in')
-            return redirect(url_for('show_entries'))
-            # return redirect(url_for('enable_tfa_via_app'))
+            flash('You were logged in')
+            #return redirect(url_for('attrib'))
+            return redirect(url_for('enable_tfa_via_app'))
 
     return render_template('login.html', error=error)
+
+
+@app.route('/enable-tfa-via-app')
+def enable_tfa_via_app():
+    if request.method == 'GET':
+        return render_template('enable_tfa_via_app.html')
+    token = request.form['token']
+    if token:
+        pass
+
+
+@app.route('/auth-qr-code.png')
+def auth_qr_code():
+    """generate a QR code with the users TOTP secret
+
+    We do this to reduce the risk of leaking
+    the secret over the wire in plaintext"""
+    #FIXME: This logic should really apply site-wide
+    domain = urlparse.urlparse(request.url).netloc
+
+    secret = pyotp.random_base32()
+
+    totp = pyotp.TOTP(secret)
+
+    if not domain:
+        domain = 'example.com'
+    username = "%s@%s" % (app.config['USERNAME'], domain)
+
+    uri = totp.provisioning_uri(username)
+    qrc = qrcode.make(uri)
+
+    stream = StringIO.StringIO()
+    qrc.save(stream)
+    image = stream.getvalue()
+    return Response(image, mimetype='image/png')
 
 
 @cache.memoize(TIMEOUT)
@@ -244,11 +265,15 @@ def get_turnover_df(from_date, end_date):
         ORDER BY aa.tradeDate
         ;
          ''' % (from_date, end_date), g.con, parse_dates=['tradeDate'], coerce_float=True, index_col='tradeDate')
-    # TODO: update exposure df for 2016, specifically MktCap information
-    df20141231 = pd.read_csv('turnover20141231.csv', index_col=0, parse_dates=0)
 
-    # concat with data in Access DB
-    turnover_df = pd.concat([df20141231, sql_turnover_df])
+    if datetime.strptime(from_date, '%Y-%m-%d') <= datetime(2014,12,31):
+        # TODO: update exposure df for 2016, specifically MktCap information
+        df20141231 = pd.read_csv('turnover20141231.csv', index_col=0, parse_dates=0)
+        # concat with data in Access DB
+        turnover_df = pd.concat([df20141231, sql_turnover_df])
+    else:
+        turnover_df = sql_turnover_df
+
     return turnover_df
 
 
@@ -373,8 +398,11 @@ def get_code_name_map():
     return code_name_map
 
 
-@app.route('/attrib', methods=['GET'])
+@app.route('/', methods=['GET'])
 def attrib():
+    if not session.get('logged_in'):
+        #abort(401)
+        return redirect(url_for('login'))
     # TODO: change all double quotes to single quote for consistence
     # TODO: verify cache invalidate
     # TODO: test Redis as cache backend
@@ -409,7 +437,9 @@ def attrib():
     sumTurnoverPerAdv = turnover_merged_df.truncate(after=end_date).groupby(["advisor", "side"]).sum()[
         'JPYPL'].unstack()
 
-    totalRatio = sumTurnoverPerAdv * 100 / total_turnover['L']  # % TOTAL
+    sumTurnoverPerAdv = sumTurnoverPerAdv.reindex(g.indexMapping.keys())
+
+    totalRatio = (sumTurnoverPerAdv * 100 / total_turnover['L']).fillna(0)  # % TOTAL
 
     aumDf = get_aum_df(start_date, end_date)
 
@@ -443,6 +473,10 @@ def attrib():
 
     sqlPlDf = get_pl_df(start_date, end_date)
     sqlPlDf = sqlPlDf.merge(code_name_map, left_on='quick', right_on='quick')
+
+    if (fExposureDf[fExposureDf['advisor'] == param_adviser].empty and turnover_df[turnover_df['advisor'] == param_adviser]
+        and sqlPlDf[sqlPlDf['advisor'] == param_adviser]):
+        return render_template('empty.html', adviser=param_adviser)
 
     t = sqlPlDf.groupby(['processDate', 'advisor', 'side']).sum().drop(['RHAttr', 'YAAttr', 'LRAttr'],
                                                                        axis=1).unstack().reset_index().set_index(
@@ -500,6 +534,46 @@ def attrib():
             'processDate')
 
     csIndexReturn = pIndexDf/pIndexDf.ix[1]-1
+
+    # calculate range for two graph so that we can make them have same 0 of y axis
+    posPlBound = 1.1*abs(max([max(cs_attr_df.max().values), min(cs_attr_df.min().values), 0]))
+    negPlBound = 1.1*abs(min([min(cs_attr_df.min().values), max(cs_attr_df.max().values), 0]))
+    posIdxBound = 1.1*abs(max([csIndexReturn[g.indexMapping[param_adviser]].max(), 0]))
+    negIdxBound = 1.1*abs(min([csIndexReturn[g.indexMapping[param_adviser]].min(), 0]))
+
+    range1 = [0, 0]
+    range2 = [0, 0]
+
+    if posPlBound == 0 and posIdxBound == 0:
+        range1 = [-negPlBound, 0]
+        range2 = [-negIdxBound, 0]
+    elif posPlBound == 0 and posIdxBound > 0 and negIdxBound != 0:
+        range1 = [-negPlBound*posIdxBound/negIdxBound, negPlBound]
+        range2 = [-negIdxBound, posIdxBound]
+    elif negPlBound == 0 and negIdxBound == 0:
+        range1 = [0, posPlBound]
+        range2 = [0, posIdxBound]
+    elif negPlBound == 0 and negIdxBound > 0 and posIdxBound != 0:
+        range1 = [-posPlBound * negIdxBound / posIdxBound, posPlBound]
+        range2 = [-negIdxBound, posIdxBound]
+    elif posPlBound == 0 and posIdxBound >0 and negIdxBound == 0:
+        range1 = [-negPlBound, negPlBound]
+        range2 = [-posIdxBound, posIdxBound]
+    elif negPlBound == 0 and negIdxBound >0 and posIdxBound == 0:
+        range1 = [-posPlBound, posPlBound]
+        range2 = [-negIdxBound, negIdxBound]
+    elif posPlBound > 0 and negPlBound > 0 and posIdxBound == 0 and negIdxBound > 0:
+        range1 = [-negPlBound, posPlBound]
+        range2 = [-negIdxBound, posPlBound*negIdxBound/negPlBound]
+    elif posPlBound > 0 and negPlBound > 0 and posIdxBound > 0 and negIdxBound > 0:
+        range1 = [-negPlBound, posPlBound]
+        if posIdxBound > negIdxBound:
+            range2 = [-negPlBound*posIdxBound/posPlBound, posIdxBound]
+        else:
+            range2 = [-negIdxBound, posPlBound*negIdxBound/negPlBound]
+
+    range2 = map(lambda x: x*100, range2)
+
     pl_graph = { 'data': [{
                     'x': [pd.to_datetime(str(i)).strftime('%Y-%m-%d') for i in cs_attr_df.index],
                     'y': cs_attr_df[col].values.tolist(),
@@ -521,14 +595,15 @@ def attrib():
            'width': 750,
            'height': 240,
            'xaxis': {'tickformat': '%d %b', 'tickfont': {'size': 10 }},
-           'yaxis': { 'tickfont': {'size': 10 } },
+           'yaxis': { 'tickfont': {'size': 10 }, 'range': range1 },
            'yaxis2': {
             'overlaying':'y',
             'side': 'right',
             'title': 'Index',
             'ticksuffix': '%',
             'showgrid': 'false',
-            'tickfont': {'size': 10 }
+            'tickfont': {'size': 10 },
+               'range': range2
    },
     'legend': { 'font': { 'size': 10 }, 'x': 1.05 }
         }
@@ -577,7 +652,6 @@ def attrib():
     graph_op['Short OP'] = bm_net_op['S'].fillna(0)
     graph_op['Short Beta OP'] = bm_beta_op['S'].fillna(0)
     graph_op = graph_op.truncate(before=datetime.strptime(start_date, '%Y-%m-%d')+timedelta(1))
-    # graph_op = graph_op[1:]
 
     op_graph = dict()
     dt_start_date = datetime.strptime(start_date, '%Y-%m-%d')
@@ -737,17 +811,45 @@ def attrib():
                      'L': 'LongPL',
                      'S': 'ShortPL', 'TO': 'TO %'})
 
-    top_positions = sqlPlDf[['quick', 'advisor', 'attribution', 'name', 'side', 'processDate']].groupby(
-            ['advisor', 'quick', 'name', 'side']).sum().sort_values(by='attribution', ascending=False).ix[
+    firstTradeDate = np.where(sqlPlDf['side'] == 'L',sqlPlDf['firstTradeDateLong'],sqlPlDf['firstTradeDateShort'])
+    top_positions = sqlPlDf[['quick',
+                             'advisor',
+                             'attribution',
+                             'name',
+                             'side',
+                             'processDate',
+                             'firstTradeDateLong',
+                             'firstTradeDateShort'
+                             ]].groupby(['advisor',
+                                         'quick',
+                                         'name',
+                                         'side',
+                                         firstTradeDate
+                                         ]).sum().sort_values(by='attribution', ascending=False).ix[
         param_adviser].head(NUMBER_OF_TOP_POSITIONS)
     top_positions = top_positions.reset_index().drop('quick', axis=1)
     top_positions.index = top_positions.index + 1
+    top_positions = top_positions.rename(columns={'name': 'Name', 'side': 'Side', 'attribution': 'Attribution', 'level_3': 'First Trade Date'})
+    top_positions = top_positions[['Name', 'Side', 'Attribution', 'First Trade Date']]
 
-    bottom_positions = sqlPlDf[['quick', 'advisor', 'attribution', 'name', 'side']].groupby(
-            ['advisor', 'quick', 'name', 'side']).sum().sort_values(by='attribution').ix[param_adviser].head(
+    bottom_positions = sqlPlDf[['quick',
+                                'advisor',
+                                'attribution',
+                                'name',
+                                'side',
+                                'firstTradeDateLong',
+                                'firstTradeDateShort'
+                                ]].groupby(['advisor',
+                                            'quick',
+                                            'name',
+                                            'side',
+                                            firstTradeDate
+                                            ]).sum().sort_values(by='attribution').ix[param_adviser].head(
         NUMBER_OF_TOP_POSITIONS)
     bottom_positions = bottom_positions.reset_index().drop('quick', axis=1)
     bottom_positions.index = bottom_positions.index + 1
+    bottom_positions = bottom_positions.rename(columns={'name': 'Name', 'side': 'Side', 'attribution': 'Attribution', 'level_3': 'First Trade Date'})
+    bottom_positions = bottom_positions[['Name', 'Side', 'Attribution', 'First Trade Date']]
 
     topixTable = turnover_merged_df.truncate(after=end_date).groupby(["advisor", "TOPIX"]).sum()[['JPYPL']].loc[
                  (slice(param_adviser, param_adviser), slice(None)), :].reset_index().drop('advisor', 1).set_index(
@@ -869,9 +971,9 @@ def attrib():
     render_obj['index'] = g.indexMapping[param_adviser]
     render_obj['startDate'] = start_date
     render_obj['endDate'] = end_date
-    render_obj['longTurnover'] = Decimal(sumTurnoverPerAdv.ix[param_adviser]['L']).quantize(Decimal('1.'),
+    render_obj['longTurnover'] = Decimal(sumTurnoverPerAdv.fillna(0).ix[param_adviser]['L']).quantize(Decimal('1.'),
                                                                                             rounding=ROUND_HALF_UP)
-    render_obj['shortTurnover'] = Decimal(sumTurnoverPerAdv.ix[param_adviser]['S']).quantize(Decimal('1.'),
+    render_obj['shortTurnover'] = Decimal(sumTurnoverPerAdv.fillna(0).ix[param_adviser]['S']).quantize(Decimal('1.'),
                                                                                              rounding=ROUND_HALF_UP)
     render_obj['totalLong'] = totalRatio.ix[param_adviser]['L']
     render_obj['totalShort'] = totalRatio.ix[param_adviser]['S']
@@ -1159,14 +1261,7 @@ def get_pl_graph(adviser, margin_top, margin_bottom, margin_left, margin_right, 
         'fill': 'tozeroy',
         'line': {'width': 0}
     }]
-    # image = base64.b64encode(py.image.get(pl_graph, width=graph_width, height=graph_height,scale=3)).decode('utf-8')
-    # template = (''
-    #     '<img style="width: {width}; height: {height}" src="data:image/png;base64,{image}">'
-    #     '{caption}'                              # Optional caption to include below the graph
-    #     '<br>'
-    #     '<hr>'
-    # '')
-    # htmlOutput = template.format(image=image, caption='', width=graph_width, height=graph_height)
+
     return pl_graph
 
 
@@ -1338,7 +1433,7 @@ def test2():
 def logout():
     session.pop('logged_in', None)
     flash('You were logged out')
-    return redirect(url_for('show_entries'))
+    return redirect(url_for('login'))
 
 
 # default port 5000
