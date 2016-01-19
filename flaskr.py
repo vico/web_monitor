@@ -985,8 +985,8 @@ def attrib():
     render_obj['shortBetaOP'] = beta_op['S'].iloc[-1] * 100
     render_obj['longHitRate'] = hitRateDf['LongsHR'].ix[param_adviser]
     render_obj['shortHitRate'] = hitRateDf['ShortsHR'].ix[param_adviser]
-    render_obj['longReturn'] = long_short_return['attribution']['L'].ix[param_adviser]
-    render_obj['shortReturn'] = long_short_return['attribution']['S'].ix[param_adviser]
+    render_obj['longReturn'] = long_short_return.fillna(0)['attribution']['L'].ix[param_adviser]
+    render_obj['shortReturn'] = long_short_return.fillna(0)['attribution']['S'].ix[param_adviser]
     render_obj['rhBpsLong'] = totalFund[totalFund['advisor'] == param_adviser].sum()['RHAttr']['L'] * 100
     render_obj['rhBpsShort'] = totalFund[totalFund['advisor'] == param_adviser].sum()['RHAttr']['S'] * 100
     render_obj['yaBpsLong'] = totalFund[totalFund['advisor'] == param_adviser].sum()['YAAttr']['L'] * 100
