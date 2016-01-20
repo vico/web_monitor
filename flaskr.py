@@ -131,8 +131,9 @@ def add_to_page(df, current_page, remaining_row_number, table_type='summary', ta
 def before_request():
     g.db = connect_db()
     g.con = pymysql.connect(host='127.0.0.1', user='root', passwd='root', db='hkg02p')
-    g.startDate = '2014-12-31'  # not include
-    g.endDate = '2015-12-01'  # not include
+    g.startDate = datetime(datetime.now().year-1, 12, 31).strftime('%Y-%m-%d')
+    app.logger.debug(g.startDate) #'2014-12-31'  # not include
+    g.endDate = datetime.now().strftime('%Y-%m-%d')#'2015-12-01'  # not include
     g.reportAdvisor = 'AP'
     g.lineWidth = 3
     g.thinLineWidth = 2
@@ -591,21 +592,21 @@ def attrib():
         'yaxis': 'y2'
     }],
         'layout': {
-            'margin': {'t': 0, 'b':15, 'l': 40, 'r': 40},
+            'margin': {'t': 0, 'b': 15, 'l': 40, 'r': 40},
            'width': 750,
            'height': 240,
-           'xaxis': {'tickformat': '%d %b', 'tickfont': {'size': 10 }},
-           'yaxis': { 'tickfont': {'size': 10 }, 'range': range1 },
+           'xaxis': {'tickformat': '%d %b', 'tickfont': {'size': 10}},
+           'yaxis': {'tickfont': {'size': 10}, 'range': range1},
            'yaxis2': {
             'overlaying':'y',
             'side': 'right',
             'title': 'Index',
             'ticksuffix': '%',
             'showgrid': 'false',
-            'tickfont': {'size': 10 },
+            'tickfont': {'size': 10},
                'range': range2
    },
-    'legend': { 'font': { 'size': 10 }, 'x': 1.05 }
+    'legend': {'font': {'size': 10}, 'x': 1.05}
         }
                  }
 
@@ -641,9 +642,15 @@ def attrib():
                       } for col in ['L', 'S']
                       ]
 
-    bm_index = pd.date_range(start=start_date, end=end_date, freq='BM')
-    bm_net_op = net_op.reindex(bm_index)
-    bm_beta_op = beta_op.reindex(bm_index)
+    month_end = datetime(net_op.index[-1].year, net_op.index[-1].month, net_op.index[-1].daysinmonth)
+    bm_index = pd.date_range(start=start_date, end=month_end, freq='BM')
+
+    if net_op.index[-1] < bm_index[-1]:
+        net_op.ix[bm_index[-1]] = np.nan
+        beta_op.ix[bm_index[-1]] = np.nan
+
+    bm_net_op = net_op.fillna(method='ffill').reindex(bm_index)
+    bm_beta_op = beta_op.fillna(method='ffill').reindex(bm_index)
     bm_net_op = bm_net_op - bm_net_op.shift(1).fillna(0)
     bm_beta_op = bm_beta_op - bm_beta_op.shift(1).fillna(0)
     graph_op = DataFrame()
@@ -654,7 +661,6 @@ def attrib():
     graph_op = graph_op.truncate(before=datetime.strptime(start_date, '%Y-%m-%d')+timedelta(1))
 
     op_graph = dict()
-    dt_start_date = datetime.strptime(start_date, '%Y-%m-%d')
     op_graph['index'] = [x.strftime('%Y-%m') for x in graph_op.index]
     op_graph['columns'] = {col: (graph_op[col] * 100).values.tolist() for col in graph_op.columns}
 
