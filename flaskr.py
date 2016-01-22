@@ -650,9 +650,16 @@ def attrib():
     month_end = datetime(net_op.index[-1].year, net_op.index[-1].month, net_op.index[-1].daysinmonth)
     bm_index = pd.date_range(start=start_date, end=month_end, freq='BM')
 
+    long_index_op  = net_op['L'].iloc[-1] * 100
+    short_index_op = net_op['S'].iloc[-1] * 100
+    long_beta_op   = beta_op['L'].iloc[-1] * 100
+    short_beta_op  = beta_op['S'].iloc[-1] * 100
+
+    bm_net_op = net_op
+    bm_beta_op = beta_op
     if net_op.index[-1] < bm_index[-1]:
-        net_op.ix[bm_index[-1]] = np.nan
-        beta_op.ix[bm_index[-1]] = np.nan
+        bm_net_op.ix[bm_index[-1]] = np.nan
+        bm_beta_op.ix[bm_index[-1]] = np.nan
 
     bm_net_op = net_op.fillna(method='ffill').reindex(bm_index)
     bm_beta_op = beta_op.fillna(method='ffill').reindex(bm_index)
@@ -990,10 +997,10 @@ def attrib():
     render_obj['totalShort'] = totalRatio.ix[param_adviser]['S']
     render_obj['longPL'] = Decimal(cs_attr_df['L'].iloc[-1]).quantize(Decimal('1.'), rounding=ROUND_HALF_UP)
     render_obj['shortPL'] = Decimal(cs_attr_df['S'].iloc[-1]).quantize(Decimal('1.'), rounding=ROUND_HALF_UP)
-    render_obj['longIndexOP'] = net_op['L'].iloc[-1] * 100
-    render_obj['shortIndexOP'] = net_op['S'].iloc[-1] * 100
-    render_obj['longBetaOP'] = beta_op['L'].iloc[-1] * 100
-    render_obj['shortBetaOP'] = beta_op['S'].iloc[-1] * 100
+    render_obj['longIndexOP'] = long_index_op
+    render_obj['shortIndexOP'] = short_index_op
+    render_obj['longBetaOP'] = long_beta_op
+    render_obj['shortBetaOP'] = short_beta_op
     render_obj['longHitRate'] = hitRateDf['LongsHR'].ix[param_adviser]
     render_obj['shortHitRate'] = hitRateDf['ShortsHR'].ix[param_adviser]
     render_obj['longReturn'] = long_short_return.fillna(0)['attribution']['L'].ix[param_adviser]
