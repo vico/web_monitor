@@ -18,9 +18,9 @@
             <td>Index</td>
             <td>{{params['index']}}</td>
             <th>Start</th>
-            <td><strong><input type="date" value="{{params['startDate']}}" min="2014-12-31"  name="startDate"></strong></td>
+            <td><strong><input type="text" value="{{params['startDate']}}"  name="startDate" id="datepicker1"></strong></td>
             <th>End</th>
-            <td><strong><input type="date" value="{{params['endDate']}}" name="endDate"></strong>
+            <td><strong><input type="text" value="{{params['endDate']}}" name="endDate" id="datepicker2"></strong>
                 <input type="submit" value="Go"/>
             </td>
 
@@ -287,7 +287,14 @@
    showlegend: false
    } );
 
-
+    var picker1 = new Pikaday({
+            field: document.getElementById('datepicker1'),
+            format: 'YYYY-MM-DD'
+     });
+    var picker2 = new Pikaday({
+            field: document.getElementById('datepicker2'),
+            format: 'YYYY-MM-DD'
+     });
 
     </script>
 {% endblock %}

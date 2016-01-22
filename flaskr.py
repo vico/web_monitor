@@ -607,7 +607,6 @@ def attrib():
             'side': 'right',
             'title': 'Index',
             'ticksuffix': '%',
-            'showgrid': 'false',
             'tickfont': {'size': 10},
                'range': range2
    },
