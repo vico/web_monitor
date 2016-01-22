@@ -127,6 +127,11 @@ def add_to_page(df, current_page, remaining_row_number, table_type='summary', ta
     return current_page + return_html, remaining_row_number
 
 
+@app.errorhandler(404)
+def page_not_found(e):
+    return render_template('404.html'), 404
+
+
 @app.before_request
 def before_request():
     g.db = connect_db()
