@@ -2,6 +2,7 @@
 {% block body %}
 <div class=container>
   <div class=metanav>
+    {{access_token}}
   {% if not session.logged_in %}
       <a href="{{ url_for('login') }}">log in</a>
   {% else %}
