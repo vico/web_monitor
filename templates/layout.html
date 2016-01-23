@@ -86,17 +86,7 @@
         *zoom: 1;
         }
 
-        input, input:hover, input:focus, input:active {
-          background: transparent;
-          border: 0;
-          border-style: none;
-          border-color: transparent;
-          outline: none;
-          outline-offset: 0;
-          box-shadow: none;
-        }
-
-        select {
+        input {
             background: transparent;
             border: 0;
             border-style: none;
@@ -104,6 +94,34 @@
             outline: none;
             outline-offset: 0;
             box-shadow: none;
+            text-align-last: center;
+            text-align: -moz-center;
+            width: 10ch;
+            border-radius: 4px;
+        }
+        input:hover, input:focus, input:active {
+            background: #d5e9f7;
+        }
+
+        select {
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            background: transparent;
+            border: 0;
+            border-style: none;
+            border-color: transparent;
+            outline: none;
+            outline-offset: 0;
+            box-shadow: none;
+            text-align-last: center;
+            text-align: -moz-center;
+            width: 4ch;
+        }
+        select:hover {
+            background: #d5e9f7;
+            /*border: 1px;
+            border-style: dotted;
+            border-color: black;*/
         }
 
     </style>
