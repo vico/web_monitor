@@ -112,14 +112,14 @@ def break_into_page(df, start_new_page=True, finalize_last_page=True,
     return table_html, count
 
 
-def add_to_page(df, current_page, remaining_row_number, table_type='summary', table_caption=''):
-    return_html, r_count = break_into_page(df, start_new_page=False, finalize_last_page=False,
+def add_to_page(df, current_page, remaining_row_number, table_type='summary', table_caption='', last_page=False):
+    return_html, r_count = break_into_page(df, start_new_page=False, finalize_last_page=last_page,
                                            number_of_row_to_break_first_page=remaining_row_number,
                                            table_type=table_type, table_caption=table_caption)
     if r_count < remaining_row_number:
         remaining_row_number -= r_count
     else:
-        return_html, r_count = break_into_page(df, start_new_page=True, finalize_last_page=False,
+        return_html, r_count = break_into_page(df, start_new_page=True, finalize_last_page=last_page,
                                                number_of_row_to_break_first_page=NUMBER_OF_ROW_PER_PAGE,
                                                table_type=table_type, table_caption=table_caption)
         remaining_row_number = NUMBER_OF_ROW_PER_PAGE - r_count
@@ -970,8 +970,11 @@ def attrib():
     remaining_row_number -= 2 + 1  # 2 titles of ranking tables
     table_list = [topixTable, strategyTable, positionTable] if g.indexMapping[param_adviser] == 'TPX' else [
         strategyTable, positionTable]
-    for df in table_list:
+    for df in table_list[:-1]:
         tables_html, remaining_row_number = add_to_page(df, tables_html, remaining_row_number)
+
+    for df in table_list[-1:]:
+        tables_html, remaining_row_number = add_to_page(df, tables_html, remaining_row_number, 'summary', '', True)
 
     render_obj = dict()
     render_obj['graph_width'] = 750
@@ -1034,7 +1037,10 @@ def attrib():
 
 @app.route('/test')
 def test():
-    return render_template('test.html')
+    render_obj = dict()
+    render_obj['analyst'] = 'AP'
+    render_obj['analyst_list'] = g.indexMapping.keys()
+    return render_template('test.html', params=render_obj)
 
 
 def getSumTurnover(from_date, end_date):

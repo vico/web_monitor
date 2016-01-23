@@ -9,6 +9,21 @@
       <a href="{{ url_for('logout') }}">log out</a>
   {% endif %}
   </div>
+  <table>
+        <tr>
+            <th>Analyst</th>
+            <td><strong><select name="analyst" class="analyst-select">
+                {% for analyst in params['analyst_list'] %}
+                    {% if analyst is equalto params['analyst'] %}
+                        <option value="{{analyst}}" selected>{{analyst}}</option>
+                    {% else %}
+                        <option value="{{analyst}}">{{analyst}}</option>
+                    {% endif %}
+                {% endfor %}
+                </select>
+            </strong></td>
+          </tr>
+    </table>
   <div class=row>
     <div class="col-md-3"><strong>Analyst</strong></div>
     <div class="col-md-3"><strong>Name</strong></div>
@@ -108,6 +123,10 @@
 
 <div id="tester" style="width:800px;height:400;"></div>
 <script>
+    $(document).ready(function() {
+      $(".analyst-select").select2();
+    });
+
   TESTER = document.getElementById('tester');
   Plotly.plot( TESTER, [
     

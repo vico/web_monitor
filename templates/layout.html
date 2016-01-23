@@ -11,6 +11,7 @@
     <!-- Load paper.css for happy printing -->
     <link rel="stylesheet" href={{ url_for('static', filename='paper.css') }}>
     <link rel="stylesheet" href={{ url_for('static', filename='pikaday.css') }}>
+    <link rel="stylesheet" href={{ url_for('static', filename='select2.css') }}>
 
     <!-- Set page size here: A5, A4 or A3 -->
     <!-- Set also "landscape" if you need -->
@@ -18,8 +19,10 @@
 
     <!-- Custom styles for this document -->
     <link href='https://fonts.googleapis.com/css?family=Tangerine:700' rel='stylesheet' type='text/css'>
+    <script src="{{ url_for('static', filename='jquery-2.2.0.min.js') }}"></script>
     <script src="{{ url_for('static', filename='moment.min.js') }}"></script>
     <script src="{{ url_for('static', filename='pikaday.js') }}"></script>
+    <script src="{{ url_for('static', filename='select2.js') }}"></script>
     <script src="{{ url_for('static', filename='plotly-latest.min.js') }}"></script>
     <style>
         body { font-family: Calibri, serif }
@@ -86,7 +89,7 @@
         *zoom: 1;
         }
 
-        input {
+        #datepicker1, #datepicker2 {
             background: transparent;
             border: 0;
             border-style: none;
@@ -94,34 +97,15 @@
             outline: none;
             outline-offset: 0;
             box-shadow: none;
-            text-align-last: center;
+            text-align-last: center; /* for Chrome */
             text-align: -moz-center;
-            width: 10ch;
+            text-align: center; /* for IE */
+            width: 12ch; /* MS IE shows 1ch smaller than other browsers */
             border-radius: 4px;
         }
-        input:hover, input:focus, input:active {
+        #datepicker1:hover, #datepicker1:focus, #datepicker1:active,
+        #datepicker2:hover, #datepicker2:focus, #datepicker2:active {
             background: #d5e9f7;
-        }
-
-        select {
-            -webkit-appearance: none;
-            -moz-appearance: none;
-            background: transparent;
-            border: 0;
-            border-style: none;
-            border-color: transparent;
-            outline: none;
-            outline-offset: 0;
-            box-shadow: none;
-            text-align-last: center;
-            text-align: -moz-center;
-            width: 4ch;
-        }
-        select:hover {
-            background: #d5e9f7;
-            /*border: 1px;
-            border-style: dotted;
-            border-color: black;*/
         }
 
     </style>

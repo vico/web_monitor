@@ -5,7 +5,7 @@
     <table>
         <tr>
             <th>Analyst</th>
-            <td><strong><select name="analyst">
+            <td><strong><select name="analyst" class="analyst-select">
                 {% for analyst in params['analyst_list'] %}
                     {% if analyst is equalto params['analyst'] %}
                         <option value="{{analyst}}" selected>{{analyst}}</option>
@@ -184,6 +184,10 @@
 
 
     <script>
+    $(document).ready(function() {
+      $(".analyst-select").select2();
+    });
+
   plGraph = document.getElementById('plGraph');
   Plotly.plot( plGraph, {{params['pl_graph'].data | safe}}, {{params['pl_graph'].layout | safe}} );
 
