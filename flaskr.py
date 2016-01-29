@@ -136,9 +136,8 @@ def page_not_found(e):
 def before_request():
     g.db = connect_db()
     g.con = pymysql.connect(host='127.0.0.1', user='root', passwd='root', db='hkg02p')
-    g.startDate = datetime(datetime.now().year-1, 12, 31).strftime('%Y-%m-%d')
-    app.logger.debug(g.startDate) #'2014-12-31'  # not include
-    g.endDate = datetime.now().strftime('%Y-%m-%d')#'2015-12-01'  # not include
+    g.startDate = datetime(datetime.now().year-2, 12, 31).strftime('%Y-%m-%d')
+    g.endDate = datetime.now().strftime('%Y-%m-%d')  # not include
     g.reportAdvisor = 'AP'
     g.lineWidth = 3
     g.thinLineWidth = 2
@@ -227,9 +226,38 @@ def auth_qr_code():
 def get_turnover_df(from_date, end_date):
     # there is some trades on 2014/12/31 both long and short sides, which is not in database table
     sql_turnover_df = sql.read_sql('''
-        SELECT aa.tradeDate, aa.code,
-        aa.currencyCode, aa.side,
-        ABS(Notl) AS Turnover, e.advisor, e.strategy, e.sector,
+        SELECT processDate as tradeDate,
+        a.quick AS code,
+        a.ccy AS currencyCode,
+        a.side,
+        a.quantity*a.MktPrice*b.rate AS Turnover,
+        a.advisor,
+        a.strategy,
+        a.sector,
+        a.GICS AS GICS,
+        a.TPX AS TOPIX,
+        IF(a.side='L', a.firstTradeDateLong, firstTradeDateShort) AS firstTradeDate,
+        IF(c.instrumentType <> 'EQ', 'Index',
+            IF(h.value*d.rate < 250000000,'Micro',
+            IF(h.value*d.rate <1000000000, 'Small',
+            IF(h.value*d.rate <5000000000, 'Mid',
+            IF(h.value*d.rate <20000000000, 'Large',
+            IF(h.value IS NULL, 'Micro','Mega'))) ))) AS MktCap
+        FROM t05PortfolioResponsibilities a
+        INNER JOIN t06DailyCrossRate b ON a.processDate = b.priceDate AND a.ccy = b.base AND b.quote='JPY'
+        INNER JOIN t01Instrument c ON c.instrumentID = a.instrumentID
+        INNER JOIN t06DailyCrossRate d ON a.processDate = d.priceDate AND a.ccy = d.base AND d.quote='USD'
+        LEFT JOIN t06DailyBBStaticSnapshot h ON c.instrumentID = h.instrumentID AND h.dataType = 'CUR_MKT_CAP'
+        WHERE processDate = '%s'
+    UNION
+        SELECT aa.tradeDate,
+        aa.code,
+        aa.currencyCode,
+        aa.side,
+        ABS(Notl) AS Turnover,
+        e.advisor,
+        e.strategy,
+        e.sector,
         f.value AS GICS,
         IF(g.value IS NOT NULL, g.value, 'Non-Japan') AS TOPIX,
         aa.firstTradeDate,
@@ -268,19 +296,17 @@ def get_turnover_df(from_date, end_date):
         LEFT JOIN t06DailyBBStaticSnapshot f ON aa.instrumentID = f.instrumentID AND f.dataType = 'GICS_SECTOR_NAME'
         LEFT JOIN t06DailyBBStaticSnapshot g ON aa.instrumentID = g.instrumentID AND g.dataType = 'JAPANESE_INDUSTRY_GROUP_NAME_ENG'
         WHERE (aa.side="L" AND aa.orderType="B") OR (aa.side="S" AND aa.orderType="S")
-        ORDER BY aa.tradeDate
         ;
-         ''' % (from_date, end_date), g.con, parse_dates=['tradeDate'], coerce_float=True, index_col='tradeDate')
+         ''' % (from_date, from_date, end_date), g.con, parse_dates=['tradeDate'], coerce_float=True, index_col='tradeDate')
 
-    if datetime.strptime(from_date, '%Y-%m-%d') <= datetime(2014,12,31):
+    #if datetime.strptime(from_date, '%Y-%m-%d') <= datetime(2014,12,31):
         # TODO: update exposure df for 2016, specifically MktCap information
-        df20141231 = pd.read_csv('turnover20141231.csv', index_col=0, parse_dates=0)
+    #    df20141231 = pd.read_csv('turnover20141231.csv', index_col=0, parse_dates=0)
         # concat with data in Access DB
-        turnover_df = pd.concat([df20141231, sql_turnover_df])
-    else:
-        turnover_df = sql_turnover_df
-
-    return turnover_df
+    #    turnover_df = pd.concat([df20141231, sql_turnover_df])
+    #else:
+        #turnover_df = sql_turnover_df
+    return sql_turnover_df
 
 
 @cache.memoize(TIMEOUT)
