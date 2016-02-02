@@ -35,11 +35,13 @@
             margin-top: 5px;
             margin-bottom: 2px;
             table-layout: fixed;
+            border: 1px;
         }
         td,th {
             font-size: 10pt;
             vertical-align: center;
             padding: 3px 6px;
+            border-color: transparent;
         }
         .dataframe tbody th:first-child {
             width: 126px;
@@ -106,6 +108,27 @@
         #datepicker1:hover, #datepicker1:focus, #datepicker1:active,
         #datepicker2:hover, #datepicker2:focus, #datepicker2:active {
             background: #d5e9f7;
+        }
+
+        #goButton {
+            background: transparent;
+            border: 0;
+            border-style: none;
+            border-color: transparent;
+            outline: none;
+            outline-offset: 0;
+            box-shadow: none;
+            text-align-last: center; /* for Chrome */
+            text-align: -moz-center;
+            text-align: center; /* for IE */
+            width: 12ch; /* MS IE shows 1ch smaller than other browsers */
+            border-radius: 4px;
+            color: transparent;
+        }
+
+        #goButton:hover, #goButton:focus, #goButton:active {
+            background: #d5e9f7;
+            color: black;
         }
 
     </style>
