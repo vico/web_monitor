@@ -17,33 +17,13 @@ import urlparse
 import pyotp
 import qrcode
 import StringIO
+from . import main
 
-# configuration
-DATABASE = '/tmp/flaskr.db'
-DEBUG = True
-SECRET_KEY = 'development key'
-USERNAME = 'admin'
-PASSWORD = 'default'
 TIMEOUT = 15 * 60
 NUMBER_OF_ROW_PER_PAGE = 41
 NUMBER_OF_TOP_POSITIONS = 8
 
-# create our little application :)
-app = Flask(__name__)
-app.config.from_object(__name__)
-
-cache = Cache(app, config={'CACHE_TYPE': 'simple'})
-
-
-def connect_db():
-    return sqlite3.connect(app.config['DATABASE'])
-
-
-def init_db():
-    with closing(connect_db()) as db:
-        with app.open_resource('schema.sql', mode='r') as f:
-            db.cursor().executescript(f.read())
-        db.commit()
+#cache = Cache(app, config={'CACHE_TYPE': 'simple'})
 
 
 def break_into_page(df, start_new_page=True, finalize_last_page=True,
@@ -127,14 +107,8 @@ def add_to_page(df, current_page, remaining_row_number, table_type='summary', ta
     return current_page + return_html, remaining_row_number
 
 
-@app.errorhandler(404)
-def page_not_found(e):
-    return render_template('404.html'), 404
-
-
-@app.before_request
+@main.before_request
 def before_request():
-    g.db = connect_db()
     g.con = pymysql.connect(host='127.0.0.1', user='root', passwd='root', db='hkg02p')
     g.startDate = datetime(datetime.now().year-2, 12, 31).strftime('%Y-%m-%d')
     g.endDate = datetime.now().strftime('%Y-%m-%d')  # not include
@@ -160,7 +134,7 @@ def before_request():
     g.dropList = ['ADV', 'Adv', 'Bal', 'NJD', 'NJA', 'KW']
 
 
-@app.teardown_request
+@main.teardown_request
 def teardown_request(exception):
     db = getattr(g, 'db', None)
     if db is not None:
@@ -170,59 +144,7 @@ def teardown_request(exception):
         con.close()
 
 
-@app.route('/login', methods=['GET', 'POST'])
-def login():
-    error = None
-    if request.method == 'POST':
-        if request.form['username'] != app.config['USERNAME']:
-            error = 'Invalid username'
-        elif request.form['password'] != app.config['PASSWORD']:
-            error = 'Invalid password'
-        else:
-            session['logged_in'] = True
-            flash('You were logged in')
-            #return redirect(url_for('attrib'))
-            return redirect(url_for('enable_tfa_via_app'))
-
-    return render_template('login.html', error=error)
-
-
-@app.route('/enable-tfa-via-app')
-def enable_tfa_via_app():
-    if request.method == 'GET':
-        return render_template('enable_tfa_via_app.html')
-    token = request.form['token']
-    if token:
-        pass
-
-
-@app.route('/auth-qr-code.png')
-def auth_qr_code():
-    """generate a QR code with the users TOTP secret
-
-    We do this to reduce the risk of leaking
-    the secret over the wire in plaintext"""
-    # FIXME: This logic should really apply site-wide
-    domain = urlparse.urlparse(request.url).netloc
-
-    secret = pyotp.random_base32()
-
-    totp = pyotp.TOTP(secret)
-
-    if not domain:
-        domain = 'example.com'
-    username = "%s@%s" % (app.config['USERNAME'], domain)
-
-    uri = totp.provisioning_uri(username)
-    qrc = qrcode.make(uri)
-
-    stream = StringIO.StringIO()
-    qrc.save(stream)
-    image = stream.getvalue()
-    return Response(image, mimetype='image/png')
-
-
-@cache.memoize(TIMEOUT)
+#@cache.memoize(TIMEOUT)
 def get_turnover_df(from_date, end_date):
     # there is some trades on 2014/12/31 both long and short sides, which is not in database table
     sql_turnover_df = sql.read_sql('''
@@ -317,7 +239,7 @@ def get_turnover_df(from_date, end_date):
     return sql_turnover_df
 
 
-@cache.memoize(TIMEOUT)
+#@cache.memoize(TIMEOUT)
 def get_hit_rate_df(from_date, end_date):
     hit_rate_df = sql.read_sql('''select advisor, SUM(IF(RHAttr > 0 AND side='L',1,0)) as LongsWin,
         SUM(IF(side='L' and RHAttr <> 0,1,0)) as Longs,
@@ -337,7 +259,7 @@ def get_hit_rate_df(from_date, end_date):
     return hit_rate_df
 
 
-@cache.memoize(TIMEOUT)
+#@cache.memoize(TIMEOUT)
 def get_pl_df(from_date, end_date):
     pl_df = sql.read_sql('''SELECT processDate,advisor, side, a.quick, attribution,
                             RHAttribution AS RHAttr,
@@ -367,7 +289,7 @@ def get_pl_df(from_date, end_date):
     return pl_df
 
 
-@cache.memoize(TIMEOUT)
+#@cache.memoize(TIMEOUT)
 def get_fx_df(from_date, end_date):
     fx_df = sql.read_sql('''SELECT a.base, AVG(a.rate) AS AvgOfrate
                 FROM (
@@ -380,7 +302,7 @@ def get_fx_df(from_date, end_date):
     return fx_df
 
 
-@cache.memoize(TIMEOUT)
+#@cache.memoize(TIMEOUT)
 def get_aum_df(from_date, end_date):
     aum_df = sql.read_sql('''SELECT processDate, MAX(RHAUM) AS RHAUM, MAX(YAAUM) AS YAAUM, MAX(LRAUM) AS LRAUM
       FROM (
@@ -399,7 +321,7 @@ def get_aum_df(from_date, end_date):
     return aum_df
 
 
-@cache.memoize(TIMEOUT)
+#@cache.memoize(TIMEOUT)
 def get_code_beta():
     code_beta_df = sql.read_sql('''SELECT a.code, a.beta, a.sector
           FROM t08AdvisorTag a,
@@ -414,7 +336,7 @@ def get_code_beta():
     return code_beta_df
 
 
-@cache.memoize(TIMEOUT)
+#@cache.memoize(TIMEOUT)
 def get_exposure_df(from_date, end_date):
     exposure_df = sql.read_sql('''SELECT processDate, advisor, quick,
          side, RHExposure, YAExposure, LRExposure
@@ -426,7 +348,7 @@ def get_exposure_df(from_date, end_date):
     return exposure_df
 
 
-@cache.memoize(TIMEOUT)
+#@cache.memoize(TIMEOUT)
 def get_index_return(from_date, end_date):
     index_df = sql.read_sql('''SELECT b.priceDate, a.indexCode, b.close
       FROM `t07Index` a, `t06DailyIndex` b
@@ -441,17 +363,17 @@ def get_index_return(from_date, end_date):
     return index_return, p_index_df
 
 
-@cache.memoize(TIMEOUT)
+#@cache.memoize(TIMEOUT)
 def get_code_name_map():
     code_name_map = sql.read_sql('''SELECT quick, name FROM t01Instrument;''', g.con)
     return code_name_map
 
 
-@app.route('/', methods=['GET'])
-def attrib():
-    if not session.get('logged_in'):
+@main.route('/', methods=['GET', 'POST'])
+def index():
+    # if not session.get('logged_in'):
         #abort(401)
-        return redirect(url_for('login'))
+    #    return redirect(url_for('login'))
     # TODO: change all double quotes to single quote for consistence
     # TODO: verify cache invalidate
     # TODO: test Redis as cache backend
@@ -656,7 +578,6 @@ def attrib():
                     'legend': {'font': {'size': 10}, 'x': 1.05}
                 }
     }
-
 
     netop_graph = [{
                        'x': [pd.to_datetime(str(i)).strftime('%Y-%m-%d') for i in net_op.index],
@@ -1077,433 +998,3 @@ def attrib():
     render_obj['analyst_list'] = g.indexMapping.keys()
 
     return render_template('attrib.html', params=render_obj)
-
-
-@app.route('/test')
-def test():
-    render_obj = dict()
-    render_obj['analyst'] = 'AP'
-    render_obj['analyst_list'] = g.indexMapping.keys()
-    return render_template('test.html', params=render_obj)
-
-
-def getSumTurnover(from_date, end_date):
-    sumTurnoverPerAdv = cache.get('sumTurnoverPerAdv')
-    totalRatio = cache.get('totalRatio')
-    if sumTurnoverPerAdv is None or totalRatio is None:
-        sqlFxDf = get_fx_df(from_date, end_date)
-
-        turnover_df = get_turnover_df(from_date, end_date)
-
-        # merge with FX df to get to-JPY-fx rate
-        turnover_merged_df = turnover_df.merge(sqlFxDf, left_on='currencyCode', right_index=True).sort_index()
-        # create new column which contain turnover in JPY
-        turnover_merged_df['JPYPL'] = (turnover_merged_df['Turnover'] * turnover_merged_df['AvgOfrate']).values
-
-        # calculate total turnover for each side
-        total_turnover = turnover_merged_df.truncate(after=end_date).groupby(["side"]).sum()['JPYPL']
-
-        # calculate turnover for each advisor
-        sumTurnoverPerAdv = turnover_merged_df.truncate(after=end_date).groupby(["advisor", "side"]).sum()[
-            'JPYPL'].unstack()
-
-        totalRatio = sumTurnoverPerAdv * 100 / total_turnover['L']
-
-        cache.set('sumTurnoverPerAdv', sumTurnoverPerAdv, timeout=TIMEOUT)
-        cache.set('totalRatio', totalRatio, timeout=TIMEOUT)
-
-    return sumTurnoverPerAdv, totalRatio
-
-
-
-def get_attr_df(from_date, end_date):
-
-    sqlPlDf = cache.get('sql_pl_df')
-    long_short_return = cache.get('long_short_return')
-
-    if sqlPlDf is None:
-        code_name_map = sql.read_sql('''SELECT quick, name FROM t01Instrument;''', g.con)
-        sqlPlDf = get_pl_df(from_date, end_date)
-        sqlPlDf = sqlPlDf.merge(code_name_map, left_on='quick', right_on='quick')
-
-        sumTurnoverPerAdv, totalRatio = getSumTurnover(from_date, end_date)
-
-        long_short_return = sqlPlDf.groupby(["advisor", "side"]).sum().drop(['RHAttr', 'YAAttr', 'LRAttr'],
-                                                                        axis=1).unstack().div(sumTurnoverPerAdv,
-                                                                                              axis=0) * 100
-
-        cache.set('long_short_return', long_short_return)
-        cache.set('sql_pl_df', sqlPlDf)
-
-    return long_short_return, sqlPlDf
-
-
-def getTurnoverValue(advisor, side):
-    '''
-    :param advisor: advisor abbreviation
-    :param side: 'L' or 'S'
-    :return: sum of turnover
-    '''
-
-    sumTurnoverPerAdv, totalRatio = getSumTurnover(g.startDate, g.endDate)
-
-    return Decimal(sumTurnoverPerAdv.ix[advisor][side]).quantize(Decimal('1.'), rounding=ROUND_HALF_UP)
-
-
-def getTurnoverRatio(advisor, side):
-    sumTurnoverPerAdv, totalRatio = getSumTurnover(g.startDate, g.endDate)
-    return totalRatio.ix[advisor][side]
-
-
-def get_pl(advisor, side, type):
-    long_short_return, sqlPlDf = get_attr_df(g.startDate, g.endDate)
-    attr_df = sqlPlDf.groupby(['advisor', 'side']).sum()
-    if type =='pl':
-        return Decimal(attr_df.ix[(advisor, side)]['attribution']).quantize(Decimal('1.'), rounding=ROUND_HALF_UP)
-    elif type == 'return':
-        return long_short_return['attribution'][side].ix[advisor]
-    elif type == 'rhpl':
-        return attr_df.ix[(advisor, side)]['RHAttr']
-    elif type == 'yapl':
-        return attr_df.ix[(advisor, side)]['YAAttr']
-    elif type == 'lrpl':
-        return attr_df.ix[(advisor, side)]['LRAttr']
-
-
-def get_avg_exposure(from_date, end_date):
-
-    exposure_avg = cache.get('exposure_avg')
-    tExposureDf = cache.get('tExposureDf')
-    betaExposure = cache.get('betaExposure')
-    gross_exposure = cache.get('gross_exposure')
-
-    if exposure_avg is None:
-        aumDf = get_aum_df(from_date, end_date)
-        codeBetaDf = get_code_beta()
-
-        fExposureDf = get_exposure_df(g.startDate, end_date)
-
-        mfExposureDf = fExposureDf.merge(codeBetaDf, how='left', left_on='quick', right_on='code')
-        sumExposureDf = mfExposureDf.groupby(['processDate', 'advisor', 'side']).sum()[
-            ['RHExposure', 'YAExposure', 'LRExposure']]
-
-        temp2 = mfExposureDf.set_index(['processDate', 'advisor', 'side'])
-
-        t2 = (temp2['RHExposure'].mul(aumDf['RHAUM'], axis=0).mul(temp2['beta'].fillna(0), axis=0) +
-              temp2['YAExposure'].mul(aumDf['YAAUM'], axis=0).mul(temp2['beta'].fillna(0), axis=0) +
-              temp2['LRExposure'].mul(aumDf['LRAUM'], axis=0).mul(temp2['beta'].fillna(0), axis=0))
-
-        t3 = t2.reset_index()  # .drop('quick',1)
-        t4 = t3.groupby(['processDate', 'advisor', 'side']).sum()
-        t4.columns = ['exposure']
-
-        betaExposure = t4['exposure']
-        tExposureDf = (sumExposureDf['RHExposure'].mul(aumDf['RHAUM'], axis=0) +
-                       sumExposureDf['YAExposure'].mul(aumDf['YAAUM'], axis=0) +
-                       sumExposureDf['LRExposure'].mul(aumDf['LRAUM'], axis=0))
-
-        tExposureDf.columns = ['Exposure']
-        t = DataFrame(tExposureDf).reset_index()
-        gross_exposure = t.groupby(by=['processDate', 'advisor'])[0].sum().div(aumDf['Total'], axis=0)
-
-        exposure_avg = DataFrame(tExposureDf).reset_index()
-
-        cache.set('tExposureDf', tExposureDf)
-        cache.set('exposure_avg', exposure_avg)
-        cache.set('betaExposure', betaExposure)
-        cache.set('gross_exposure', gross_exposure)
-
-    return exposure_avg, tExposureDf, betaExposure, gross_exposure
-
-
-def get_exposure(adviser, side):
-    exposure_avg, tExposureDf, betaExposure, gross_exposure = get_avg_exposure(g.startDate, g.endDate)
-    aum_df = get_aum_df(g.startDate, g.endDate)
-    return (exposure_avg[(exposure_avg['advisor'] == adviser) & (exposure_avg['side'] == side)].mean() * 100 / aum_df[
-            'Total'].mean()).iloc[0]
-
-
-def get_rank(adviser, side):
-    exposure_avg, tExposureDf, betaExposure, gross_exposure = get_avg_exposure(g.startDate, g.endDate)
-    aum_df = get_aum_df(g.startDate, g.endDate)
-    rankLongDf = exposure_avg[(exposure_avg['side'] == 'L')].groupby(by='advisor').mean() * 100 / aum_df['Total'].mean()
-    rankShortDf = exposure_avg[(exposure_avg['side'] == 'S')].groupby(by='advisor').mean() * 100 / aum_df['Total'].mean()
-    rankLongDf = rankLongDf.drop(g.dropList, errors='ignore').rank(ascending=False)
-    rankShortDf = rankShortDf.drop(g.dropList, errors='ignore').rank(ascending=False)
-
-    if side == 'L':
-        return rankLongDf.ix[adviser][0]
-    elif side == 'S':
-        return rankShortDf.ix[adviser][0]
-
-
-def get_net_op(adviser):
-
-    indexReturn, pIndexDf = get_index_return(g.startDate, g.endDate)
-    exposure_avg, tExposureDf, betaExposure, gross_exposure = get_avg_exposure(g.startDate, g.endDate)
-    aum_df = get_aum_df(g.startDate, g.endDate)
-    long_short_return, sqlPlDf = get_attr_df(g.startDate, g.endDate)
-
-    tExposure = tExposureDf[:, adviser].unstack().shift(1)
-
-    t = sqlPlDf.groupby(['processDate', 'advisor', 'side']).sum().drop(['RHAttr', 'YAAttr', 'LRAttr'],
-                                                                       axis=1).unstack().reset_index().set_index(
-            'processDate')
-    attr_df = t[t['advisor'] == adviser]['attribution']
-    attr_df['Total'] = attr_df['L'] + attr_df['S']
-
-    net_op = DataFrame()
-    net_op['L'] = attr_df['L'].sub(tExposure['L'].mul(indexReturn[g.indexMapping[adviser]], axis=0),
-                                   axis=0).div(
-            aum_df.shift(1)['Total'], axis=0)
-    net_op['S'] = attr_df['S'].sub((tExposure['S'] * -1).mul(indexReturn[g.indexMapping[adviser]], axis=0),
-                                   axis=0).div(aum_df.shift(1)['Total'], axis=0)
-    net_op.ix[g.startDate] = 0
-    net_op = net_op.cumsum().fillna(0)
-    net_op['Total'] = net_op['L'] + net_op['S']
-
-    netop_graph = [{
-                       'x': [pd.to_datetime(str(i)).strftime('%Y-%m-%d') for i in net_op.index],
-                       'y': (net_op[col] * 100).values.tolist(),
-                       'name': ('Long Net' if col == 'L' else ('Short Net' if col == 'S' else col)) + ' O/P',
-                       'line': {'width': g.lineWidth}
-                   } for col in net_op.columns
-                   ]
-
-    return net_op, attr_df, netop_graph
-
-
-def get_beta_op(adviser):
-
-    indexReturn, pIndexDf = get_index_return(g.startDate, g.endDate)
-    exposure_avg, tExposureDf, betaExposure, gross_exposure = get_avg_exposure(g.startDate, g.endDate)
-    long_short_return, sqlPlDf = get_attr_df(g.startDate, g.endDate)
-    aum_df = get_aum_df(g.startDate, g.endDate)
-
-    btExposure = betaExposure[:, adviser].unstack().shift(1)
-
-    t = sqlPlDf.groupby(['processDate', 'advisor', 'side']).sum().drop(['RHAttr', 'YAAttr', 'LRAttr'],
-                                                                       axis=1).unstack().reset_index().set_index(
-            'processDate')
-    attr_df = t[t['advisor'] == adviser]['attribution']
-    attr_df['Total'] = attr_df['L'] + attr_df['S']
-
-    beta_op = DataFrame()
-    beta_op['L'] = attr_df['L'].sub(btExposure['L'].mul(indexReturn[g.indexMapping[adviser]], axis=0),
-                                    axis=0).div(aum_df.shift(1)['Total'], axis=0)
-    beta_op['S'] = attr_df['S'].sub((btExposure['S'] * -1).mul(indexReturn[g.indexMapping[adviser]], axis=0),
-                                    axis=0).div(aum_df.shift(1)['Total'], axis=0)
-    beta_op = beta_op.cumsum().fillna(0)
-    beta_op['Total'] = beta_op['L'] + beta_op['S']
-
-    beta_graph = [{
-                      'x': [pd.to_datetime(str(i)).strftime('%Y-%m-%d') for i in beta_op.index],
-                      'y': (beta_op[col] * 100).fillna(0).values.tolist(),
-                      'name': ('Long Beta' if col == 'L' else ('Short Beta' if col == 'S' else col)) + ' O/P',
-                      'line': {'width': g.lineWidth}
-                  } for col in beta_op.columns
-                  ]
-    return beta_op, beta_graph
-
-
-def get_pl_graph(adviser, margin_top, margin_bottom, margin_left, margin_right, graph_width, graph_height):
-    net_op, attr_df, netop_graph = get_net_op(adviser)
-    cs_attr_df = attr_df.cumsum().fillna(0)
-    indexReturn, pIndexDf = get_index_return(g.startDate, g.endDate)
-    exposure_avg, tExposureDf, betaExposure, gross_exposure = get_avg_exposure(g.startDate, g.endDate)
-
-    tExposure = tExposureDf[:, adviser].unstack().shift(1)
-
-    pl_graph = [{
-                    'x': [pd.to_datetime(str(i)).strftime('%Y-%m-%d') for i in cs_attr_df.index],
-                    'y': cs_attr_df[col].values.tolist(),
-                    'name': ('Long' if col == 'L' else ('Short' if col == 'S' else col)) + ' PL',
-                    'line': {'width': g.lineWidth}
-                } for col in cs_attr_df.columns
-                ] + [{
-        'x': [pd.to_datetime(str(i)).strftime('%Y-%m-%d') for i in pIndexDf.index],
-        'y': ((tExposure['L'] + tExposure['S']) * indexReturn[g.indexMapping[adviser]]).sub(
-                pIndexDf[g.indexMapping[adviser]], axis=0).cumsum().fillna(0).values.tolist(),
-        'name': g.indexMapping[adviser],
-        'fill': 'tozeroy',
-        'line': {'width': 0}
-    }]
-
-    return pl_graph
-
-
-def get_exposure_graph(adviser):
-    exposure_avg, tExposureDf, betaExposure, gross_exposure = get_avg_exposure(g.startDate, g.endDate)
-    exposureGraphDf = tExposureDf[:, adviser].unstack().reindex(tExposureDf.index.levels[0]).fillna(0)
-    exposure_graph = [{
-                          'x': [pd.to_datetime(str(i)).strftime('%Y-%m-%d') for i in exposureGraphDf.index],
-                          'y': exposureGraphDf[col].values.tolist(),
-                          'name': 'Long Exposure' if col == 'L' else ('Short Exposure' if col == 'S' else col),
-                          'line': {'width': g.lineWidth}
-                      } for col in ['L', 'S']
-                      ]
-    return exposure_graph
-
-
-def get_name_graph(adviser):
-    fExposureDf = get_exposure_df(g.startDate, g.endDate)
-
-    names_df = fExposureDf.groupby(by=['processDate', 'advisor']).count()['quick']
-    names_graph = [{
-                       'x': [pd.to_datetime(str(i)).strftime('%Y-%m-%d') for i in names_df[:, col].index],
-                       'y': (names_df[:, col]).values.tolist(),
-                       'name': col,
-                       'line': {
-                           'color': "rgb(214, 39, 40)" if (col == adviser) else "rgb(190, 190, 190)",
-                           'width': g.lineWidth if (col == adviser) else g.thinLineWidth
-
-                       }
-                   } for col in names_df.index.levels[1] if not col in g.dropList]
-
-    return names_graph
-
-
-def get_op_graph(adviser):
-    net_op, attr_df, netop_graph = get_net_op(adviser)
-    beta_op, beta_graph = get_beta_op(adviser)
-
-    bm_index = pd.date_range(start=g.startDate, end=g.endDate, freq='BM')
-    bm_net_op = net_op.reindex(bm_index)
-    bm_beta_op = beta_op.reindex(bm_index)
-    bm_net_op = bm_net_op - bm_net_op.shift(1)
-    bm_beta_op = bm_beta_op - bm_beta_op.shift(1)
-    graph_op = DataFrame()
-    graph_op['Long OP'] = bm_net_op['L'].fillna(0) * 100
-    graph_op['Long Beta OP'] = bm_beta_op['L'].fillna(0) * 100
-    graph_op['Short OP'] = bm_net_op['S'].fillna(0) * 100
-    graph_op['Short Beta OP'] = bm_beta_op['S'].fillna(0) * 100
-
-    op_graph = dict()
-    op_graph['index'] = [x.strftime('%Y-%m') for x in graph_op.index]
-    op_graph['columns'] = {col: (graph_op[col] * 100).values.tolist() for col in graph_op.columns}
-
-    return op_graph
-
-
-def get_gross_exposure_graph(adviser):
-    exposure_avg, tExposureDf, betaExposure, gross_exposure = get_avg_exposure(g.startDate, g.endDate)
-    gross_exposure_graph = [{
-                                'x': [pd.to_datetime(str(i)).strftime('%Y-%m-%d') for i in
-                                      gross_exposure[:, col].index],
-                                'y': (gross_exposure[:, col] * 100).values.tolist(),
-                                'name': col,
-                                'line': {
-                                    'color': "rgb(214, 39, 40)" if (col == adviser) else "rgb(190, 190, 190)",
-                                    'width': g.lineWidth if (col == adviser) else g.thinLineWidth
-                                }
-                            } for col in gross_exposure.index.levels[1] if not col in g.dropList]
-    return gross_exposure_graph
-
-
-def get_short_exposure_graph(adviser):
-    exposure_avg, tExposureDf, betaExposure, gross_exposure = get_avg_exposure(g.startDate, g.endDate)
-    aum_df = get_aum_df(g.startDate, g.endDate)
-    t = DataFrame(tExposureDf).reset_index()
-    t2 = t[t['side'] == 'S'].set_index(['processDate', 'advisor'])[0].div(aum_df['Total'], axis=0)
-    t3 = DataFrame(
-            t[t['side'] == 'S'].set_index(['processDate', 'advisor'])[0].div(aum_df['Total'], axis=0)).reset_index()
-    t3[t3['advisor'] == 'Bal'] = 0
-    t4 = t3.groupby(by='processDate')[0].sum().truncate(before=g.startDate)
-    short_exposure = t2.div(t4, axis=0)
-    short_exposure_graph = [{
-                                'x': [pd.to_datetime(str(i)).strftime('%Y-%m-%d') for i in
-                                      short_exposure[:, col].index],
-                                'y': (short_exposure[:, col] * 100).values.tolist(),
-                                'name': col,
-                                'line': {
-                                    'color': "rgb(214, 39, 40)" if (col == adviser) else "rgb(190, 190, 190)",
-                                    'width': g.lineWidth if (col == adviser) else g.thinLineWidth
-
-                                }
-                            } for col in short_exposure.index.levels[1] if not col in g.dropList]
-    return short_exposure_graph
-
-
-@app.route('/test2')
-def test2():
-    param_adviser = request.args.get('analyst', g.reportAdvisor)
-
-    hitRateDf = get_hit_rate_df(g.startDate, g.endDate)
-
-    net_op, attr_df, netop_graph = get_net_op(param_adviser)
-    beta_op, beta_graph = get_beta_op(param_adviser)
-
-    render_obj = dict()
-    render_obj['analyst'] = param_adviser
-    render_obj['index'] = g.indexMapping[param_adviser]
-    render_obj['startDate'] = g.startDate
-    render_obj['endDate'] = g.endDate
-    render_obj['analyst_list'] = g.indexMapping.keys()
-    render_obj['longTurnover'] = getTurnoverValue(param_adviser, 'L')
-    render_obj['shortTurnover'] = getTurnoverValue(param_adviser, 'S')
-    render_obj['totalLong'] = getTurnoverRatio(param_adviser, 'L')
-    render_obj['totalShort'] = getTurnoverRatio(param_adviser, 'S')
-
-    render_obj['longPL'] = get_pl(param_adviser, 'L', 'pl')
-    render_obj['shortPL'] = get_pl(param_adviser, 'S', 'pl')
-
-    render_obj['longIndexOP'] = net_op['L'].iloc[-1] * 100
-    render_obj['shortIndexOP'] = net_op['S'].iloc[-1] * 100
-
-    render_obj['longBetaOP'] = beta_op['L'].iloc[-1] * 100
-    render_obj['shortBetaOP'] = beta_op['S'].iloc[-1] * 100
-
-    render_obj['longHitRate'] = hitRateDf['LongsHR'].ix[param_adviser]
-    render_obj['shortHitRate'] = hitRateDf['ShortsHR'].ix[param_adviser]
-
-    render_obj['longReturn'] = get_pl(param_adviser, 'L', 'return')
-    render_obj['shortReturn'] = get_pl(param_adviser, 'S', 'return')
-
-    render_obj['rhBpsLong'] = get_pl(param_adviser, 'L', 'rhpl') * 100
-    render_obj['rhBpsShort'] = get_pl(param_adviser, 'S', 'rhpl') * 100
-    render_obj['yaBpsLong'] = get_pl(param_adviser, 'L', 'yapl') * 100
-    render_obj['yaBpsShort'] = get_pl(param_adviser, 'S', 'yapl') * 100
-    render_obj['lrBpsLong'] = get_pl(param_adviser, 'L', 'lrpl') * 100
-    render_obj['lrBpsShort'] = get_pl(param_adviser, 'S', 'lrpl') * 100
-
-    render_obj['exposure_avg_long'] = get_exposure(param_adviser, 'L')
-    render_obj['exposure_avg_short'] = get_exposure(param_adviser, 'S')
-
-    render_obj['rank_long'] = get_rank(param_adviser, 'L')
-    render_obj['rank_short'] = get_rank(param_adviser, 'S')
-
-    render_obj['graph_width'] = 750
-    render_obj['graph_height'] = 240
-    render_obj['graph_line_width'] = g.lineWidth
-    render_obj['margin_left'] = 40
-    render_obj['margin_top'] = 40
-    render_obj['margin_bottom'] = 30
-    render_obj['margin_right'] = 5
-    render_obj['graph_font'] = 'Calibri'
-    render_obj['graph_font_size'] = 10
-
-    render_obj['pl_graph'] = get_pl_graph(param_adviser, render_obj['margin_top'], render_obj['margin_bottom'],
-                                          render_obj['margin_left'], render_obj['margin_right'],
-                                          render_obj['graph_width'], render_obj['graph_height'])
-    render_obj['netop_graph'] = netop_graph
-    render_obj['betaop_graph'] = beta_graph
-    render_obj['exposure_graph'] = get_exposure_graph(param_adviser)
-    render_obj['op_graph'] = get_op_graph(param_adviser)
-    render_obj['gross_exposure_graph'] = get_gross_exposure_graph(param_adviser)
-    render_obj['short_exposure_graph'] = get_short_exposure_graph(param_adviser)
-    render_obj['names_graph'] = get_name_graph(param_adviser)
-
-    return render_template('test2.html', params=render_obj)
-
-
-@app.route('/logout')
-def logout():
-    session.pop('logged_in', None)
-    flash('You were logged out')
-    return redirect(url_for('login'))
-
-
-# default port 5000
-if __name__ == '__main__':
-    app.debug = True
-    app.run(host='0.0.0.0')
