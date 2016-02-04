@@ -1,7 +1,5 @@
-# all the imports
-import sqlite3
-from flask import Flask, request, session, g, redirect, url_for, \
-    abort, render_template, flash, Response
+from flask import Flask, request, session, g, url_for, \
+    abort, render_template, flash, Response, current_app
 from contextlib import closing
 
 import pandas as pd
@@ -11,19 +9,16 @@ import numpy as np
 import pymysql
 from datetime import datetime, timedelta
 from decimal import *
-from flask.ext.cache import Cache
+#from flask.ext.cache import Cache
+from cache import cache
 
-import urlparse
-import pyotp
-import qrcode
-import StringIO
 from . import main
 
 TIMEOUT = 15 * 60
 NUMBER_OF_ROW_PER_PAGE = 41
 NUMBER_OF_TOP_POSITIONS = 8
 
-#cache = Cache(app, config={'CACHE_TYPE': 'simple'})
+#cache = Cache(current_app, config={'CACHE_TYPE': 'simple'})
 
 
 def break_into_page(df, start_new_page=True, finalize_last_page=True,
@@ -144,7 +139,7 @@ def teardown_request(exception):
         con.close()
 
 
-#@cache.memoize(TIMEOUT)
+@cache.memoize(TIMEOUT)
 def get_turnover_df(from_date, end_date):
     # there is some trades on 2014/12/31 both long and short sides, which is not in database table
     sql_turnover_df = sql.read_sql('''
@@ -239,7 +234,7 @@ def get_turnover_df(from_date, end_date):
     return sql_turnover_df
 
 
-#@cache.memoize(TIMEOUT)
+@cache.memoize(TIMEOUT)
 def get_hit_rate_df(from_date, end_date):
     hit_rate_df = sql.read_sql('''select advisor, SUM(IF(RHAttr > 0 AND side='L',1,0)) as LongsWin,
         SUM(IF(side='L' and RHAttr <> 0,1,0)) as Longs,
@@ -259,7 +254,7 @@ def get_hit_rate_df(from_date, end_date):
     return hit_rate_df
 
 
-#@cache.memoize(TIMEOUT)
+@cache.memoize(TIMEOUT)
 def get_pl_df(from_date, end_date):
     pl_df = sql.read_sql('''SELECT processDate,advisor, side, a.quick, attribution,
                             RHAttribution AS RHAttr,
@@ -289,7 +284,7 @@ def get_pl_df(from_date, end_date):
     return pl_df
 
 
-#@cache.memoize(TIMEOUT)
+@cache.memoize(TIMEOUT)
 def get_fx_df(from_date, end_date):
     fx_df = sql.read_sql('''SELECT a.base, AVG(a.rate) AS AvgOfrate
                 FROM (
@@ -302,7 +297,7 @@ def get_fx_df(from_date, end_date):
     return fx_df
 
 
-#@cache.memoize(TIMEOUT)
+@cache.memoize(TIMEOUT)
 def get_aum_df(from_date, end_date):
     aum_df = sql.read_sql('''SELECT processDate, MAX(RHAUM) AS RHAUM, MAX(YAAUM) AS YAAUM, MAX(LRAUM) AS LRAUM
       FROM (
@@ -321,7 +316,7 @@ def get_aum_df(from_date, end_date):
     return aum_df
 
 
-#@cache.memoize(TIMEOUT)
+@cache.memoize(TIMEOUT)
 def get_code_beta():
     code_beta_df = sql.read_sql('''SELECT a.code, a.beta, a.sector
           FROM t08AdvisorTag a,
@@ -336,7 +331,7 @@ def get_code_beta():
     return code_beta_df
 
 
-#@cache.memoize(TIMEOUT)
+@cache.memoize(TIMEOUT)
 def get_exposure_df(from_date, end_date):
     exposure_df = sql.read_sql('''SELECT processDate, advisor, quick,
          side, RHExposure, YAExposure, LRExposure
@@ -348,7 +343,7 @@ def get_exposure_df(from_date, end_date):
     return exposure_df
 
 
-#@cache.memoize(TIMEOUT)
+@cache.memoize(TIMEOUT)
 def get_index_return(from_date, end_date):
     index_df = sql.read_sql('''SELECT b.priceDate, a.indexCode, b.close
       FROM `t07Index` a, `t06DailyIndex` b
@@ -363,13 +358,14 @@ def get_index_return(from_date, end_date):
     return index_return, p_index_df
 
 
-#@cache.memoize(TIMEOUT)
+@cache.memoize(TIMEOUT)
 def get_code_name_map():
     code_name_map = sql.read_sql('''SELECT quick, name FROM t01Instrument;''', g.con)
     return code_name_map
 
 
 @main.route('/', methods=['GET', 'POST'])
+#@cache.memoize(TIMEOUT)
 def index():
     # if not session.get('logged_in'):
         #abort(401)
@@ -455,7 +451,7 @@ def index():
     attr_df = t[t['advisor'] == param_adviser]['attribution']
     attr_df['Total'] = attr_df['L'] + attr_df['S']
     cs_attr_df = attr_df
-    cs_attr_df = cs_attr_df.cumsum().fillna(method='ffill')
+    cs_attr_df = cs_attr_df.cumsum().fillna(method='ffill').fillna(0)
 
     long_short_return = sqlPlDf.groupby(["advisor", "side"]).sum().drop(['RHAttr', 'YAAttr', 'LRAttr'],
                                                                         axis=1).unstack().div(sumTurnoverPerAdv,
