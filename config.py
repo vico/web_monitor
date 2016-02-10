@@ -4,6 +4,9 @@ basedir = os.path.abspath(os.path.dirname(__file__))
 
 
 class Config:
+    def __init__(self):
+        pass
+
     SECRET_KEY = os.environ.get('SECRET_KEY') or 'adf098098'
     TIMEOUT = 15 * 60
     NUMBER_OF_ROW_PER_PAGE = 41
@@ -14,7 +17,8 @@ class Config:
     MAIL_USERNAME = os.environ.get('MAIL_USERNAME')
     MAIL_PASSWORD = os.environ.get('MAIL_PASSWORD')
     MAIL_SUBJECT_PREFIX = 'RH'
-    MAIL_SENDER = 'auto@rockhampton-mgt.com'
+    MAIL_SENDER = os.environ.get('MAIL_SENDER')
+    SQLALCHEMY_TRACK_MODIFICATIONS = False
 
     @staticmethod
     def init_app(app):
