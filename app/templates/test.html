@@ -2,11 +2,10 @@
 {% block body %}
 <div class=container>
   <div class=metanav>
-    {{access_token}}
-  {% if not session.logged_in %}
-      <a href="{{ url_for('login') }}">log in</a>
+  {% if current_user.is_authenticated %}
+      <a href="{{ url_for('auth.logout') }}">Sign out</a>
   {% else %}
-      <a href="{{ url_for('logout') }}">log out</a>
+      <a href="{{ url_for('auth.login') }}">Sign in</a>
   {% endif %}
   </div>
   <table>

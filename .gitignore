@@ -6,3 +6,4 @@ venv
 htmlcov
 build
 .*.swp
+*.sqlite

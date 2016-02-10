@@ -4,14 +4,15 @@
 <head>
     <meta charset="utf-8">
     <title>Web Attribution</title>
-
+    <link rel="shortcut icon" href="{{ url_for('static', filename='favicon.ico') }}">
     <!-- Normalize or reset CSS with your favorite library -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/normalize/3.0.3/normalize.css">
 
     <!-- Load paper.css for happy printing -->
-    <link rel="stylesheet" href={{ url_for('static', filename='paper.css') }}>
-    <link rel="stylesheet" href={{ url_for('static', filename='pikaday.css') }}>
-    <link rel="stylesheet" href={{ url_for('static', filename='select2.css') }}>
+    <link rel="stylesheet" href="{{ url_for('static', filename='paper.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='pikaday.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='select2.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 
     <!-- Set page size here: A5, A4 or A3 -->
     <!-- Set also "landscape" if you need -->
@@ -20,6 +21,7 @@
     <!-- Custom styles for this document -->
     <link href='https://fonts.googleapis.com/css?family=Tangerine:700' rel='stylesheet' type='text/css'>
     <script src="{{ url_for('static', filename='jquery-2.2.0.min.js') }}"></script>
+
     <script src="{{ url_for('static', filename='moment.min.js') }}"></script>
     <script src="{{ url_for('static', filename='pikaday.js') }}"></script>
     <script src="{{ url_for('static', filename='select2.js') }}"></script>
@@ -131,6 +133,27 @@
             color: black;
         }
 
+        #signoutlink {
+            background: transparent;
+            border: 0;
+            border-style: none;
+            border-color: transparent;
+            outline: none;
+            outline-offset: 0;
+            box-shadow: none;
+            text-align-last: center; /* for Chrome */
+            text-align: -moz-center;
+            text-align: center; /* for IE */
+            width: 12ch; /* MS IE shows 1ch smaller than other browsers */
+            border-radius: 4px;
+            color: transparent;
+        }
+
+        #signoutlink:hover, #signoutlink:focus, #signoutlink:active {
+            background: #d5e9f7;
+            color: black;
+        }
+
     </style>
 </head>
 
@@ -141,10 +164,15 @@
 <!-- Each sheet element should have the class "sheet" -->
 <!-- "padding-**mm" is optional: you can set 10, 15, 20 or 25 -->
 
-
-{% for message in get_flashed_messages() %}
-<div class=flash>{{ message }}</div>
-{% endfor %}
+{% with messages = get_flashed_messages() %}
+    {% if messages %}
+    <ul>
+        {% for message in messages %}
+        <li>{{ message }}</li>
+        {% endfor %}
+    </ul>
+    {% endif %}
+{% endwith %}
 {% block body %}{% endblock %}
 
 

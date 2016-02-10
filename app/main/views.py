@@ -1,6 +1,4 @@
-from flask import Flask, request, session, g, url_for, \
-    abort, render_template, flash, Response, current_app
-from contextlib import closing
+from flask import request, g, render_template
 
 import pandas as pd
 from pandas import DataFrame
@@ -9,16 +7,14 @@ import numpy as np
 import pymysql
 from datetime import datetime, timedelta
 from decimal import *
-#from flask.ext.cache import Cache
 from cache import cache
+from flask.ext.login import login_required
 
 from . import main
 
 TIMEOUT = 15 * 60
 NUMBER_OF_ROW_PER_PAGE = 41
 NUMBER_OF_TOP_POSITIONS = 8
-
-#cache = Cache(current_app, config={'CACHE_TYPE': 'simple'})
 
 
 def break_into_page(df, start_new_page=True, finalize_last_page=True,
@@ -365,7 +361,7 @@ def get_code_name_map():
 
 
 @main.route('/', methods=['GET', 'POST'])
-#@cache.memoize(TIMEOUT)
+@login_required
 def index():
     # if not session.get('logged_in'):
         #abort(401)
@@ -406,138 +402,142 @@ def index():
 
     sumTurnoverPerAdv = sumTurnoverPerAdv.reindex(g.indexMapping.keys())
 
-    totalRatio = (sumTurnoverPerAdv * 100 / total_turnover['L']).fillna(0)  # % TOTAL
+    total_ratio = (sumTurnoverPerAdv * 100 / total_turnover['L']).fillna(0)  # % TOTAL
 
-    aumDf = get_aum_df(start_date, end_date)
+    aum_df = get_aum_df(start_date, end_date)
 
-    codeBetaDf = get_code_beta()
+    code_beta_df = get_code_beta()
 
-    fExposureDf = get_exposure_df(start_date, end_date)
+    f_exposure_df = get_exposure_df(start_date, end_date)
 
-    names_df = fExposureDf.groupby(by=['processDate', 'advisor']).count()['quick']
+    names_df = f_exposure_df.groupby(by=['processDate', 'advisor']).count()['quick']
 
-    mfExposureDf = fExposureDf.merge(codeBetaDf, how='left', left_on='quick', right_on='code')
-    sumExposureDf = mfExposureDf.groupby(['processDate', 'advisor', 'side']).sum()[
+    mf_exposure_df = f_exposure_df.merge(code_beta_df, how='left', left_on='quick', right_on='code')
+    sum_exposure_per_fund = mf_exposure_df.groupby(['processDate', 'advisor', 'side']).sum()[
         ['RHExposure', 'YAExposure', 'LRExposure']]
 
-    temp2 = mfExposureDf.set_index(['processDate', 'advisor', 'side'])
+    temp2 = mf_exposure_df.set_index(['processDate', 'advisor', 'side'])
 
-    t2 = (temp2['RHExposure'].mul(aumDf['RHAUM'], axis=0).mul(temp2['beta'].fillna(0), axis=0) +
-          temp2['YAExposure'].mul(aumDf['YAAUM'], axis=0).mul(temp2['beta'].fillna(0), axis=0) +
-          temp2['LRExposure'].mul(aumDf['LRAUM'], axis=0).mul(temp2['beta'].fillna(0), axis=0))
+    t2 = (temp2['RHExposure'].mul(aum_df['RHAUM'], axis=0).mul(temp2['beta'].fillna(0), axis=0) +
+          temp2['YAExposure'].mul(aum_df['YAAUM'], axis=0).mul(temp2['beta'].fillna(0), axis=0) +
+          temp2['LRExposure'].mul(aum_df['LRAUM'], axis=0).mul(temp2['beta'].fillna(0), axis=0))
 
     t3 = t2.reset_index()  # .drop('quick',1)
     t4 = t3.groupby(['processDate', 'advisor', 'side']).sum()
     t4.columns = ['exposure']
 
-    betaExposure = t4['exposure']
-    tExposureDf = (sumExposureDf['RHExposure'
-                   ].mul(aumDf['RHAUM'], axis=0) +
-                   sumExposureDf['YAExposure'].mul(aumDf['YAAUM'], axis=0) +
-                   sumExposureDf['LRExposure'].mul(aumDf['LRAUM'], axis=0))
+    beta_exposure_df = t4['exposure']
+    all_fund_exposure_in_money = (sum_exposure_per_fund['RHExposure'].mul(aum_df['RHAUM'], axis=0) +
+                                  sum_exposure_per_fund['YAExposure'].mul(aum_df['YAAUM'], axis=0) +
+                                  sum_exposure_per_fund['LRExposure'].mul(aum_df['LRAUM'], axis=0))
 
-    tExposureDf.columns = ['Exposure']
+    all_fund_exposure_in_money.columns = ['Exposure']
 
-    sqlPlDf = get_pl_df(start_date, end_date)
-    sqlPlDf = sqlPlDf.merge(code_name_map, left_on='quick', right_on='quick')
+    sql_pl_df = get_pl_df(start_date, end_date)
+    sql_pl_df = sql_pl_df.merge(code_name_map, left_on='quick', right_on='quick')
 
-    if (fExposureDf[fExposureDf['advisor'] == param_adviser].empty and turnover_df[turnover_df['advisor'] == param_adviser].empty
-        and sqlPlDf[sqlPlDf['advisor'] == param_adviser].empty):
+    if (f_exposure_df[f_exposure_df['advisor'] == param_adviser].empty and
+            turnover_df[turnover_df['advisor'] == param_adviser].empty and
+            sql_pl_df[sql_pl_df['advisor'] == param_adviser].empty):
         return render_template('empty.html', adviser=param_adviser)
 
-    t = sqlPlDf.groupby(['processDate', 'advisor', 'side']).sum().drop(['RHAttr', 'YAAttr', 'LRAttr'],
-                                                                       axis=1).unstack().reset_index().set_index(
-            'processDate')
+    t = sql_pl_df.groupby(['processDate', 'advisor', 'side'
+                           ]).sum().drop(['RHAttr', 'YAAttr', 'LRAttr'
+                                          ], axis=1).unstack().reset_index().set_index('processDate')
+
     attr_df = t[t['advisor'] == param_adviser]['attribution']
     attr_df['Total'] = attr_df['L'] + attr_df['S']
     cs_attr_df = attr_df
     cs_attr_df = cs_attr_df.cumsum().fillna(method='ffill').fillna(0)
 
-    long_short_return = sqlPlDf.groupby(["advisor", "side"]).sum().drop(['RHAttr', 'YAAttr', 'LRAttr'],
+    long_short_return = sql_pl_df.groupby(["advisor", "side"]).sum().drop(['RHAttr', 'YAAttr', 'LRAttr'],
                                                                         axis=1).unstack().div(sumTurnoverPerAdv,
                                                                                               axis=0) * 100
 
-    indexReturn, pIndexDf = get_index_return(start_date, end_date)
+    index_net_return, index_df = get_index_return(start_date, end_date)
 
-    tExposure = tExposureDf[:, param_adviser].unstack().shift(1)
+    advisor_exposure = all_fund_exposure_in_money[:, param_adviser].unstack().shift(1)
 
-    exposure_avg = DataFrame(tExposureDf).reset_index()
+    exposure_avg = DataFrame(all_fund_exposure_in_money).reset_index()
 
-    t = DataFrame(tExposureDf).reset_index()
-    gross_exposure = t.groupby(by=['processDate', 'advisor'])[0].sum().div(aumDf['Total'], axis=0)
-    t2 = t[t['side'] == 'S'].set_index(['processDate', 'advisor'])[0].div(aumDf['Total'], axis=0)
+    t = DataFrame(all_fund_exposure_in_money).reset_index()
+    gross_exposure = t.groupby(by=['processDate', 'advisor'])[0].sum().div(aum_df['Total'], axis=0)
+    t2 = t[t['side'] == 'S'].set_index(['processDate', 'advisor'])[0].div(aum_df['Total'], axis=0)
     t3 = DataFrame(
-            t[t['side'] == 'S'].set_index(['processDate', 'advisor'])[0].div(aumDf['Total'], axis=0)).reset_index()
-    t3[t3['advisor'] == 'Bal'] = 0
+            t[t['side'] == 'S'].set_index(['processDate', 'advisor'])[0].div(aum_df['Total'], axis=0)).reset_index()
+    t3[t3['advisor'] == 'Bal'] = 0  # TODO: Check this
     t4 = t3.groupby(by='processDate')[0].sum().truncate(before=start_date)
     short_exposure = t2.div(t4, axis=0)
 
-    rankLongDf = exposure_avg[(exposure_avg['side'] == 'L')].groupby(by='advisor').mean() * 100 / aumDf['Total'].mean()
-    rankShortDf = exposure_avg[(exposure_avg['side'] == 'S')].groupby(by='advisor').mean() * 100 / aumDf['Total'].mean()
-    rankLongDf = rankLongDf.drop(g.dropList, errors='ignore').rank(ascending=False)
-    rankShortDf = rankShortDf.drop(g.dropList, errors='ignore').rank(ascending=False)
+    rank_long_df = exposure_avg[(exposure_avg['side'] == 'L'
+                                 )].groupby(by='advisor').mean() * 100 / aum_df['Total'].mean()
+    ranke_short_df = exposure_avg[(exposure_avg['side'] == 'S'
+                                   )].groupby(by='advisor').mean() * 100 / aum_df['Total'].mean()
+
+    rank_long_df = rank_long_df.drop(g.dropList, errors='ignore').rank(ascending=False)
+    ranke_short_df = ranke_short_df.drop(g.dropList, errors='ignore').rank(ascending=False)
 
     net_op = DataFrame()
 
-    net_op['L'] = attr_df['L'].sub(tExposure['L'].mul(indexReturn[g.indexMapping[param_adviser]], axis=0),
-                                   axis=0).div(
-            aumDf.shift(1)['Total'], axis=0)
-    net_op['S'] = attr_df['S'].sub((tExposure['S'] * -1).mul(indexReturn[g.indexMapping[param_adviser]], axis=0),
-                                   axis=0).div(aumDf.shift(1)['Total'], axis=0)
-    net_op = net_op.cumsum().fillna(method='ffill').fillna(0) # fill na forward and then fill 0 at beginning
+    net_op['L'] = attr_df['L'].sub(advisor_exposure['L'].mul(index_net_return[g.indexMapping[param_adviser]], axis=0),
+                                   axis=0
+                                   ).div(aum_df.shift(1)['Total'], axis=0)
+    net_op['S'] = attr_df['S'].sub((advisor_exposure['S'] * -1).mul(index_net_return[g.indexMapping[param_adviser]], axis=0),
+                                   axis=0).div(aum_df.shift(1)['Total'], axis=0)
+    net_op = net_op.cumsum().fillna(method='ffill').fillna(0)  # fill na forward and then fill 0 at beginning
     net_op['Total'] = net_op['L'] + net_op['S']
 
-    btExposure = betaExposure[:, param_adviser].unstack().shift(1)
+    beta_exposure = beta_exposure_df[:, param_adviser].unstack().shift(1)
     beta_op = DataFrame()
-    beta_op['L'] = attr_df['L'].sub(btExposure['L'].mul(indexReturn[g.indexMapping[param_adviser]], axis=0),
-                                    axis=0).div(aumDf.shift(1)['Total'], axis=0)
-    beta_op['S'] = attr_df['S'].sub((btExposure['S'] * -1).mul(indexReturn[g.indexMapping[param_adviser]], axis=0),
-                                    axis=0).div(aumDf.shift(1)['Total'], axis=0)
-    beta_op = beta_op.cumsum().fillna(method='ffill').fillna(0)# fill na forward and then fill 0 at beginning
+    beta_op['L'] = attr_df['L'].sub(beta_exposure['L'].mul(index_net_return[g.indexMapping[param_adviser]], axis=0),
+                                    axis=0).div(aum_df.shift(1)['Total'], axis=0)
+    beta_op['S'] = attr_df['S'].sub((beta_exposure['S'] * -1).mul(index_net_return[g.indexMapping[param_adviser]], axis=0),
+                                    axis=0).div(aum_df.shift(1)['Total'], axis=0)
+    beta_op = beta_op.cumsum().fillna(method='ffill').fillna(0)  # fill na forward and then fill 0 at beginning
     beta_op['Total'] = beta_op['L'] + beta_op['S']
 
-    totalFund = sqlPlDf.groupby(['processDate', 'advisor', 'side']).sum().drop(['attribution'],
-                                                                               axis=1).unstack().reset_index().set_index(
-            'processDate')
+    total_fund = sql_pl_df.groupby(['processDate', 'advisor', 'side'
+                                    ]).sum().drop(['attribution'], axis=1
+                                                  ).unstack().reset_index().set_index('processDate')
 
-    csIndexReturn = pIndexDf/pIndexDf.ix[1]-1
+    cs_index_return = index_df/index_df.ix[1]-1
 
     # calculate range for two graph so that we can make them have same 0 of y axis
-    posPlBound = 1.1*abs(max([max(cs_attr_df.max().values), min(cs_attr_df.min().values), 0]))
-    negPlBound = 1.1*abs(min([min(cs_attr_df.min().values), max(cs_attr_df.max().values), 0]))
-    posIdxBound = 1.1*abs(max([csIndexReturn[g.indexMapping[param_adviser]].max(), 0]))
-    negIdxBound = 1.1*abs(min([csIndexReturn[g.indexMapping[param_adviser]].min(), 0]))
+    positive_pl_bound = 1.1*abs(max([max(cs_attr_df.max().values), min(cs_attr_df.min().values), 0]))
+    negative_pl_bound = 1.1*abs(min([min(cs_attr_df.min().values), max(cs_attr_df.max().values), 0]))
+    positive_index_bound = 1.1*abs(max([cs_index_return[g.indexMapping[param_adviser]].max(), 0]))
+    negative_index_bound = 1.1*abs(min([cs_index_return[g.indexMapping[param_adviser]].min(), 0]))
 
     range1 = [0, 0]
     range2 = [0, 0]
 
-    if posPlBound == 0 and posIdxBound == 0:
-        range1 = [-negPlBound, 0]
-        range2 = [-negIdxBound, 0]
-    elif posPlBound == 0 and posIdxBound > 0 and negIdxBound != 0:
-        range1 = [-negPlBound*posIdxBound/negIdxBound, negPlBound]
-        range2 = [-negIdxBound, posIdxBound]
-    elif negPlBound == 0 and negIdxBound == 0:
-        range1 = [0, posPlBound]
-        range2 = [0, posIdxBound]
-    elif negPlBound == 0 and negIdxBound > 0 and posIdxBound != 0:
-        range1 = [-posPlBound * negIdxBound / posIdxBound, posPlBound]
-        range2 = [-negIdxBound, posIdxBound]
-    elif posPlBound == 0 and posIdxBound >0 and negIdxBound == 0:
-        range1 = [-negPlBound, negPlBound]
-        range2 = [-posIdxBound, posIdxBound]
-    elif negPlBound == 0 and negIdxBound >0 and posIdxBound == 0:
-        range1 = [-posPlBound, posPlBound]
-        range2 = [-negIdxBound, negIdxBound]
-    elif posPlBound > 0 and negPlBound > 0 and posIdxBound == 0 and negIdxBound > 0:
-        range1 = [-negPlBound, posPlBound]
-        range2 = [-negIdxBound, posPlBound*negIdxBound/negPlBound]
-    elif posPlBound > 0 and negPlBound > 0 and posIdxBound > 0 and negIdxBound > 0:
-        range1 = [-negPlBound, posPlBound]
-        if posIdxBound > negIdxBound:
-            range2 = [-negPlBound*posIdxBound/posPlBound, posIdxBound]
+    if positive_pl_bound == 0 and positive_index_bound == 0:
+        range1 = [-negative_pl_bound, 0]
+        range2 = [-negative_index_bound, 0]
+    elif positive_pl_bound == 0 and positive_index_bound > 0 and negative_index_bound != 0:
+        range1 = [-negative_pl_bound*positive_index_bound/negative_index_bound, negative_pl_bound]
+        range2 = [-negative_index_bound, positive_index_bound]
+    elif negative_pl_bound == 0 and negative_index_bound == 0:
+        range1 = [0, positive_pl_bound]
+        range2 = [0, positive_index_bound]
+    elif negative_pl_bound == 0 and negative_index_bound > 0 and positive_index_bound != 0:
+        range1 = [-positive_pl_bound * negative_index_bound / positive_index_bound, positive_pl_bound]
+        range2 = [-negative_index_bound, positive_index_bound]
+    elif positive_pl_bound == 0 and positive_index_bound > 0 and negative_index_bound == 0:
+        range1 = [-negative_pl_bound, negative_pl_bound]
+        range2 = [-positive_index_bound, positive_index_bound]
+    elif negative_pl_bound == 0 and negative_index_bound > 0 and positive_index_bound == 0:
+        range1 = [-positive_pl_bound, positive_pl_bound]
+        range2 = [-negative_index_bound, negative_index_bound]
+    elif positive_pl_bound > 0 and negative_pl_bound > 0 and positive_index_bound == 0 and negative_index_bound > 0:
+        range1 = [-negative_pl_bound, positive_pl_bound]
+        range2 = [-negative_index_bound, positive_pl_bound*negative_index_bound/negative_pl_bound]
+    elif positive_pl_bound > 0 and negative_pl_bound > 0 and positive_index_bound > 0 and negative_index_bound > 0:
+        range1 = [-negative_pl_bound, positive_pl_bound]
+        if positive_index_bound > negative_index_bound:
+            range2 = [-negative_pl_bound*positive_index_bound/positive_pl_bound, positive_index_bound]
         else:
-            range2 = [-negIdxBound, posPlBound*negIdxBound/negPlBound]
+            range2 = [-negative_index_bound, positive_pl_bound*negative_index_bound/negative_pl_bound]
 
     range2 = map(lambda x: x*100, range2)
 
@@ -546,12 +546,13 @@ def index():
                     'y': cs_attr_df[col].values.tolist(),
                     'name': ('Long' if col == 'L' else ('Short' if col == 'S' else col)) + ' PL',
                     'line': {'width': g.lineWidth,
-                             'color': "rgb(27, 93, 225)" if col == 'L' else ("rgb(214,39,40)" if col == 'S' else "rgb(0,0,0)")
+                             'color': "rgb(27, 93, 225)" if col == 'L' else ("rgb(214,39,40)" if col == 'S'
+                                                                             else "rgb(0,0,0)")
                              }
                 } for col in cs_attr_df.columns
                 ] + [{
-                        'x': [pd.to_datetime(str(i)).strftime('%Y-%m-%d') for i in pIndexDf.index],
-                        'y': (csIndexReturn[g.indexMapping[param_adviser]].dropna()*100).values.tolist(),
+                        'x': [pd.to_datetime(str(i)).strftime('%Y-%m-%d') for i in index_df.index],
+                        'y': (cs_index_return[g.indexMapping[param_adviser]].dropna()*100).values.tolist(),
                         'name': g.indexMapping[param_adviser],
                         'fill': 'tozeroy',
                         'line': {'width': 0},
@@ -569,7 +570,7 @@ def index():
                         'title': 'Index',
                         'ticksuffix': '%',
                         'tickfont': {'size': 10},
-                           'range': range2
+                        'range': range2
                     },
                     'legend': {'font': {'size': 10}, 'x': 1.05}
                 }
@@ -580,7 +581,8 @@ def index():
                        'y': (net_op[col] * 100).values.tolist(),
                        'name': ('Long Net' if col == 'L' else ('Short Net' if col == 'S' else col)) + ' O/P',
                        'line': {'width': g.lineWidth,
-                                'color': "rgb(27, 93, 225)" if col == 'L' else ("rgb(214,39,40)" if col == 'S' else "rgb(0,0,0)")
+                                'color': "rgb(27, 93, 225)" if col == 'L' else ("rgb(214,39,40)" if col == 'S'
+                                                                                else "rgb(0,0,0)")
                                 }
                    } for col in net_op.columns
                    ]
@@ -590,18 +592,20 @@ def index():
                       'y': (beta_op[col] * 100).fillna(0).values.tolist(),
                       'name': ('Long Beta' if col == 'L' else ('Short Beta' if col == 'S' else col)) + ' O/P',
                       'line': {'width': g.lineWidth,
-                               'color': "rgb(27, 93, 225)" if col == 'L' else ("rgb(214,39,40)" if col == 'S' else "rgb(0,0,0)")
+                               'color': "rgb(27, 93, 225)" if col == 'L' else ("rgb(214,39,40)" if col == 'S'
+                                                                               else "rgb(0,0,0)")
                                }
                   } for col in beta_op.columns
                   ]
 
-    exposure_graph_df = tExposureDf[:, param_adviser].unstack().reindex(tExposureDf.index.levels[0]).dropna() #.fillna(method='ffill')
+    exposure_graph_df = all_fund_exposure_in_money[:, param_adviser].unstack().reindex(all_fund_exposure_in_money.index.levels[0]).dropna()
     exposure_graph = [{
                           'x': [pd.to_datetime(str(i)).strftime('%Y-%m-%d') for i in exposure_graph_df.index],
                           'y': exposure_graph_df[col].values.tolist(),
                           'name': 'Long Exposure' if col == 'L' else ('Short Exposure' if col == 'S' else col),
                           'line': {'width': g.lineWidth,
-                                   'color': "rgb(27, 93, 225)" if col == 'L' else ("rgb(214,39,40)" if col == 'S' else "rgb(0,0,0)")
+                                   'color': "rgb(27, 93, 225)" if col == 'L' else ("rgb(214,39,40)" if col == 'S'
+                                                                                   else "rgb(0,0,0)")
                                    }
                       } for col in ['L', 'S']
                       ]
@@ -609,10 +613,10 @@ def index():
     month_end = datetime(net_op.index[-1].year, net_op.index[-1].month, net_op.index[-1].daysinmonth)
     bm_index = pd.date_range(start=start_date, end=month_end, freq='BM')
 
-    long_index_op  = net_op['L'].iloc[-1] * 100
+    long_index_op = net_op['L'].iloc[-1] * 100
     short_index_op = net_op['S'].iloc[-1] * 100
-    long_beta_op   = beta_op['L'].iloc[-1] * 100
-    short_beta_op  = beta_op['S'].iloc[-1] * 100
+    long_beta_op = beta_op['L'].iloc[-1] * 100
+    short_beta_op = beta_op['S'].iloc[-1] * 100
 
     bm_net_op = net_op
     bm_beta_op = beta_op
@@ -670,23 +674,18 @@ def index():
                    } for col in names_df.index.levels[1] if not col in g.dropList]
 
     # attribution for each fund: number is correct
-    fundScale = sqlPlDf.groupby(['advisor',
-                                 'MktCap']).sum()[['RHAttr',
-                                                   'YAAttr',
-                                                   'LRAttr']].loc[(slice(param_adviser,
-                                                                         param_adviser),slice(None)),:
-                                                                                          ].reset_index().drop('advisor',1).set_index('MktCap')
+    fund_scale = sql_pl_df.groupby(['advisor', 'MktCap']
+                                   ).sum()[['RHAttr', 'YAAttr', 'LRAttr'
+                                            ]].loc[(slice(param_adviser, param_adviser), slice(None)
+                                                    ), :].reset_index().drop('advisor', 1).set_index('MktCap')
     # pl for each side
-    scalePl = sqlPlDf.groupby(['advisor',
-                               'MktCap',
-                               'side']).sum()[['attribution']].loc[(slice(param_adviser, param_adviser),
-                                                                    slice(None)),:
-                                                                                 ].unstack()['attribution'].reset_index().drop('advisor',
-                                                                                                                               1).set_index('MktCap').fillna(0)
+    scale_pl = sql_pl_df.groupby(['advisor', 'MktCap', 'side']).sum()[['attribution']].loc[
+               (slice(param_adviser, param_adviser), slice(None)), :].unstack()['attribution'].reset_index().drop(
+        'advisor', 1).set_index('MktCap').fillna(0)
 
     # try to assign cap to each trade turnover as Micro,.., Large
-    scaleTable = turnover_merged_df.truncate(after=end_date).reset_index()
-    scaleTable.groupby(['advisor', 'MktCap']).sum()
+    scale_table = turnover_merged_df.truncate(after=end_date).reset_index()
+    scale_table.groupby(['advisor', 'MktCap']).sum()
 
     # TODO: truncate before?
 
@@ -696,100 +695,101 @@ def index():
 
     # TODO: ranking table not fit page well
 
-    sizeTurnover = scaleTable.groupby(["advisor",
-                                       "MktCap"]).sum()[['JPYPL']].loc[(slice(param_adviser,param_adviser),
-                                                                        slice(None)),:].reset_index().drop('advisor',1).set_index('MktCap')
-    sizeTurnover = sizeTurnover.merge(fundScale,
-                                      left_index=True,
-                                      right_index=True,
-                                      how='outer').fillna(0).merge(scalePl, left_index=True, right_index=True, how='outer')
-    totalTurnOver = sizeTurnover['JPYPL'].sum()
-    sizeTurnover['TO'] = (sizeTurnover['JPYPL']/totalTurnOver).replace([np.nan,np.inf,-np.inf],0)
+    size_turnover = scale_table.groupby(["advisor", "MktCap"]).sum()[['JPYPL']].loc[
+                    (slice(param_adviser, param_adviser), slice(None)), :].reset_index().drop('advisor', 1).set_index(
+        'MktCap')
+    size_turnover = size_turnover.merge(fund_scale, left_index=True, right_index=True, how='outer').fillna(0).merge(
+        scale_pl, left_index=True, right_index=True, how='outer')
+    total_turnover = size_turnover['JPYPL'].sum()
+    size_turnover['TO'] = (size_turnover['JPYPL']/total_turnover).replace([np.nan,np.inf,-np.inf],0)
 
-    sizeTurnover = sizeTurnover.reindex(['Micro', 'Small', 'Mid', 'Large', 'Mega', 'Index'], fill_value=0)
-    totalSeries = sizeTurnover.sum()
-    totalSeries.name = 'Total'
-    scaleTotal = pd.DataFrame(totalSeries).T
-    scaleTable = pd.concat([sizeTurnover, scaleTotal])
-    scaleTable['Return'] = (scaleTable['L'] + scaleTable['S']) / scaleTable['JPYPL']
-    scaleTable['Return'].fillna(0, inplace=True)
-    scaleTable = scaleTable[['RHAttr', 'YAAttr', 'LRAttr', 'L', 'S', 'JPYPL', 'TO', 'Return']]
+    size_turnover = size_turnover.reindex(['Micro', 'Small', 'Mid', 'Large', 'Mega', 'Index'], fill_value=0)
+    total_series = size_turnover.sum()
+    total_series.name = 'Total'
+    scale_total = pd.DataFrame(total_series).T
+    scale_table = pd.concat([size_turnover, scale_total])
+    scale_table['Return'] = (scale_table['L'] + scale_table['S']) / scale_table['JPYPL']
+    scale_table['Return'].fillna(0, inplace=True)
+    scale_table = scale_table[['RHAttr', 'YAAttr', 'LRAttr', 'L', 'S', 'JPYPL', 'TO', 'Return']]
 
-    scaleTable = scaleTable.rename(
+    scale_table = scale_table.rename(
         columns={'JPYPL': 'Turnover', 'RHAttr': 'Rockhampton', 'YAAttr': 'Yaraka', 'LRAttr': 'Longreach', 'L': 'LongPL',
                  'S': 'ShortPL', 'TO': 'TO %'})
 
-    gicsTable = turnover_merged_df.truncate(after=end_date).groupby(["advisor", "GICS"]).sum()[['JPYPL']].loc[
+    gics_table = turnover_merged_df.truncate(after=end_date).groupby(["advisor", "GICS"]).sum()[['JPYPL']].loc[
                 (slice(param_adviser, param_adviser), slice(None)), :].reset_index().drop('advisor', 1).set_index(
             'GICS')
-    fundGics = sqlPlDf.groupby(['advisor', 'GICS']).sum()[['RHAttr', 'YAAttr', 'LRAttr']].loc[
+    fund_gics = sql_pl_df.groupby(['advisor', 'GICS']).sum()[['RHAttr', 'YAAttr', 'LRAttr']].loc[
                (slice(param_adviser, param_adviser), slice(None)), :].reset_index().drop('advisor', 1).set_index(
             'GICS')
-    gicsPl = sqlPlDf.groupby(['advisor', 'GICS', 'side']).sum()[['attribution']].loc[
+    gics_pl = sql_pl_df.groupby(['advisor', 'GICS', 'side']).sum()[['attribution']].loc[
              (slice(param_adviser, param_adviser), slice(None)), :].unstack()['attribution'].reset_index().drop(
             'advisor', 1).set_index('GICS').fillna(0)
-    gicsTable = gicsTable.merge(fundGics, left_index=True, right_index=True, how='outer').merge(gicsPl, left_index=True,
-                                                                                                right_index=True,
-                                                                                                how='outer').fillna(0)
+    gics_table = gics_table.merge(fund_gics, left_index=True, right_index=True, how='outer').merge(gics_pl,
+                                                                                                   left_index=True,
+                                                                                                   right_index=True,
+                                                                                                   how='outer').fillna(
+        0)
 
-    totalTurnOver = gicsTable['JPYPL'].sum()
-    gicsTable['TO'] = gicsTable['JPYPL'] / totalTurnOver
+    total_turnover = gics_table['JPYPL'].sum()
+    gics_table['TO'] = gics_table['JPYPL'] / total_turnover
 
-    total_series = gicsTable.sum()
+    total_series = gics_table.sum()
     total_series.name = 'Total'
-    gicsTotal = pd.DataFrame(total_series).T
-    gicsTable = pd.concat([gicsTable, gicsTotal])
-    gicsTable['Return'] = ((gicsTable['L'] + gicsTable['S']) / gicsTable['JPYPL']).replace(['', np.nan, np.inf, -np.inf], 0)
-    gicsTable = gicsTable[['RHAttr', 'YAAttr', 'LRAttr', 'L', 'S', 'JPYPL', 'TO', 'Return']]
-    gicsTable = gicsTable.rename(
+    gics_total = pd.DataFrame(total_series).T
+    gics_table = pd.concat([gics_table, gics_total])
+    gics_table['Return'] = ((gics_table['L'] + gics_table['S']) / gics_table['JPYPL']
+                            ).replace(['', np.nan, np.inf, -np.inf], 0)
+    gics_table = gics_table[['RHAttr', 'YAAttr', 'LRAttr', 'L', 'S', 'JPYPL', 'TO', 'Return']]
+    gics_table = gics_table.rename(
             columns={'JPYPL': 'Turnover', 'RHAttr': 'Rockhampton', 'YAAttr': 'Yaraka', 'LRAttr': 'Longreach',
                      'L': 'LongPL',
                      'S': 'ShortPL', 'TO': 'TO %'})
 
-    codeBetaDf['code'] = codeBetaDf[['code']].applymap(str.upper)[
+    code_beta_df['code'] = code_beta_df[['code']].applymap(str.upper)[
         'code']  # some code has inconsistent format like xxxx Hk instead of HK
-    t = sqlPlDf.merge(codeBetaDf, left_on='quick', right_on='code', how='left')
-    sectorTable = turnover_merged_df.truncate(after=end_date).groupby(["advisor", "sector"]).sum()[['JPYPL']].loc[
+    t = sql_pl_df.merge(code_beta_df, left_on='quick', right_on='code', how='left')
+    sector_table = turnover_merged_df.truncate(after=end_date).groupby(["advisor", "sector"]).sum()[['JPYPL']].loc[
                   (slice(param_adviser, param_adviser), slice(None)), :].reset_index().drop('advisor', 1).set_index(
             'sector')
-    fundSector = t.groupby(['advisor', 'sector']).sum()[['RHAttr', 'YAAttr', 'LRAttr']].loc[
+    fund_sector = t.groupby(['advisor', 'sector']).sum()[['RHAttr', 'YAAttr', 'LRAttr']].loc[
                  (slice(param_adviser, param_adviser), slice(None)), :].reset_index().drop('advisor', 1).set_index(
             'sector')
 
-    sectorPl = t.groupby(['advisor', 'sector', 'side']).sum()[['attribution']].loc[
+    sector_pl = t.groupby(['advisor', 'sector', 'side']).sum()[['attribution']].loc[
                (slice(param_adviser, param_adviser), slice(None)), :].unstack()['attribution'].reset_index().drop(
             'advisor', 1).set_index('sector').fillna(0)
 
-    sectorTable = sectorTable.merge(fundSector, left_index=True,
-                                    right_index=True, how='outer').fillna(0).merge(sectorPl,
-                                    left_index=True,
-                                    right_index=True,
-                                    how='outer').fillna(0)
+    sector_table = sector_table.merge(fund_sector, left_index=True,
+                                      right_index=True, how='outer').fillna(0).merge(sector_pl,
+                                                                                     left_index=True,
+                                                                                     right_index=True,
+                                                                                     how='outer').fillna(0)
 
-    sectorTotalTurnOver = sectorTable['JPYPL'].sum()
+    sector_total_turnover = sector_table['JPYPL'].sum()
 
-    sectorTable['TO'] = sectorTable['JPYPL'] / sectorTotalTurnOver
+    sector_table['TO'] = sector_table['JPYPL'] / sector_total_turnover
 
-    sectorSeries = sectorTable.sum()
-    sectorSeries.name = 'Total'
-    if 'TailSens' in sectorTable.index and 'Tail' in sectorTable.index:
-        sectorTable.ix['Tail'] = sectorTable.ix['Tail'] + sectorTable.ix['TailSens']
-        sectorTable.drop('TailSens', inplace=True)
-    if 'Tail' in sectorTable.index and 'TailRR' in sectorTable.index:
-        sectorTable.ix['Tail'] = sectorTable.ix['Tail'] + sectorTable.ix['TailRR']
-        sectorTable.drop('TailRR', inplace=True)
+    sector_series = sector_table.sum()
+    sector_series.name = 'Total'
+    if 'TailSens' in sector_table.index and 'Tail' in sector_table.index:
+        sector_table.ix['Tail'] = sector_table.ix['Tail'] + sector_table.ix['TailSens']
+        sector_table.drop('TailSens', inplace=True)
+    if 'Tail' in sector_table.index and 'TailRR' in sector_table.index:
+        sector_table.ix['Tail'] = sector_table.ix['Tail'] + sector_table.ix['TailRR']
+        sector_table.drop('TailRR', inplace=True)
 
-    sectorTotal = pd.DataFrame(sectorSeries).T
-    sectorTable = pd.concat([sectorTable, sectorTotal])
-    sectorTable['Return'] = ((sectorTable['L'] + sectorTable['S']) / sectorTable['JPYPL']).replace([np.inf, -np.inf], 0)
-    sectorTable = sectorTable[['RHAttr', 'YAAttr', 'LRAttr', 'L', 'S', 'JPYPL', 'TO', 'Return']]
-    sectorTable = sectorTable.rename(
+    sector_total = pd.DataFrame(sector_series).T
+    sector_table = pd.concat([sector_table, sector_total])
+    sector_table['Return'] = ((sector_table['L'] + sector_table['S']) / sector_table['JPYPL']).replace([np.inf, -np.inf], 0)
+    sector_table = sector_table[['RHAttr', 'YAAttr', 'LRAttr', 'L', 'S', 'JPYPL', 'TO', 'Return']]
+    sector_table = sector_table.rename(
             columns={'JPYPL': 'Turnover', 'RHAttr': 'Rockhampton', 'YAAttr': 'Yaraka', 'LRAttr': 'Longreach',
                      'L': 'LongPL',
                      'S': 'ShortPL', 'TO': 'TO %'})
 
-    firstTradeDate = np.where(sqlPlDf['side'] == 'L',sqlPlDf['firstTradeDateLong'],sqlPlDf['firstTradeDateShort'])
-    top_positions = sqlPlDf[['quick',
+    first_trade_date = np.where(sql_pl_df['side'] == 'L', sql_pl_df['firstTradeDateLong'], sql_pl_df['firstTradeDateShort'])
+    top_positions = sql_pl_df[['quick',
                              'advisor',
                              'attribution',
                              'name',
@@ -801,7 +801,7 @@ def index():
                                          'quick',
                                          'name',
                                          'side',
-                                         firstTradeDate
+                                         first_trade_date
                                          ]).sum().sort_values(by='attribution', ascending=False).ix[
         param_adviser].head(NUMBER_OF_TOP_POSITIONS)
     top_positions = top_positions.reset_index().drop('quick', axis=1)
@@ -809,7 +809,7 @@ def index():
     top_positions = top_positions.rename(columns={'name': 'Name', 'side': 'Side', 'attribution': 'Attribution', 'level_3': 'First Trade Date'})
     top_positions = top_positions[['Name', 'Side', 'Attribution', 'First Trade Date']]
 
-    bottom_positions = sqlPlDf[['quick',
+    bottom_positions = sql_pl_df[['quick',
                                 'advisor',
                                 'attribution',
                                 'name',
@@ -820,98 +820,102 @@ def index():
                                             'quick',
                                             'name',
                                             'side',
-                                            firstTradeDate
+                                            first_trade_date
                                             ]).sum().sort_values(by='attribution').ix[param_adviser].head(
         NUMBER_OF_TOP_POSITIONS)
     bottom_positions = bottom_positions.reset_index().drop('quick', axis=1)
     bottom_positions.index = bottom_positions.index + 1
-    bottom_positions = bottom_positions.rename(columns={'name': 'Name', 'side': 'Side', 'attribution': 'Attribution', 'level_3': 'First Trade Date'})
+    bottom_positions = bottom_positions.rename(
+        columns={'name': 'Name', 'side': 'Side', 'attribution': 'Attribution', 'level_3': 'First Trade Date'})
     bottom_positions = bottom_positions[['Name', 'Side', 'Attribution', 'First Trade Date']]
 
-    topixTable = turnover_merged_df.truncate(after=end_date).groupby(["advisor", "TOPIX"]).sum()[['JPYPL']].loc[
+    topix_table = turnover_merged_df.truncate(after=end_date).groupby(["advisor", "TOPIX"]).sum()[['JPYPL']].loc[
                  (slice(param_adviser, param_adviser), slice(None)), :].reset_index().drop('advisor', 1).set_index(
             'TOPIX')
-    fundTopix = sqlPlDf.groupby(['advisor', 'TPX']).sum()[['RHAttr', 'YAAttr', 'LRAttr']].loc[
+    fund_topix = sql_pl_df.groupby(['advisor', 'TPX']).sum()[['RHAttr', 'YAAttr', 'LRAttr']].loc[
                 (slice(param_adviser, param_adviser), slice(None)), :].reset_index().drop('advisor', 1).set_index(
             'TPX')
-    fundTopix = fundTopix.rename(index={'Warehousing  and  Harbor Transpo': 'Warehousing  and  Harbor Transport'})
-    topixPl = sqlPlDf.groupby(['advisor', 'TPX', 'side']).sum()[['attribution']].loc[
+    fund_topix = fund_topix.rename(index={'Warehousing  and  Harbor Transpo': 'Warehousing  and  Harbor Transport'})
+    topix_pl = sql_pl_df.groupby(['advisor', 'TPX', 'side']).sum()[['attribution']].loc[
               (slice(param_adviser, param_adviser), slice(None)), :].unstack()['attribution'].reset_index().drop(
             'advisor', 1).set_index('TPX')
-    topixPl = topixPl.rename(index={'Warehousing  and  Harbor Transpo': 'Warehousing  and  Harbor Transport'})
-    topixTable = topixTable.merge(fundTopix, left_index=True, right_index=True, how='outer').fillna(0).merge(topixPl.fillna(0),
+    topix_pl = topix_pl.rename(index={'Warehousing  and  Harbor Transpo': 'Warehousing  and  Harbor Transport'})
+    topix_table = topix_table.merge(fund_topix, left_index=True, right_index=True, how='outer').fillna(0).merge(topix_pl.fillna(0),
                                                                                       left_index=True, right_index=True, how='outer')
-    totalTurnOver = topixTable['JPYPL'].sum()
-    topixTable['TO'] = topixTable['JPYPL'] / totalTurnOver
+    total_turnover = topix_table['JPYPL'].sum()
+    topix_table['TO'] = topix_table['JPYPL'] / total_turnover
 
-    topixSeries = topixTable.sum()
-    topixSeries.name = 'Total'
-    topixTotal = pd.DataFrame(topixSeries).T
-    topixTable = pd.concat([topixTable, topixTotal])
-    topixTable['Return'] = ((topixTable['L'] + topixTable['S'].fillna(0)) / topixTable['JPYPL']).replace(
+    topix_series = topix_table.sum()
+    topix_series.name = 'Total'
+    topix_total = pd.DataFrame(topix_series).T
+    topix_table = pd.concat([topix_table, topix_total])
+    topix_table['Return'] = ((topix_table['L'] + topix_table['S'].fillna(0)) / topix_table['JPYPL']).replace(
             [np.nan, np.inf, -np.inf], 0)
-    topixTable = topixTable[['RHAttr', 'YAAttr', 'LRAttr', 'L', 'S', 'JPYPL', 'TO', 'Return']]
-    topixTable = topixTable.rename(
+    topix_table = topix_table[['RHAttr', 'YAAttr', 'LRAttr', 'L', 'S', 'JPYPL', 'TO', 'Return']]
+    topix_table = topix_table.rename(
             columns={'JPYPL': 'Turnover', 'RHAttr': 'Rockhampton', 'YAAttr': 'Yaraka', 'LRAttr': 'Longreach',
                      'L': 'LongPL',
                      'S': 'ShortPL', 'TO': 'TO %'})
 
-    strategyTable = turnover_merged_df.truncate(after=end_date).groupby(["advisor", "strategy"]).sum()[['JPYPL']].loc[
+    strategy_table = turnover_merged_df.truncate(after=end_date).groupby(["advisor", "strategy"]).sum()[['JPYPL']].loc[
                     (slice(param_adviser, param_adviser), slice(None)), :].reset_index().drop('advisor',
                                                                                               1).set_index(
             'strategy')
-    fundStrategy = sqlPlDf.groupby(['advisor', 'strategy']).sum()[['RHAttr', 'YAAttr', 'LRAttr']].loc[
+    fund_strategy = sql_pl_df.groupby(['advisor', 'strategy']).sum()[['RHAttr', 'YAAttr', 'LRAttr']].loc[
                    (slice(param_adviser, param_adviser), slice(None)), :].reset_index().drop('advisor',
                                                                                              1).set_index(
             'strategy')
-    fundStrategy = fundStrategy.fillna(0)
-    strategyPl = sqlPlDf.groupby(['advisor', 'strategy', 'side']).sum()[['attribution']].loc[
+    fund_strategy = fund_strategy.fillna(0)
+    strategy_pl = sql_pl_df.groupby(['advisor', 'strategy', 'side']).sum()[['attribution']].loc[
                  (slice(param_adviser, param_adviser), slice(None)), :].unstack()['attribution'].reset_index().drop(
             'advisor', 1).set_index('strategy')
-    strategyPl = strategyPl.fillna(0)
-    strategyTable = strategyTable.merge(fundStrategy, left_index=True, right_index=True, how='outer').fillna(0).merge(strategyPl,
-                                                                                               left_index=True,
-                                                                                               right_index=True,
-                                                                                               how='left').fillna(0)
+    strategy_pl = strategy_pl.fillna(0)
+    strategy_table = strategy_table.merge(fund_strategy, left_index=True, right_index=True, how='outer').fillna(
+        0).merge(strategy_pl,
+                 left_index=True,
+                 right_index=True,
+                 how='left').fillna(0)
 
-    totalStrategyTurnOver = strategyTable['JPYPL'].sum()
-    strategyTable['TO'] = strategyTable['JPYPL'] / totalStrategyTurnOver
+    total_strategy_turnover = strategy_table['JPYPL'].sum()
+    strategy_table['TO'] = strategy_table['JPYPL'] / total_strategy_turnover
 
-    strategySeries = strategyTable.sum()
-    strategySeries.name = 'Total'
-    strategyTotal = pd.DataFrame(strategySeries).T
-    strategyTable = pd.concat([strategyTable, strategyTotal])
-    strategyTable['Return'] = ((strategyTable['L'] + strategyTable['S'].fillna(0)) / strategyTable['JPYPL']).replace(
+    strategy_series = strategy_table.sum()
+    strategy_series.name = 'Total'
+    strategy_total = pd.DataFrame(strategy_series).T
+    strategy_table = pd.concat([strategy_table, strategy_total])
+    strategy_table['Return'] = ((strategy_table['L'] + strategy_table['S'].fillna(0)) / strategy_table['JPYPL']).replace(
             [np.inf, -np.inf], 0)
-    strategyTable = strategyTable[['RHAttr', 'YAAttr', 'LRAttr', 'L', 'S', 'JPYPL', 'TO', 'Return']]
-    strategyTable = strategyTable.rename(
+    strategy_table = strategy_table[['RHAttr', 'YAAttr', 'LRAttr', 'L', 'S', 'JPYPL', 'TO', 'Return']]
+    strategy_table = strategy_table.rename(
             columns={'JPYPL': 'Turnover', 'RHAttr': 'Rockhampton', 'YAAttr': 'Yaraka', 'LRAttr': 'Longreach',
                      'L': 'LongPL',
                      'S': 'ShortPL', 'TO': 'TO %'})
-    position_table = turnover_merged_df.truncate(after=end_date).groupby(["advisor", "code", "name"]).sum()[['JPYPL']].loc[
-                    (slice(param_adviser, param_adviser), slice(None)), :].reset_index().drop('advisor',
-                                                                                              1).set_index('code')
-    position_pl = sqlPlDf.groupby(['advisor', 'quick', 'name']).sum()[['RHAttr', 'YAAttr', 'LRAttr']].loc[
+    position_table = turnover_merged_df.truncate(after=end_date).groupby(["advisor", "code", "name"]).sum()[
+                         ['JPYPL']].loc[
+                     (slice(param_adviser, param_adviser), slice(None)), :].reset_index().drop('advisor',
+                                                                                               1).set_index('code')
+    position_pl = sql_pl_df.groupby(['advisor', 'quick', 'name']).sum()[['RHAttr', 'YAAttr', 'LRAttr']].loc[
                  (slice(param_adviser, param_adviser), slice(None)), :].reset_index().drop('advisor', 1).set_index(
             'quick')
-    side_pl = sqlPlDf.groupby(['advisor', 'quick', 'side']).sum()[['attribution']].loc[
+    side_pl = sql_pl_df.groupby(['advisor', 'quick', 'side']).sum()[['attribution']].loc[
              (slice(param_adviser, param_adviser), slice(None)), :].unstack()['attribution'].reset_index().drop(
             'advisor', 1).set_index('quick').fillna(0)
     position_table = position_table.merge(position_pl, left_index=True, right_index=True, how='outer'). \
         merge(side_pl, left_index=True, right_index=True, how='left').fillna(0)
 
-    totalPositionTurnOver = position_table['JPYPL'].sum()
-    position_table['TO'] = position_table['JPYPL'] / totalPositionTurnOver
+    total_position_turnover = position_table['JPYPL'].sum()
+    position_table['TO'] = position_table['JPYPL'] / total_position_turnover
     position_table['name'] = np.where(position_table['name_x'] != 0, position_table['name_x'], position_table['name_y'])
     position_table = position_table.reset_index().set_index(['name']).sort_index()
     position_series = position_table.sum()
     position_series.name = 'Total'
-    positionTotal = pd.DataFrame(position_series).T
+    position_total = pd.DataFrame(position_series).T
 
-    position_table = pd.concat([position_table, positionTotal])
-    position_table['Return'] = ((position_table['L'] + position_table['S'].fillna(0)) / position_table['JPYPL'].replace(0,
-                                                                                                                    np.nan)).replace(
-            [np.nan, np.inf, -np.inf], 0)
+    position_table = pd.concat([position_table, position_total])
+    position_table['Return'] = ((position_table['L'] + position_table['S'].fillna(0)
+                                 ) / position_table['JPYPL'].replace(0, np.nan)
+                                ).replace([np.nan, np.inf, -np.inf], 0)
+
     position_table = position_table[['RHAttr', 'YAAttr', 'LRAttr', 'L', 'S', 'JPYPL', 'TO', 'Return']]
     position_table = position_table.rename(
             columns={'JPYPL': 'Turnover', 'RHAttr': 'Rockhampton', 'YAAttr': 'Yaraka', 'LRAttr': 'Longreach',
@@ -920,7 +924,7 @@ def index():
 
     tables_html = ''
     remaining_row_number = 28
-    for df in [scaleTable, gicsTable, sectorTable]:
+    for df in [scale_table, gics_table, sector_table]:
         tables_html, remaining_row_number = add_to_page(df, tables_html, remaining_row_number)
 
     tables_html, remaining_row_number = add_to_page(top_positions, tables_html, remaining_row_number, 'ranking',
@@ -929,8 +933,8 @@ def index():
                                                     'Bottom %s Trades' % NUMBER_OF_TOP_POSITIONS)
 
     remaining_row_number -= 2 + 1  # 2 titles of ranking tables
-    table_list = [topixTable, strategyTable, position_table] if g.indexMapping[param_adviser] == 'TPX' else [
-        strategyTable, position_table]
+    table_list = [topix_table, strategy_table, position_table] if g.indexMapping[param_adviser] == 'TPX' else [
+        strategy_table, position_table]
     for df in table_list[:-1]:
         tables_html, remaining_row_number = add_to_page(df, tables_html, remaining_row_number)
 
@@ -952,12 +956,13 @@ def index():
     render_obj['index'] = g.indexMapping[param_adviser]
     render_obj['startDate'] = start_date
     render_obj['endDate'] = end_date
-    render_obj['longTurnover'] = Decimal(sumTurnoverPerAdv.fillna(0).ix[param_adviser]['L']).quantize(Decimal('1.'),
-                                                                                            rounding=ROUND_HALF_UP)
-    render_obj['shortTurnover'] = Decimal(sumTurnoverPerAdv.fillna(0).ix[param_adviser]['S']).quantize(Decimal('1.'),
-                                                                                             rounding=ROUND_HALF_UP)
-    render_obj['totalLong'] = totalRatio.ix[param_adviser]['L']
-    render_obj['totalShort'] = totalRatio.ix[param_adviser]['S']
+    render_obj['longTurnover'] = Decimal(sumTurnoverPerAdv.fillna(0).ix[param_adviser]['L']
+                                         ).quantize(Decimal('1.'), rounding=ROUND_HALF_UP)
+    render_obj['shortTurnover'] = Decimal(sumTurnoverPerAdv.fillna(0).ix[param_adviser]['S']
+                                          ).quantize(Decimal('1.'), rounding=ROUND_HALF_UP)
+
+    render_obj['totalLong'] = total_ratio.ix[param_adviser]['L']
+    render_obj['totalShort'] = total_ratio.ix[param_adviser]['S']
     render_obj['longPL'] = Decimal(cs_attr_df['L'].iloc[-1]).quantize(Decimal('1.'), rounding=ROUND_HALF_UP)
     render_obj['shortPL'] = Decimal(cs_attr_df['S'].iloc[-1]).quantize(Decimal('1.'), rounding=ROUND_HALF_UP)
     render_obj['longIndexOP'] = long_index_op
@@ -968,20 +973,20 @@ def index():
     render_obj['shortHitRate'] = hitRateDf['ShortsHR'].ix[param_adviser]
     render_obj['longReturn'] = long_short_return.fillna(0)['attribution']['L'].ix[param_adviser]
     render_obj['shortReturn'] = long_short_return.fillna(0)['attribution']['S'].ix[param_adviser]
-    render_obj['rhBpsLong'] = totalFund[totalFund['advisor'] == param_adviser].sum()['RHAttr']['L'] * 100
-    render_obj['rhBpsShort'] = totalFund[totalFund['advisor'] == param_adviser].sum()['RHAttr']['S'] * 100
-    render_obj['yaBpsLong'] = totalFund[totalFund['advisor'] == param_adviser].sum()['YAAttr']['L'] * 100
-    render_obj['yaBpsShort'] = totalFund[totalFund['advisor'] == param_adviser].sum()['YAAttr']['S'] * 100
-    render_obj['lrBpsLong'] = totalFund[totalFund['advisor'] == param_adviser].sum()['LRAttr']['L'] * 100
-    render_obj['lrBpsShort'] = totalFund[totalFund['advisor'] == param_adviser].sum()['LRAttr']['S'] * 100
+    render_obj['rhBpsLong'] = total_fund[total_fund['advisor'] == param_adviser].sum()['RHAttr']['L'] * 100
+    render_obj['rhBpsShort'] = total_fund[total_fund['advisor'] == param_adviser].sum()['RHAttr']['S'] * 100
+    render_obj['yaBpsLong'] = total_fund[total_fund['advisor'] == param_adviser].sum()['YAAttr']['L'] * 100
+    render_obj['yaBpsShort'] = total_fund[total_fund['advisor'] == param_adviser].sum()['YAAttr']['S'] * 100
+    render_obj['lrBpsLong'] = total_fund[total_fund['advisor'] == param_adviser].sum()['LRAttr']['L'] * 100
+    render_obj['lrBpsShort'] = total_fund[total_fund['advisor'] == param_adviser].sum()['LRAttr']['S'] * 100
     render_obj['exposure_avg_long'] = (
-        exposure_avg[(exposure_avg['advisor'] == param_adviser) & (exposure_avg['side'] == 'L')].mean() * 100 / aumDf[
+        exposure_avg[(exposure_avg['advisor'] == param_adviser) & (exposure_avg['side'] == 'L')].mean() * 100 / aum_df[
             'Total'].mean()).iloc[0]
     render_obj['exposure_avg_short'] = (
-        exposure_avg[(exposure_avg['advisor'] == param_adviser) & (exposure_avg['side'] == 'S')].mean() * 100 / aumDf[
+        exposure_avg[(exposure_avg['advisor'] == param_adviser) & (exposure_avg['side'] == 'S')].mean() * 100 / aum_df[
             'Total'].mean()).iloc[0]
-    render_obj['rank_long'] = rankLongDf.ix[param_adviser][0]
-    render_obj['rank_short'] = rankShortDf.ix[param_adviser][0]
+    render_obj['rank_long'] = rank_long_df.ix[param_adviser][0]
+    render_obj['rank_short'] = ranke_short_df.ix[param_adviser][0]
     render_obj['pl_graph'] = pl_graph
     render_obj['netop_graph'] = netop_graph
     render_obj['betaop_graph'] = beta_graph
@@ -994,3 +999,11 @@ def index():
     render_obj['analyst_list'] = g.indexMapping.keys()
 
     return render_template('attrib.html', params=render_obj)
+
+
+@main.route('/test')
+@login_required
+def test():
+    render_obj = dict()
+    render_obj['analyst_list'] = g.indexMapping.keys()
+    return render_template('test.html', params=render_obj)

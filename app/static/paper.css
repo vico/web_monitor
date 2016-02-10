@@ -18,6 +18,7 @@ body.A5           .sheet { width: 148mm; height: 209mm }
 body.A5.landscape .sheet { width: 210mm; height: 147mm }
 
 /** Padding area **/
+.sheet.padding-5mm { padding:5mm 10mm}
 .sheet.padding-10mm { padding: 10mm }
 .sheet.padding-15mm { padding: 15mm }
 .sheet.padding-20mm { padding: 20mm }

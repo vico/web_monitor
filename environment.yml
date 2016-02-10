@@ -5,6 +5,8 @@ dependencies:
   - pandas
   - numpy
   - pymysql
+  - flask-wtf
+  - gunicorn
   - pip:
     - pyotp
     - qrcode
@@ -12,3 +14,9 @@ dependencies:
     - xhtml2pdf
     - Flask-Cache
     - Flask-Script
+    - Flask-SQLAlchemy
+    - Flask-Migrate
+    - Flask-Mail
+    - Flask-Login
+    - Flask-Bootstrap
+    - Flask-Moment

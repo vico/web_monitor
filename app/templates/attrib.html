@@ -22,6 +22,7 @@
             <th>End</th>
             <td><strong><input type="text" value="{{params['endDate']}}" name="endDate" id="datepicker2"></strong>
                 <input type="submit" value="Go" id="goButton"/>
+                <a href="{{ url_for('auth.logout') }}" id="signoutlink">Logout</a>
             </td>
 
         </tr>
