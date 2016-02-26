@@ -138,6 +138,7 @@ def teardown_request(exception):
 def get_turnover_df(from_date, end_date):
     # there is some trades on 2014/12/31 both long and short sides, which is not in database table
     sql_turnover_df = sql.read_sql('''
+        -- First date Turnover: the total amount we have invested for open positions at that point of time
         SELECT processDate as tradeDate,
         a.quick AS code,
         a.ccy AS currencyCode,
@@ -672,6 +673,7 @@ def index():
                                 }
                             } for col in gross_exposure.index.levels[1] if not col in g.dropList]
 
+    short_exposure_range = [0, short_exposure.loc[(slice(None), g.indexMapping.keys())].max()*100]
     short_exposure_graph = {'data': [{
                                 'x': [pd.to_datetime(str(i)).strftime('%Y-%m-%d') for i in
                                       short_exposure[:, col].index],
@@ -691,7 +693,9 @@ def index():
                                 'title': 'Short Exposure (As a Percent of all non-index short exposure)',
                                 'xaxis': {'tickformat': '%d %b', 'tickfont': {'size': render_obj['tick_font_size']}},
                                 'yaxis': {
-                                  'ticksuffix': '%', 'tickfont': {'size': render_obj['tick_font_size']}
+                                    'ticksuffix': '%',
+                                    'tickfont': {'size': render_obj['tick_font_size']},
+                                    'range': short_exposure_range
                                 },
                                 'legend': {'font': {'size': render_obj['tick_font_size']}},
                                 'showlegend': False
