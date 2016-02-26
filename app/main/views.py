@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 from decimal import *
 from cache import cache
 from flask.ext.login import login_required
+import json
 
 from . import main
 
@@ -111,18 +112,16 @@ def before_request():
         'CS': 'TPX',
         'SM': 'TPX',
         'HA': 'TPX',
-        'PK': 'TPX',
         'RW': 'TPX',
         'SJ': 'TPX',
-        'TNi': 'TPX',
+        # 'TNi': 'TPX', is PM
         'TI': 'TPX',
         'TT': 'TPX',
         'AQ': 'HSCEI',
-        'DH': 'HSCEI',
-        'EL': 'TWSE',
-        'PK-A': 'KOSPI'
+        # 'DH': 'HSCEI', moved to backoffice
+        'EL': 'TWSE'
     }
-    g.dropList = ['ADV', 'Adv', 'Bal', 'NJD', 'NJA', 'KW']
+    g.dropList = ['ADV', 'Adv', 'Bal', 'NJD', 'NJA', 'KW', 'DH', 'PK', 'PK-A', 'TNi']
 
 
 @main.teardown_request
@@ -185,7 +184,7 @@ def get_turnover_df(from_date, end_date):
         d.currencyCode,
         b.side,
         IF(orderType="B",1,-1)*b.quantity AS Qty,
-        IF(orderType="B",-1,1)*b.net AS Notl,
+        IF(orderType="B",-1,1)*b.net*i.rate AS Notl,
         MAX(a.adviseDate) AS `MaxOfDate`,
         b.reconcileID,
         b.tradeDate,
@@ -203,6 +202,7 @@ def get_turnover_df(from_date, end_date):
         INNER JOIN t01Instrument c ON (b.equityType = c.instrumentType) AND (b.code = c.quick)
         INNER JOIN t02Currency d ON c.currencyID = d.currencyID
         INNER JOIN `t06DailyCrossRate` j ON j.priceDate = b.processDate AND j.base=d.currencyCode AND j.quote='USD'
+        INNER JOIN `t06DailyCrossRate` i ON i.priceDate = b.processDate AND i.base=d.currencyCode AND i.quote='JPY'
         LEFT JOIN t05PortfolioResponsibilities z ON z.instrumentID = c.instrumentID AND z.processDate = b.processDate
         LEFT JOIN t06DailyBBStaticSnapshot h ON c.instrumentID = h.instrumentID AND h.dataType = 'CUR_MKT_CAP'
         WHERE a.adviseDate<= b.processDate
@@ -348,7 +348,7 @@ def get_index_return(from_date, end_date):
       AND a.indexCode IN ('TPX','KOSPI','TWSE','HSCEI')
       ;''' % (from_date, end_date), g.con, coerce_float=True, parse_dates=['priceDate'])
     p_index_df = index_df.pivot('priceDate', 'indexCode', 'close')
-    # p_index_df.fillna(method='ffill', inplace=True)
+    p_index_df.fillna(method='ffill', inplace=True)  # fill forward for same value of previous day for holidays
     index_return = p_index_df / p_index_df.shift(1) - 1
     # index_return = index_return.fillna(method='ffill', inplace=True)  # for index like TWSE has data for Sat
     return index_return, p_index_df
@@ -363,18 +363,13 @@ def get_code_name_map():
 @main.route('/', methods=['GET', 'POST'])
 @login_required
 def index():
-    # if not session.get('logged_in'):
-        #abort(401)
-    #    return redirect(url_for('login'))
     # TODO: change all double quotes to single quote for consistence
     # TODO: verify cache invalidate
     # TODO: test Redis as cache backend
     # TODO: find a good way to reduce first access turn around time
-    # TODO: add email verification, Clef as 2 factor authentication
     # TODO: add send PDFs to specified email
     # TODO: add checker view (should have pie graph to see what is missing)
     # TODO: add 1 year summary attribution page
-    # TODO: switch to use scale from table
     param_adviser = request.args.get('analyst', g.reportAdvisor)
     start_date = request.args.get('startDate', g.startDate)
     end_date = request.args.get('endDate', g.endDate)
@@ -382,27 +377,28 @@ def index():
 
     code_name_map = get_code_name_map()
 
-    hitRateDf = get_hit_rate_df(start_date, end_date)
+    hit_rate_df = get_hit_rate_df(start_date, end_date)
 
-    sqlFxDf = get_fx_df(start_date, end_date)
+    sql_fx_df = get_fx_df(start_date, end_date)
 
     turnover_df = get_turnover_df(start_date, end_date)
 
     # merge with FX df to get to-JPY-fx rate
-    turnover_merged_df = turnover_df.merge(sqlFxDf, left_on='currencyCode', right_index=True).sort_index()
+    turnover_merged_df = turnover_df.merge(sql_fx_df, left_on='currencyCode', right_index=True).sort_index()
     # create new column which contain turnover in JPY
-    turnover_merged_df['JPYPL'] = (turnover_merged_df['Turnover'] * turnover_merged_df['AvgOfrate']).values
+    # turnover_merged_df['JPYPL'] = (turnover_merged_df['Turnover'] * turnover_merged_df['AvgOfrate']).values
+    turnover_merged_df['JPYPL'] = turnover_merged_df['Turnover']
 
     # calculate total turnover for each side
     total_turnover = turnover_merged_df.truncate(after=end_date).groupby(["side"]).sum()['JPYPL']
 
     # calculate turnover for each advisor
-    sumTurnoverPerAdv = turnover_merged_df.truncate(after=end_date).groupby(["advisor", "side"]).sum()[
+    sum_turnover_per_adv = turnover_merged_df.truncate(after=end_date).groupby(["advisor", "side"]).sum()[
         'JPYPL'].unstack()
 
-    sumTurnoverPerAdv = sumTurnoverPerAdv.reindex(g.indexMapping.keys())
+    sum_turnover_per_adv = sum_turnover_per_adv.reindex(g.indexMapping.keys())
 
-    total_ratio = (sumTurnoverPerAdv * 100 / total_turnover['L']).fillna(0)  # % TOTAL
+    total_ratio = (sum_turnover_per_adv * 100 / total_turnover).fillna(0)  # % TOTAL
 
     aum_df = get_aum_df(start_date, end_date)
 
@@ -451,7 +447,7 @@ def index():
     cs_attr_df = cs_attr_df.cumsum().fillna(method='ffill').fillna(0)
 
     long_short_return = sql_pl_df.groupby(["advisor", "side"]).sum().drop(['RHAttr', 'YAAttr', 'LRAttr'],
-                                                                        axis=1).unstack().div(sumTurnoverPerAdv,
+                                                                        axis=1).unstack().div(sum_turnover_per_adv,
                                                                                               axis=0) * 100
 
     index_net_return, index_df = get_index_return(start_date, end_date)
@@ -541,6 +537,20 @@ def index():
 
     range2 = map(lambda x: x*100, range2)
 
+    render_obj = dict()
+    render_obj['graph_width'] = 750
+    render_obj['graph_height'] = 240
+    render_obj['graph_line_width'] = g.lineWidth
+    render_obj['margin_left'] = 40
+    render_obj['margin_top'] = 40
+    render_obj['margin_bottom'] = 34
+    render_obj['margin_right'] = 5
+    render_obj['graph_font'] = 'Calibri'
+    render_obj['tick_font_size'] = 10
+    render_obj['nticks'] = nticks
+    render_obj['analyst'] = param_adviser
+    render_obj['num_adv'] = len(g.indexMapping.keys())
+
     pl_graph = {'data': [{
                     'x': [pd.to_datetime(str(i)).strftime('%Y-%m-%d') for i in cs_attr_df.index],
                     'y': cs_attr_df[col].values.tolist(),
@@ -559,20 +569,20 @@ def index():
                         'yaxis': 'y2'
                 }],
                 'layout': {
-                    'margin': {'t': 0, 'b': 15, 'l': 40, 'r': 40},
-                    'width': 750,
-                    'height': 240,
-                    'xaxis': {'tickformat': '%d %b', 'tickfont': {'size': 10}},
-                    'yaxis': {'tickfont': {'size': 10}, 'range': range1},
+                    'margin': {'t': 0, 'b': 15, 'l': render_obj['margin_left'], 'r': 40},
+                    'width': render_obj['graph_width'],
+                    'height': render_obj['graph_height'],
+                    'xaxis': {'tickformat': '%d %b', 'tickfont': {'size': render_obj['tick_font_size']}},
+                    'yaxis': {'tickfont': {'size': render_obj['tick_font_size']}, 'range': range1},
                     'yaxis2': {
                         'overlaying': 'y',
                         'side': 'right',
                         'title': 'Index',
                         'ticksuffix': '%',
-                        'tickfont': {'size': 10},
+                        'tickfont': {'size': render_obj['tick_font_size']},
                         'range': range2
                     },
-                    'legend': {'font': {'size': 10}, 'x': 1.05}
+                    'legend': {'font': {'size': render_obj['tick_font_size']}, 'x': 1.05}
                 }
     }
 
@@ -599,7 +609,8 @@ def index():
                   ]
 
     exposure_graph_df = all_fund_exposure_in_money[:, param_adviser].unstack().reindex(all_fund_exposure_in_money.index.levels[0]).dropna()
-    exposure_graph = [{
+    exposure_graph_range = [0, exposure_graph_df.stack().max()]
+    exposure_graph = {'data': [{
                           'x': [pd.to_datetime(str(i)).strftime('%Y-%m-%d') for i in exposure_graph_df.index],
                           'y': exposure_graph_df[col].values.tolist(),
                           'name': 'Long Exposure' if col == 'L' else ('Short Exposure' if col == 'S' else col),
@@ -608,7 +619,18 @@ def index():
                                                                                    else "rgb(0,0,0)")
                                    }
                       } for col in ['L', 'S']
-                      ]
+                      ],
+                      'layout': {
+                            'margin': {'t': render_obj['margin_top'], 'b': render_obj['margin_bottom'],
+                                       'l': render_obj['margin_left'], 'r': render_obj['margin_right']},
+                            'width': render_obj['graph_width'],
+                            'height': render_obj['graph_height'],
+                            'xaxis': {'tickformat': '%d %b', 'tickfont': {'size': render_obj['tick_font_size']}},
+                            'yaxis': {'tickfont': {'size': render_obj['tick_font_size']},
+                                      'range': exposure_graph_range},
+                            'legend': {'font': {'size': render_obj['tick_font_size']}}
+                        }
+                      }
 
     month_end = datetime(net_op.index[-1].year, net_op.index[-1].month, net_op.index[-1].daysinmonth)
     bm_index = pd.date_range(start=start_date, end=month_end, freq='BM')
@@ -650,7 +672,7 @@ def index():
                                 }
                             } for col in gross_exposure.index.levels[1] if not col in g.dropList]
 
-    short_exposure_graph = [{
+    short_exposure_graph = {'data': [{
                                 'x': [pd.to_datetime(str(i)).strftime('%Y-%m-%d') for i in
                                       short_exposure[:, col].index],
                                 'y': (short_exposure[:, col] * 100).values.tolist(),
@@ -660,7 +682,21 @@ def index():
                                     'width': g.lineWidth if (col == param_adviser) else g.thinLineWidth
 
                                 }
-                            } for col in short_exposure.index.levels[1] if not col in g.dropList]
+                            } for col in short_exposure.index.levels[1] if not col in g.dropList],
+                            'layout': {
+                                'margin': {'t': render_obj['margin_top'], 'b': render_obj['margin_bottom'],
+                                           'l': render_obj['margin_left'], 'r': render_obj['margin_right']+20},
+                                'width': render_obj['graph_width'],
+                                'height': render_obj['graph_height'],
+                                'title': 'Short Exposure (As a Percent of all non-index short exposure)',
+                                'xaxis': {'tickformat': '%d %b', 'tickfont': {'size': render_obj['tick_font_size']}},
+                                'yaxis': {
+                                  'ticksuffix': '%', 'tickfont': {'size': render_obj['tick_font_size']}
+                                },
+                                'legend': {'font': {'size': render_obj['tick_font_size']}},
+                                'showlegend': False
+                            }
+                        }
 
     names_graph = [{
                        'x': [pd.to_datetime(str(i)).strftime('%Y-%m-%d') for i in names_df[:, col].index],
@@ -789,19 +825,10 @@ def index():
                      'S': 'ShortPL', 'TO': 'TO %'})
 
     first_trade_date = np.where(sql_pl_df['side'] == 'L', sql_pl_df['firstTradeDateLong'], sql_pl_df['firstTradeDateShort'])
-    top_positions = sql_pl_df[['quick',
-                             'advisor',
-                             'attribution',
-                             'name',
-                             'side',
-                             'processDate',
-                             'firstTradeDateLong',
-                             'firstTradeDateShort'
-                             ]].groupby(['advisor',
-                                         'quick',
-                                         'name',
-                                         'side',
-                                         first_trade_date
+    top_positions = sql_pl_df[['quick', 'advisor', 'attribution', 'name', 'side', 'processDate',
+                               'firstTradeDateLong',
+                               'firstTradeDateShort'
+                             ]].groupby(['advisor', 'quick', 'name', 'side', first_trade_date
                                          ]).sum().sort_values(by='attribution', ascending=False).ix[
         param_adviser].head(NUMBER_OF_TOP_POSITIONS)
     top_positions = top_positions.reset_index().drop('quick', axis=1)
@@ -809,18 +836,9 @@ def index():
     top_positions = top_positions.rename(columns={'name': 'Name', 'side': 'Side', 'attribution': 'Attribution', 'level_3': 'First Trade Date'})
     top_positions = top_positions[['Name', 'Side', 'Attribution', 'First Trade Date']]
 
-    bottom_positions = sql_pl_df[['quick',
-                                'advisor',
-                                'attribution',
-                                'name',
-                                'side',
-                                'firstTradeDateLong',
-                                'firstTradeDateShort'
-                                ]].groupby(['advisor',
-                                            'quick',
-                                            'name',
-                                            'side',
-                                            first_trade_date
+    bottom_positions = sql_pl_df[['quick', 'advisor', 'attribution', 'name', 'side', 'firstTradeDateLong',
+                                  'firstTradeDateShort'
+                                ]].groupby(['advisor', 'quick', 'name', 'side', first_trade_date
                                             ]).sum().sort_values(by='attribution').ix[param_adviser].head(
         NUMBER_OF_TOP_POSITIONS)
     bottom_positions = bottom_positions.reset_index().drop('quick', axis=1)
@@ -840,8 +858,9 @@ def index():
               (slice(param_adviser, param_adviser), slice(None)), :].unstack()['attribution'].reset_index().drop(
             'advisor', 1).set_index('TPX')
     topix_pl = topix_pl.rename(index={'Warehousing  and  Harbor Transpo': 'Warehousing  and  Harbor Transport'})
-    topix_table = topix_table.merge(fund_topix, left_index=True, right_index=True, how='outer').fillna(0).merge(topix_pl.fillna(0),
-                                                                                      left_index=True, right_index=True, how='outer')
+    topix_table = topix_table.merge(fund_topix, left_index=True, right_index=True, how='outer'
+                                    ).fillna(0).merge(topix_pl.fillna(0), left_index=True,
+                                                      right_index=True, how='outer')
     total_turnover = topix_table['JPYPL'].sum()
     topix_table['TO'] = topix_table['JPYPL'] / total_turnover
 
@@ -941,24 +960,13 @@ def index():
     for df in table_list[-1:]:
         tables_html, remaining_row_number = add_to_page(df, tables_html, remaining_row_number, 'summary', '', True)
 
-    render_obj = dict()
-    render_obj['graph_width'] = 750
-    render_obj['graph_height'] = 240
-    render_obj['graph_line_width'] = g.lineWidth
-    render_obj['margin_left'] = 40
-    render_obj['margin_top'] = 40
-    render_obj['margin_bottom'] = 34
-    render_obj['margin_right'] = 5
-    render_obj['graph_font'] = 'Calibri'
-    render_obj['tick_font_size'] = 10
-    render_obj['nticks'] = nticks
-    render_obj['analyst'] = param_adviser
+
     render_obj['index'] = g.indexMapping[param_adviser]
     render_obj['startDate'] = start_date
     render_obj['endDate'] = end_date
-    render_obj['longTurnover'] = Decimal(sumTurnoverPerAdv.fillna(0).ix[param_adviser]['L']
+    render_obj['longTurnover'] = Decimal(sum_turnover_per_adv.fillna(0).ix[param_adviser]['L']
                                          ).quantize(Decimal('1.'), rounding=ROUND_HALF_UP)
-    render_obj['shortTurnover'] = Decimal(sumTurnoverPerAdv.fillna(0).ix[param_adviser]['S']
+    render_obj['shortTurnover'] = Decimal(sum_turnover_per_adv.fillna(0).ix[param_adviser]['S']
                                           ).quantize(Decimal('1.'), rounding=ROUND_HALF_UP)
 
     render_obj['totalLong'] = total_ratio.ix[param_adviser]['L']
@@ -969,8 +977,8 @@ def index():
     render_obj['shortIndexOP'] = short_index_op
     render_obj['longBetaOP'] = long_beta_op
     render_obj['shortBetaOP'] = short_beta_op
-    render_obj['longHitRate'] = hitRateDf['LongsHR'].ix[param_adviser]
-    render_obj['shortHitRate'] = hitRateDf['ShortsHR'].ix[param_adviser]
+    render_obj['longHitRate'] = hit_rate_df['LongsHR'].ix[param_adviser]
+    render_obj['shortHitRate'] = hit_rate_df['ShortsHR'].ix[param_adviser]
     render_obj['longReturn'] = long_short_return.fillna(0)['attribution']['L'].ix[param_adviser]
     render_obj['shortReturn'] = long_short_return.fillna(0)['attribution']['S'].ix[param_adviser]
     render_obj['rhBpsLong'] = total_fund[total_fund['advisor'] == param_adviser].sum()['RHAttr']['L'] * 100

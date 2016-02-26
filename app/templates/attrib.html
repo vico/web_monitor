@@ -83,7 +83,7 @@
         <tr>
             <td><strong>Exposure</strong></td>
             <td><strong>AUM</strong></td>
-            <td><strong>Rank</strong></td>
+            <td><strong>Rank ({{ params['num_adv'] }})</strong></td>
         </tr>
         </thead>
         <tbody>
@@ -218,15 +218,8 @@
    } );
 
 
-   exposureGraph = document.getElementById('exposureGraph');
-  Plotly.plot( exposureGraph, {{params['exposure_graph'] | safe}} , {
-       margin: { t: {{params['margin_top']}},b:{{params['margin_bottom']}},l:{{params['margin_left']}},r:{{params['margin_right']}} },
-       width: {{params['graph_width']}},
-       height: {{params['graph_height']}},
-       xaxis: { tickformat: '%d %b', tickfont: {size: {{params['tick_font_size']}} }},
-       yaxis: {tickfont: {size: {{params['tick_font_size']}} }},
-       legend: { font: { size: {{params['tick_font_size']}} } }
-   } );
+  exposureGraph = document.getElementById('exposureGraph');
+  Plotly.plot( exposureGraph, {{params['exposure_graph'].data | safe}} , {{params['exposure_graph'].layout | safe}} );
 
 
    opGraph = document.getElementById('opGraph');
@@ -266,19 +259,7 @@
    } );
 
    shortExposureGraph = document.getElementById('shortExposureGraph');
-  Plotly.plot( shortExposureGraph, {{params['short_exposure_graph'] | safe}} , {
-   margin: { t: {{params['margin_top']}},b:{{params['margin_bottom']}},l:{{params['margin_left']}},r:{{params['margin_right']+20}} },
-   width: {{params['graph_width']}},
-   height: {{params['graph_height']}},
-   title: 'Short Exposure (As a Percent of all non-index short exposure)',
-   xaxis: { tickformat: '%d %b', tickfont: {size: {{params['tick_font_size']}} }},
-   yaxis: {
-     ticksuffix: '%', tickfont: {size: {{params['tick_font_size']}} }
-   },
-   legend: { font: { size: {{params['tick_font_size']}} } },
-    showlegend: false
-
-   } );
+  Plotly.plot( shortExposureGraph, {{params['short_exposure_graph'].data | tojson}} , {{params['short_exposure_graph'].layout | tojson}});
 
    namesGraph = document.getElementById('namesGraph');
   Plotly.plot( namesGraph, {{params['names_graph'] | safe}} , {

@@ -8,7 +8,6 @@ class Config:
         pass
 
     SECRET_KEY = os.environ.get('SECRET_KEY') or 'adf098098'
-    TIMEOUT = 15 * 60
     NUMBER_OF_ROW_PER_PAGE = 41
     NUMBER_OF_TOP_POSITIONS = 8
     MAIL_SERVER = 'smtp.office365.com'
@@ -27,6 +26,7 @@ class Config:
 
 class DevelopmentConfig(Config):
     DEBUG = True
+    MAIL_DEBUG = True
     SQLALCHEMY_DATABASE_URI = 'sqlite:///' + os.path.join(basedir, 'data.sqlite')
     SQLALCHEMY_COMMIT_ON_TEARDOWN = True
 
@@ -38,6 +38,5 @@ class TestingConfig(Config):
 config = {
     'developement': DevelopmentConfig,
     'testing': TestingConfig,
-
     'default': DevelopmentConfig
 }

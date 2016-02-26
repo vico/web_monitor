@@ -1,4 +1,4 @@
-from flask import render_template, redirect, url_for, request, flash, current_app
+from flask import render_template, redirect, url_for, request, flash
 from flask.ext.login import login_user, logout_user, current_user, login_required
 from . import auth
 from ..models import User
@@ -40,9 +40,6 @@ def register():
         send_email(user.email, 'Confirm your account', 'auth/email/confirm', user=user, token=token)
         flash('A confirmation email has been sent to you.')
         return redirect(url_for('main.index'))
-    else:
-        current_app.logger.debug(form)
-
     return render_template('auth/register.html', form=form)
 
 
