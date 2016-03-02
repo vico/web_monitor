@@ -138,7 +138,7 @@ def teardown_request(exception):
 def get_turnover_df(from_date, end_date):
     # there is some trades on 2014/12/31 both long and short sides, which is not in database table
     sql_turnover_df = sql.read_sql('''
-        -- First date Turnover: the total amount we have invested for open positions at that point of time
+        -- First date Turnover: the total amount we have invested for open positions at the start of period
         SELECT processDate as tradeDate,
         a.quick AS code,
         a.ccy AS currencyCode,
@@ -148,7 +148,7 @@ def get_turnover_df(from_date, end_date):
         a.advisor,
         a.strategy,
         a.sector,
-        f.value AS GICS,
+        IF (f.value IS NOT NULL, f.value, 'Not available') AS GICS,
         IF (i.value = 'REIT', 'Real Estate',  IF(i.value='ETP', 'Index', IF(g.value IS NOT NULL, g.value, 'Non-Japan'))) AS TOPIX,
         IF(a.side='L', a.firstTradeDateLong, firstTradeDateShort) AS firstTradeDate,
         IF(c.instrumentType <> 'EQ', 'Index',
@@ -176,11 +176,13 @@ def get_turnover_df(from_date, end_date):
         e.advisor,
         e.strategy,
         e.sector,
-        f.value AS GICS,
+        IF (f.value IS NOT NULL, f.value, 'Not available') AS GICS,
         IF (i.value = 'REIT', 'Real Estate',  IF(i.value='ETP', 'Index', IF(g.value IS NOT NULL, g.value, 'Non-Japan'))) AS TOPIX,
         aa.firstTradeDate,
         aa.MktCap
         FROM (
+        -- Get list of trades for each instrument, trade date, order type (B/S), side (L/S), quantity, notation, code
+        -- which has max trade date
         SELECT b.code,
         d.currencyCode,
         b.side,
@@ -221,13 +223,6 @@ def get_turnover_df(from_date, end_date):
         ;
          ''' % (from_date, from_date, end_date), g.con, parse_dates=['tradeDate'], coerce_float=True, index_col='tradeDate')
 
-    #if datetime.strptime(from_date, '%Y-%m-%d') <= datetime(2014,12,31):
-        # TODO: update exposure df for 2016, specifically MktCap information
-    #    df20141231 = pd.read_csv('turnover20141231.csv', index_col=0, parse_dates=0)
-        # concat with data in Access DB
-    #    turnover_df = pd.concat([df20141231, sql_turnover_df])
-    #else:
-        #turnover_df = sql_turnover_df
     return sql_turnover_df
 
 
@@ -257,7 +252,7 @@ def get_pl_df(from_date, end_date):
                             RHAttribution AS RHAttr,
                             YAAttribution AS YAAttr,
                             LRAttribution AS LRAttr,
-                            f.value AS GICS,
+                            IF (f.value IS NOT NULL, f.value, 'Not available') AS GICS,
                             IF (i.value = 'REIT', 'Real Estate',  IF(i.value='ETP', 'Index',
                                 IF(g.value IS NOT NULL, g.value, 'Non-Japan'))) AS TPX,
                             strategy, firstTradeDateLong, firstTradeDateShort,
@@ -659,7 +654,7 @@ def index():
     graph_op = graph_op.truncate(before=datetime.strptime(start_date, '%Y-%m-%d')+timedelta(1))
 
     op_graph = dict()
-    op_graph['index'] = [x.strftime('%Y-%m') for x in graph_op.index]
+    op_graph['index'] = [x.strftime('%b') for x in graph_op.index]
     op_graph['columns'] = {col: (graph_op[col] * 100).values.tolist() for col in graph_op.columns}
 
     gross_exposure_graph = [{
@@ -711,7 +706,7 @@ def index():
                            'width': g.lineWidth if (col == param_adviser) else g.thinLineWidth
 
                        }
-                   } for col in names_df.index.levels[1] if not col in g.dropList]
+                   } for col in names_df.index.levels[1] if col not in g.dropList]
 
     # attribution for each fund: number is correct
     fund_scale = sql_pl_df.groupby(['advisor', 'MktCap']
