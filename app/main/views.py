@@ -431,7 +431,7 @@ def index():
     if (f_exposure_df[f_exposure_df['advisor'] == param_adviser].empty and
             turnover_df[turnover_df['advisor'] == param_adviser].empty and
             sql_pl_df[sql_pl_df['advisor'] == param_adviser].empty):
-        return render_template('empty.html', adviser=param_adviser)
+        return render_template('main/empty.html', adviser=param_adviser)
 
     t = sql_pl_df.groupby(['processDate', 'advisor', 'side'
                            ]).sum().drop(['RHAttr', 'YAAttr', 'LRAttr'
@@ -1005,7 +1005,7 @@ def index():
     render_obj['tables_html'] = tables_html
     render_obj['analyst_list'] = g.indexMapping.keys()
 
-    return render_template('attrib.html', params=render_obj)
+    return render_template('main/attrib.html', params=render_obj)
 
 
 @main.route('/test')
@@ -1013,4 +1013,4 @@ def index():
 def test():
     render_obj = dict()
     render_obj['analyst_list'] = g.indexMapping.keys()
-    return render_template('test.html', params=render_obj)
+    return render_template('main/test.html', params=render_obj)

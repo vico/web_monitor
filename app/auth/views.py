@@ -16,7 +16,7 @@ def login():
         user = User.query.filter_by(email=form.email.data).first()
         if user is not None and user.verify_password(form.password.data):
             login_user(user, form.remember_me.data)
-            return redirect(request.args.get('next') or url_for('main.index'))
+            return redirect(request.args.get('next') or url_for('front.index'))
         flash('Invalid username or password')
 
     return render_template('auth/login.html', form=form)
@@ -26,7 +26,7 @@ def login():
 def logout():
     logout_user()
     flash('You have been logged out.')
-    return redirect(url_for('main.index'))
+    return redirect(url_for('auth.login'))
 
 
 @auth.route('/register', methods=['GET', 'POST'])
@@ -39,7 +39,7 @@ def register():
         token = user.generate_confirmation_token()
         send_email(user.email, 'Confirm your account', 'auth/email/confirm', user=user, token=token)
         flash('A confirmation email has been sent to you.')
-        return redirect(url_for('main.index'))
+        return redirect(url_for('front.index'))
     return render_template('auth/register.html', form=form)
 
 
@@ -49,7 +49,7 @@ def resend_confirmation():
     token = current_user.generate_confirmation_token()
     send_email(current_user.email, 'Confirm your account', 'auth/email/confirm', user=current_user, token=token)
     flash('A new confirmation email has been sent to you.')
-    return redirect(url_for('main.index'))
+    return redirect(url_for('front.index'))
 
 
 @auth.route('/confirm/<token>')
@@ -61,7 +61,7 @@ def confirm(token):
         flash('You have confirmed your account. Thanks')
     else:
         flash('The confirmation link is invalid or has expired.')
-    return redirect(url_for('main.index'))
+    return redirect(url_for('front.index'))
 
 
 @auth.before_app_request
@@ -73,7 +73,7 @@ def before_request():
 @auth.route('/unconfirmed')
 def unconfirmed():
     if current_user.is_anonymous or current_user.confirmed:
-        return redirect(url_for('main.index'))
+        return redirect(url_for('front.index'))
     return render_template('auth/unconfirmed.html')
 
 
@@ -86,7 +86,7 @@ def change_password():
             current_user.password = form.password.data
             db.session.add(current_user)
             flash('Your password has been updated.')
-            return redirect(url_for('main.index'))
+            return redirect(url_for('front.index'))
         else:
             flash('Invalid password.')
     return render_template("auth/change_password.html", form=form)
@@ -95,7 +95,7 @@ def change_password():
 @auth.route('/reset', methods=['GET', 'POST'])
 def password_reset_request():
     if not current_user.is_anonymous:
-        return redirect(url_for('main.index'))
+        return redirect(url_for('front.index'))
     form = PasswordResetRequestForm()
     if form.validate_on_submit():
         user = User.query.filter_by(email=form.email.data).first()
@@ -114,15 +114,15 @@ def password_reset_request():
 @auth.route('/reset/<token>', methods=['GET', 'POST'])
 def password_reset(token):
     if not current_user.is_anonymous:
-        return redirect(url_for('main.index'))
+        return redirect(url_for('front.index'))
     form = PasswordResetForm()
     if form.validate_on_submit():
         user = User.query.filter_by(email=form.email.data).first()
         if user is None:
-            return redirect(url_for('main.index'))
+            return redirect(url_for('front.index'))
         if user.reset_password(token, form.password.data):
             flash('Your password has been updated.')
             return redirect(url_for('auth.login'))
         else:
-            return redirect(url_for('main.index'))
+            return redirect(url_for('front.index'))
     return render_template('auth/reset_password.html', form=form)
