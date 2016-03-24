@@ -1,7 +1,7 @@
 {% extends "layout.html" %}
 {% block body %}
 <section class="sheet padding-10mm">
-    <form action="/" method="GET">
+    <form action="{{url_for('main.index')}}" method="GET">
     <table>
         <tr>
             <th>Analyst</th>
