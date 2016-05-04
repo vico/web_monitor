@@ -228,6 +228,14 @@ def get_turnover_df(from_date, end_date):
 
 @cache.memoize(TIMEOUT)
 def get_hit_rate_df(from_date, end_date):
+    """
+        Return a hit rate dataframe of all advisors between from_date to end_date
+
+        Hit rate: hit rate of a side is ratio of number of win trades/positions over all number of trades/positions.
+        A trade/position is called a win if it has positive attribution, attribution is calculated as sum of all
+        attributions from the time the position is opened (first trade) until it is closed.
+    """
+
     hit_rate_df = sql.read_sql('''select advisor, SUM(IF(RHAttr > 0 AND side='L',1,0)) as LongsWin,
         SUM(IF(side='L' and RHAttr <> 0,1,0)) as Longs,
         SUM(if(RHAttr > 0 and side='L',1,0))*100/sum(if(side='L' AND RHAttr <> 0,1,0)) as LongsHR,
@@ -274,19 +282,6 @@ def get_pl_df(from_date, end_date):
                 AND a.quick NOT LIKE "FX%%"
                           ;''' % (from_date, end_date), g.con, coerce_float=True, parse_dates=['processDate'])
     return pl_df
-
-
-@cache.memoize(TIMEOUT)
-def get_fx_df(from_date, end_date):
-    fx_df = sql.read_sql('''SELECT a.base, AVG(a.rate) AS AvgOfrate
-                FROM (
-                SELECT t06DailyCrossRate.priceDate, t06DailyCrossRate.base, t06DailyCrossRate.quote, t06DailyCrossRate.Rate
-                FROM t06DailyCrossRate
-                WHERE priceDate> '%s' AND priceDate < '%s' AND QUOTE="JPY"
-                ) a
-                GROUP BY a.base;
-                ''' % (from_date, end_date), g.con, coerce_float=True, index_col='base')
-    return fx_df
 
 
 @cache.memoize(TIMEOUT)
@@ -345,7 +340,7 @@ def get_index_return(from_date, end_date):
       ;''' % (from_date, end_date), g.con, coerce_float=True, parse_dates=['priceDate'])
     p_index_df = index_df.pivot('priceDate', 'indexCode', 'close')
     p_index_df.fillna(method='ffill', inplace=True)  # fill forward for same value of previous day for holidays
-    index_return = p_index_df / p_index_df.shift(1) - 1
+    index_return = p_index_df.pct_change()  # index_return = p_index_df / p_index_df.shift(1) - 1
     # index_return = index_return.fillna(method='ffill', inplace=True)  # for index like TWSE has data for Sat
     return index_return, p_index_df
 
@@ -375,21 +370,17 @@ def index():
 
     hit_rate_df = get_hit_rate_df(start_date, end_date)
 
-    sql_fx_df = get_fx_df(start_date, end_date)
-
     turnover_df = get_turnover_df(start_date, end_date)
+    turnover_df.sort_index(inplace=True)
 
-    # merge with FX df to get to-JPY-fx rate
-    turnover_merged_df = turnover_df.merge(sql_fx_df, left_on='currencyCode', right_index=True).sort_index()
     # create new column which contain turnover in JPY
-    # turnover_merged_df['JPYPL'] = (turnover_merged_df['Turnover'] * turnover_merged_df['AvgOfrate']).values
-    turnover_merged_df['JPYPL'] = turnover_merged_df['Turnover']
+    turnover_df['JPYPL'] = turnover_df['Turnover']
 
     # calculate total turnover for each side
-    total_turnover = turnover_merged_df.truncate(after=end_date).groupby(["side"]).sum()['JPYPL']
+    total_turnover = turnover_df.truncate(after=end_date).groupby(['side']).sum()['JPYPL']
 
     # calculate turnover for each advisor
-    sum_turnover_per_adv = turnover_merged_df.truncate(after=end_date).groupby(["advisor", "side"]).sum()[
+    sum_turnover_per_adv = turnover_df.truncate(after=end_date).groupby(['advisor', 'side']).sum()[
         'JPYPL'].unstack()
 
     sum_turnover_per_adv = sum_turnover_per_adv.reindex(g.indexMapping.keys())
@@ -405,7 +396,7 @@ def index():
     names_df = f_exposure_df.groupby(by=['processDate', 'advisor']).count()['quick']
 
     mf_exposure_df = f_exposure_df.merge(code_beta_df, how='left', left_on='quick', right_on='code')
-    sum_exposure_per_fund = mf_exposure_df.groupby(['processDate', 'advisor', 'side']).sum()[
+    sum_exposure_per_adv_side = mf_exposure_df.groupby(['processDate', 'advisor', 'side']).sum()[
         ['RHExposure', 'YAExposure', 'LRExposure']]
 
     temp2 = mf_exposure_df.set_index(['processDate', 'advisor', 'side'])
@@ -419,9 +410,9 @@ def index():
     t4.columns = ['exposure']
 
     beta_exposure_df = t4['exposure']
-    all_fund_exposure_in_money = (sum_exposure_per_fund['RHExposure'].mul(aum_df['RHAUM'], axis=0) +
-                                  sum_exposure_per_fund['YAExposure'].mul(aum_df['YAAUM'], axis=0) +
-                                  sum_exposure_per_fund['LRExposure'].mul(aum_df['LRAUM'], axis=0))
+    all_fund_exposure_in_money = (sum_exposure_per_adv_side['RHExposure'].mul(aum_df['RHAUM'], axis=0) +
+                                  sum_exposure_per_adv_side['YAExposure'].mul(aum_df['YAAUM'], axis=0) +
+                                  sum_exposure_per_adv_side['LRExposure'].mul(aum_df['LRAUM'], axis=0))
 
     all_fund_exposure_in_money.columns = ['Exposure']
 
@@ -719,7 +710,7 @@ def index():
         'advisor', 1).set_index('MktCap').fillna(0)
 
     # try to assign cap to each trade turnover as Micro,.., Large
-    scale_table = turnover_merged_df.truncate(after=end_date).reset_index()
+    scale_table = turnover_df.truncate(after=end_date).reset_index()
     scale_table.groupby(['advisor', 'MktCap']).sum()
 
     # TODO: truncate before?
@@ -751,7 +742,7 @@ def index():
         columns={'JPYPL': 'Turnover', 'RHAttr': 'Rockhampton', 'YAAttr': 'Yaraka', 'LRAttr': 'Longreach', 'L': 'LongPL',
                  'S': 'ShortPL', 'TO': 'TO %'})
 
-    gics_table = turnover_merged_df.truncate(after=end_date).groupby(["advisor", "GICS"]).sum()[['JPYPL']].loc[
+    gics_table = turnover_df.truncate(after=end_date).groupby(["advisor", "GICS"]).sum()[['JPYPL']].loc[
                 (slice(param_adviser, param_adviser), slice(None)), :].reset_index().drop('advisor', 1).set_index(
             'GICS')
     fund_gics = sql_pl_df.groupby(['advisor', 'GICS']).sum()[['RHAttr', 'YAAttr', 'LRAttr']].loc[
@@ -784,7 +775,7 @@ def index():
     code_beta_df['code'] = code_beta_df[['code']].applymap(str.upper)[
         'code']  # some code has inconsistent format like xxxx Hk instead of HK
     t = sql_pl_df.merge(code_beta_df, left_on='quick', right_on='code', how='left')
-    sector_table = turnover_merged_df.truncate(after=end_date).groupby(["advisor", "sector"]).sum()[['JPYPL']].loc[
+    sector_table = turnover_df.truncate(after=end_date).groupby(["advisor", "sector"]).sum()[['JPYPL']].loc[
                   (slice(param_adviser, param_adviser), slice(None)), :].reset_index().drop('advisor', 1).set_index(
             'sector')
     fund_sector = t.groupby(['advisor', 'sector']).sum()[['RHAttr', 'YAAttr', 'LRAttr']].loc[
@@ -846,7 +837,7 @@ def index():
         columns={'name': 'Name', 'side': 'Side', 'attribution': 'Attribution', 'level_3': 'First Trade Date'})
     bottom_positions = bottom_positions[['Name', 'Side', 'Attribution', 'First Trade Date']]
 
-    topix_table = turnover_merged_df.truncate(after=end_date).groupby(["advisor", "TOPIX"]).sum()[['JPYPL']].loc[
+    topix_table = turnover_df.truncate(after=end_date).groupby(["advisor", "TOPIX"]).sum()[['JPYPL']].loc[
                  (slice(param_adviser, param_adviser), slice(None)), :].reset_index().drop('advisor', 1).set_index(
             'TOPIX')
     fund_topix = sql_pl_df.groupby(['advisor', 'TPX']).sum()[['RHAttr', 'YAAttr', 'LRAttr']].loc[
@@ -875,7 +866,7 @@ def index():
                      'L': 'LongPL',
                      'S': 'ShortPL', 'TO': 'TO %'})
 
-    strategy_table = turnover_merged_df.truncate(after=end_date).groupby(["advisor", "strategy"]).sum()[['JPYPL']].loc[
+    strategy_table = turnover_df.truncate(after=end_date).groupby(["advisor", "strategy"]).sum()[['JPYPL']].loc[
                     (slice(param_adviser, param_adviser), slice(None)), :].reset_index().drop('advisor',
                                                                                               1).set_index(
             'strategy')
@@ -908,7 +899,7 @@ def index():
             columns={'JPYPL': 'Turnover', 'RHAttr': 'Rockhampton', 'YAAttr': 'Yaraka', 'LRAttr': 'Longreach',
                      'L': 'LongPL',
                      'S': 'ShortPL', 'TO': 'TO %'})
-    position_table = turnover_merged_df.truncate(after=end_date).groupby(["advisor", "code", "name"]).sum()[
+    position_table = turnover_df.truncate(after=end_date).groupby(["advisor", "code", "name"]).sum()[
                          ['JPYPL']].loc[
                      (slice(param_adviser, param_adviser), slice(None)), :].reset_index().drop('advisor',
                                                                                                1).set_index('code')
