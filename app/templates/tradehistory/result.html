@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% import "bootstrap/wtf.html" as wtf %}
+
+{% block title %}Trade history - Index{% endblock %}
+
+{% block page_content %}
+<div class="page-header">
+    <h1>Trade history</h1>
+</div>
+<div class="col-md-4">
+    <table class="table">
+        <thead>
+            <tr><th>Side</th><th>PL</th><th>Alpha</th><th>PL Win</th></tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>L</td><td>{{'{:.2f}%'.format(params['long_pl']*100)}}</td>
+                <td>{{'{:.2f}%'.format(params['long_alpha']*100)}}</td>
+                <td>{{'{:.2f}%'.format(params['long_pl_win']*100)}}</td>
+            </tr>
+            <tr>
+                <td>S</td><td>{{'{:.2f}%'.format(params['short_pl']*100)}}</td>
+                <td>{{'{:.2f}%'.format(params['short_alpha']*100)}}</td>
+                <td>{{'{:.2f}%'.format(params['short_pl_win']*100)}}</td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+{% endblock %}

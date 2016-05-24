@@ -38,6 +38,9 @@ def create_app(config_name):
     from .main import main as main_blueprint
     app.register_blueprint(main_blueprint, url_prefix='/attr')
 
+    from .tradehistory import tradehistory as tradehistory_blueprint
+    app.register_blueprint(tradehistory_blueprint, url_prefix='/tradehistory')
+
     from .front import front as front_blueprint
     app.register_blueprint(front_blueprint, url_prefix='/')
 
