@@ -107,15 +107,30 @@ def check():
     alpha_long_hit = alpha_hit[alpha_hit > 0]['L'].count() * 1.0 / attr_df['L'].count()
     alpha_short_hit = alpha_hit[alpha_hit > 0]['S'].count() * 1.0 / attr_df['S'].count()
 
-    op = attribution.subtract(exposure.mul(index_return['close'], axis='index', level=0), axis='index', level=0)
+    op = (attribution.subtract(exposure.mul(index_return['close'], axis='index', level=0), axis='index', level=0)
+                     .dropna())
 
-    op_hit = op.dropna().groupby(axis=0, level=1).sum()
+    op_hit = op.groupby(axis=0, level=1).sum()
     op_long_hit_ratio = op_hit[op_hit > 0]['L'].count() * 1.0 / attr_df['L'].count()
     op_short_hit_ratio = op_hit[op_hit > 0]['S'].count() * 1.0 / attr_df['S'].count()
+
+    tbl = (sql_pl_df.groupby(['firstTradeDate', 'side'])
+           .sum()[['RHAttr']]
+           )
+
+    day_count = sql_pl_df.groupby(['firstTradeDate', 'side']).count()['processDate']
+    tbl['Days'] = day_count
+    tbl['RHAttr'] = tbl['RHAttr'].map(lambda x: '{:.2f}%'.format(x * 100))
+    tbl.reset_index(inplace=True)
+    tbl = tbl[['firstTradeDate', 'side', 'Days', 'RHAttr']]
+    tbl = tbl.rename(columns={'firstTradeDate': 'Date', 'side': 'Side', 'Days': 'Days', 'RHAttr': 'PL'})
+    tbl_html = tbl.to_html(index=False, classes='table').replace('border="1"','border="0"')
 
     render_obj = dict()
     render_obj['long_pl'] = attr_df.sum()['L']
     render_obj['short_pl'] = attr_df.sum()['S']
+    render_obj['long_op'] = op.sum()['L']
+    render_obj['short_op'] = op.sum()['S']
     render_obj['long_alpha'] = alpha.sum()['L']
     render_obj['short_alpha'] = alpha.sum()['S']
     render_obj['long_count'] = long_count
@@ -123,5 +138,10 @@ def check():
     render_obj['long_pl_win'] = long_win_ratio
     render_obj['short_pl_win'] = short_win_ratio
     render_obj['total_pl_win'] = total_ratio
+    render_obj['long_a_win'] = alpha_long_hit
+    render_obj['short_a_win'] = alpha_short_hit
+    render_obj['long_op_win'] = op_long_hit_ratio
+    render_obj['short_op_win'] = op_short_hit_ratio
+    render_obj['table'] = tbl_html
 
-    return render_template('tradehistory/result.html', params=render_obj)
+    return render_template('tradehistory/result.html', params=render_obj, justify='right')
