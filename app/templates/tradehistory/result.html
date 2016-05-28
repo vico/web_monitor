@@ -5,40 +5,101 @@
 
 {% block page_content %}
 <div class="page-header">
-    <h1>Trade history</h1>
+    <h2 style="display:inline-block;">Trade history</h2>
+     <form class="form-inline" style="display:inline-block;float:right;" method="GET" action="check">
+        <div class="form-group">
+            <label for="quick">Quick</label>
+            <input type="text" class="form-control" id="quick" name="quick" placeholder="7200 or 711 HK or HACK US" autofocus>
+        </div>
+        <button type="submit" class="btn btn-default">Go</button>
+    </form>
 </div>
-<div class="col-md-8">
+<div class="col-md-7">
     <div class="col-md-6">
         <table class="table">
             <thead>
                 <tr>
-                    <th>Trade</th><th>PL</th><th>O/P</th><th>Alpha</th><th>W%</th>
+                    <th></th><th>Trade</th><th>PL</th><th>O/P</th><th>Alpha</th><th>W%</th>
                     <th>O%</th><th>A%</th>
                 </tr>
             </thead>
             <tbody>
+                {% if params['long_count'] > 0 %}
                 <tr>
-                    <td>L</td><td>{{'{:.2f}%'.format(params['long_pl']*100)}}</td>
+                    <td>L</td>
+                    <td>{{params['long_count']}}</td>
+                    <td>{{'{:.2f}%'.format(params['long_pl']*100)}}</td>
                     <td>{{'{:.2f}%'.format(params['long_op']*100)}}</td>
                     <td>{{'{:.2f}%'.format(params['long_alpha']*100)}}</td>
                     <td>{{'{:.2f}%'.format(params['long_pl_win']*100)}}</td>
                     <td>{{'{:.2f}%'.format(params['long_op_win']*100)}}</td>
                     <td>{{'{:.2f}%'.format(params['long_a_win']*100)}}</td>
                 </tr>
+                {% endif %}
+                {% if params['short_count'] > 0 %}
                 <tr>
-                    <td>S</td><td>{{'{:.2f}%'.format(params['short_pl']*100)}}</td>
+                    <td>S</td>
+                    <td>{{params['short_count']}}</td>
+                    <td>{{'{:.2f}%'.format(params['short_pl']*100)}}</td>
                     <td>{{'{:.2f}%'.format(params['short_op']*100)}}</td>
                     <td>{{'{:.2f}%'.format(params['short_alpha']*100)}}</td>
                     <td>{{'{:.2f}%'.format(params['short_pl_win']*100)}}</td>
                     <td>{{'{:.2f}%'.format(params['short_op_win']*100)}}</td>
                     <td>{{'{:.2f}%'.format(params['short_a_win']*100)}}</td>
                 </tr>
+                {% endif %}
+                {% if params['long_count'] > 0 and params['short_count'] > 0 %}
+                <tr>
+                    <td>Total</td>
+                    <td>{{params['long_count'] + params['short_count']}}</td>
+                    <td></td>
+                    <td></td>
+                    <td></td>
+                    <td>{{'{:.2f}%'.format((params['long_pl_win']+params['short_pl_win'])/2*100)}}</td>
+                    <td>{{'{:.2f}%'.format((params['long_op_win']+params['short_op_win'])/2*100)}}</td>
+                    <td>{{'{:.2f}%'.format((params['long_a_win']+params['short_a_win'])/2*100)}}</td>
+                </tr>
+                {% endif %}
             </tbody>
         </table>
     </div>
+    <div class="col-md-12">
+       {% if params['long_count'] > 0 %}
+       <h4>Long Charts</h4>
+       <div id="long_price_graph"></div>
+       <div id="long_rate_graph"></div>
+       {% endif %}
+       {% if params['short_count'] > 0 %}
+       <h4>Short Charts</h4>
+       <div id="short_price_graph"></div>
+       <div id="short_rate_graph"></div>
+       {% endif %}
+    </div>
 
 </div>
-<div class="col-md-4">
+<div class="col-md-5">
     {{ params['table'] | safe }}
 </div>
+
+{% if params['long_count'] > 0 %}
+  <script>
+    $(document).ready(function() {
+     long_price_graph = document.getElementById("long_price_graph");
+     long_rate_graph = document.getElementById('long_rate_graph');
+     
+    Plotly.plot( long_price_graph, {{params['long_price_graph'].data | safe }}, {{ params['long_price_graph'].layout | safe }});
+    Plotly.plot( long_rate_graph, {{params['long_rate_graph'].data | safe }}, {{ params['long_rate_graph'].layout | safe }});
+       });
+  </script>
+{% endif %}
+{% if params['short_count'] > 0 %}
+  <script>
+    $(document).ready(function() {
+     short_price_graph = document.getElementById("short_price_graph");
+     short_rate_graph = document.getElementById('short_rate_graph');
+    Plotly.plot( short_price_graph, {{params['short_price_graph'].data | safe }}, {{ params['short_price_graph'].layout | safe }});
+    Plotly.plot( short_rate_graph, {{params['short_rate_graph'].data | safe }}, {{ params['short_rate_graph'].layout | safe }});
+    });
+  </script>
+{% endif %}
 {% endblock %}

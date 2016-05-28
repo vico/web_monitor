@@ -220,7 +220,7 @@ def get_turnover_df(from_date, end_date):
         GROUP BY c.instrumentID, b.tradeDate, b.orderType, b.reconcileID, b.side, Qty, Notl, b.code
         ORDER BY b.code
         ) aa
-        LEFT JOIN t08AdvisorTag e ON (aa.MaxOfDate = e.adviseDate) AND (aa.code = e.code)
+        LEFT JOIN t08AdvisorTag e ON aa.code = e.code AND aa.MaxOfDate = e.adviseDate
         LEFT JOIN t06DailyBBStaticSnapshot f ON aa.instrumentID = f.instrumentID AND f.dataType = 'GICS_SECTOR_NAME'
         LEFT JOIN t06DailyBBStaticSnapshot g ON aa.instrumentID = g.instrumentID AND g.dataType = 'JAPANESE_INDUSTRY_GROUP_NAME_ENG'
         LEFT JOIN t06DailyBBStaticSnapshot i ON aa.instrumentID = i.instrumentID AND i.dataType = 'SECURITY_TYP'
