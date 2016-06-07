@@ -33,9 +33,9 @@
                     <td>{{'{:.2f}%'.format(pl[('RHAttr', 'L')])}}</td>
                     <td>{{'{:.2f}%'.format(rhop['L'])}}</td>
                     <td>{{'{:.2f}%'.format(rhalpha['L'])}}</td>
-                    <td>{{'{:.2f}%'.format(tbldata['RHAttr']['long_ratio']*100)}}</td>
-                    <td>{{'{:.2f}%'.format(op_hit['RH']['long_ratio']*100)}}</td>
-                    <td>{{'{:.2f}%'.format(alpha['RH']['long_ratio']*100)}}</td>
+                    <td>{{'{:.0f}%'.format(tbldata['RHAttr']['long_ratio']*100)}}</td>
+                    <td>{{'{:.0f}%'.format(op_hit['RH']['long_ratio']*100)}}</td>
+                    <td>{{'{:.0f}%'.format(alpha['RH']['long_ratio']*100)}}</td>
                 </tr>
                 {% endif %}
 
@@ -47,9 +47,9 @@
                     <td>{{'{:.2f}%'.format(pl[('RHAttr', 'S')])}}</td>
                     <td>{{'{:.2f}%'.format(rhop['S'])}}</td>
                     <td>{{'{:.2f}%'.format(rhalpha['S'])}}</td>
-                    <td>{{'{:.2f}%'.format(tbldata['RHAttr']['short_ratio']*100)}}</td>
-                    <td>{{'{:.2f}%'.format(op_hit['RH']['short_ratio']*100)}}</td>
-                    <td>{{'{:.2f}%'.format(alpha['RH']['short_ratio']*100)}}</td>
+                    <td>{{'{:.0f}%'.format(tbldata['RHAttr']['short_ratio']*100)}}</td>
+                    <td>{{'{:.0f}%'.format(op_hit['RH']['short_ratio']*100)}}</td>
+                    <td>{{'{:.0f}%'.format(alpha['RH']['short_ratio']*100)}}</td>
                 </tr>
                 {% endif %}
 
@@ -61,9 +61,9 @@
                     <td></td>
                     <td></td>
                     <td></td>
-                    <td>{{'{:.2f}%'.format((tbldata['RHAttr']['long_ratio']+tbldata['RHAttr']['short_ratio'])/2*100)}}</td>
-                    <td>{{'{:.2f}%'.format((op_hit['RH']['long_ratio']+op_hit['RH']['short_ratio'])/2*100)}}</td>
-                    <td>{{'{:.2f}%'.format((alpha['RH']['long_ratio']+alpha['RH']['short_ratio'])/2*100)}}</td>
+                    <td>{{'{:.0f}%'.format((tbldata['RHAttr']['long_ratio']+tbldata['RHAttr']['short_ratio'])/2*100)}}</td>
+                    <td>{{'{:.0f}%'.format((op_hit['RH']['long_ratio']+op_hit['RH']['short_ratio'])/2*100)}}</td>
+                    <td>{{'{:.0f}%'.format((alpha['RH']['long_ratio']+alpha['RH']['short_ratio'])/2*100)}}</td>
                 </tr>
                 {% endif %}
                 {% endif %}
@@ -78,9 +78,9 @@
                     <td>{{'{:.2f}%'.format(pl[('YAAttr', 'L')])}}</td>
                     <td>{{'{:.2f}%'.format(yaop['L'])}}</td>
                     <td>{{'{:.2f}%'.format(yaalpha['L'])}}</td>
-                    <td>{{'{:.2f}%'.format(tbldata['YAAttr']['long_ratio']*100)}}</td>
-                    <td>{{'{:.2f}%'.format(op_hit['YA']['long_ratio']*100)}}</td>
-                    <td>{{'{:.2f}%'.format(alpha['YA']['long_ratio']*100)}}</td>
+                    <td>{{'{:.0f}%'.format(tbldata['YAAttr']['long_ratio']*100)}}</td>
+                    <td>{{'{:.0f}%'.format(op_hit['YA']['long_ratio']*100)}}</td>
+                    <td>{{'{:.0f}%'.format(alpha['YA']['long_ratio']*100)}}</td>
                 </tr>
                 {% endif %}
 
@@ -92,9 +92,9 @@
                     <td>{{'{:.2f}%'.format(pl[('YAAttr', 'S')])}}</td>
                     <td>{{'{:.2f}%'.format(yaop['S'])}}</td>
                     <td>{{'{:.2f}%'.format(yaalpha['S'])}}</td>
-                    <td>{{'{:.2f}%'.format(tbldata.YAAttr.short_ratio*100)}}</td>
-                    <td>{{'{:.2f}%'.format(op_hit.YA.short_ratio*100)}}</td>
-                    <td>{{'{:.2f}%'.format(alpha.YA.short_ratio*100)}}</td>
+                    <td>{{'{:.0f}%'.format(tbldata.YAAttr.short_ratio*100)}}</td>
+                    <td>{{'{:.0f}%'.format(op_hit.YA.short_ratio*100)}}</td>
+                    <td>{{'{:.0f}%'.format(alpha.YA.short_ratio*100)}}</td>
                 </tr>
                 {% endif %}
 
@@ -106,9 +106,9 @@
                     <td></td>
                     <td></td>
                     <td></td>
-                    <td>{{'{:.2f}%'.format((tbldata.YAAttr.long_ratio+tbldata.YAAttr.short_ratio)/2*100)}}</td>
-                    <td>{{'{:.2f}%'.format((op_hit.YA.long_ratio+op_hit.YA.short_ratio)/2*100)}}</td>
-                    <td>{{'{:.2f}%'.format((alpha.YA.long_ratio+alpha.YA.short_ratio)/2*100)}}</td>
+                    <td>{{'{:.0f}%'.format((tbldata.YAAttr.long_ratio+tbldata.YAAttr.short_ratio)/2*100)}}</td>
+                    <td>{{'{:.0f}%'.format((op_hit.YA.long_ratio+op_hit.YA.short_ratio)/2*100)}}</td>
+                    <td>{{'{:.0f}%'.format((alpha.YA.long_ratio+alpha.YA.short_ratio)/2*100)}}</td>
                 </tr>
                 {% endif %}
                 {% endif %}
@@ -122,9 +122,9 @@
                     <td>{{'{:.2f}%'.format(pl[('LRAttr', 'L')])}}</td>
                     <td>{{'{:.2f}%'.format(lrop['L'])}}</td>
                     <td>{{'{:.2f}%'.format(lralpha['L'])}}</td>
-                    <td>{{'{:.2f}%'.format(tbldata['LRAttr']['long_ratio']*100)}}</td>
-                    <td>{{'{:.2f}%'.format(op_hit['LR']['long_ratio']*100)}}</td>
-                    <td>{{'{:.2f}%'.format(alpha['LR']['long_ratio']*100)}}</td>
+                    <td>{{'{:.0f}%'.format(tbldata['LRAttr']['long_ratio']*100)}}</td>
+                    <td>{{'{:.0f}%'.format(op_hit['LR']['long_ratio']*100)}}</td>
+                    <td>{{'{:.0f}%'.format(alpha['LR']['long_ratio']*100)}}</td>
                 </tr>
                 {% endif %}
 
@@ -136,9 +136,9 @@
                     <td>{{'{:.2f}%'.format(pl[('LRAttr', 'S')])}}</td>
                     <td>{{'{:.2f}%'.format(lrop['S'])}}</td>
                     <td>{{'{:.2f}%'.format(lralpha['S'])}}</td>
-                    <td>{{'{:.2f}%'.format(tbldata.LRAttr.short_ratio*100)}}</td>
-                    <td>{{'{:.2f}%'.format(op_hit.LR.short_ratio*100)}}</td>
-                    <td>{{'{:.2f}%'.format(alpha.LR.short_ratio*100)}}</td>
+                    <td>{{'{:.0f}%'.format(tbldata.LRAttr.short_ratio*100)}}</td>
+                    <td>{{'{:.0f}%'.format(op_hit.LR.short_ratio*100)}}</td>
+                    <td>{{'{:.0f}%'.format(alpha.LR.short_ratio*100)}}</td>
                 </tr>
                 {% endif %}
 
@@ -150,9 +150,9 @@
                     <td></td>
                     <td></td>
                     <td></td>
-                    <td>{{'{:.2f}%'.format((tbldata.LRAttr.long_ratio+tbldata.LRAttr.short_ratio)/2*100)}}</td>
-                    <td>{{'{:.2f}%'.format((op_hit.LR.long_ratio+op_hit.LR.short_ratio)/2*100)}}</td>
-                    <td>{{'{:.2f}%'.format((alpha.LR.long_ratio+alpha.LR.short_ratio)/2*100)}}</td>
+                    <td>{{'{:.0f}%'.format((tbldata.LRAttr.long_ratio+tbldata.LRAttr.short_ratio)/2*100)}}</td>
+                    <td>{{'{:.0f}%'.format((op_hit.LR.long_ratio+op_hit.LR.short_ratio)/2*100)}}</td>
+                    <td>{{'{:.0f}%'.format((alpha.LR.long_ratio+alpha.LR.short_ratio)/2*100)}}</td>
                 </tr>
                 {% endif %}
                 {% endif %}
@@ -185,33 +185,48 @@
 
 {% if tbldata['RHAttr']['long_count'] > 0 %}
   <script>
-    $(document).ready(function() {
+     long_plot = function() {
      long_price_graph = document.getElementById("long_price_graph");
      long_rate_graph = document.getElementById('long_rate_graph');
-     
+
     Plotly.plot( long_price_graph, {{params['long_price_graph'].data | safe }}, {{ params['long_price_graph'].layout | safe }});
     Plotly.plot( long_rate_graph, {{params['long_rate_graph'].data | safe }}, {{ params['long_rate_graph'].layout | safe }});
-       });
+       };
+    if (document.readyState === 'complete' || document.readyState !== 'loading') {
+        long_plot();
+     } else {
+        document.addEventListener('DOMContentLoaded', long_plot);
+      }
   </script>
 {% endif %}
 
 {% if tbldata['RHAttr']['long_count'] > 0 or tbldata['RHAttr']['short_count'] > 0 %}
 <script>
-    $(document).ready(function() {
+    position_plot = function() {
      position_size_graph = document.getElementById("position_size_graph");
     Plotly.plot( position_size_graph , {{params['position_size_graph'].data | safe }}, {{ params['position_size_graph'].layout | safe }});
-    });
+    };
+    if (document.readyState === 'complete' || document.readyState !== 'loading') {
+        position_plot();
+    } else {
+        document.addEventListener('DOMContentLoaded', position_plot);
+    }
 </script>
 {% endif %}
 
 {% if tbldata['RHAttr']['short_count'] > 0 %}
   <script>
-    $(document).ready(function() {
-     short_price_graph = document.getElementById("short_price_graph");
-     short_rate_graph = document.getElementById('short_rate_graph');
-    Plotly.plot( short_price_graph, {{params['short_price_graph'].data | safe }}, {{ params['short_price_graph'].layout | safe }});
-    Plotly.plot( short_rate_graph, {{params['short_rate_graph'].data | safe }}, {{ params['short_rate_graph'].layout | safe }});
-    });
+      short_plot = function() {
+         short_price_graph = document.getElementById("short_price_graph");
+         short_rate_graph = document.getElementById('short_rate_graph');
+        Plotly.plot( short_price_graph, {{params['short_price_graph'].data | safe }}, {{ params['short_price_graph'].layout | safe }});
+        Plotly.plot( short_rate_graph, {{params['short_rate_graph'].data | safe }}, {{ params['short_rate_graph'].layout | safe }});
+        };
+      if (document.readyState === 'complete' || document.readyState !== 'loading') {
+        short_plot();
+    } else {
+        document.addEventListener('DOMContentLoaded', short_plot);
+    }
   </script>
 {% endif %}
 {% endblock %}

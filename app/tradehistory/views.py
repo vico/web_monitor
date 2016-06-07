@@ -14,6 +14,7 @@ from . import tradehistory
 @tradehistory.before_request
 def before_request():
     g.con = pymysql.connect(host='localhost', user='root', passwd='root', db='hkg02p')
+        #(host='localhost', user='root', passwd='root', db='hkg02p')
         #(host='192.168.1.147', user='uploader', passwd='fA6ZxopGrbdb', db='hkg02p')
     # g.start_date = datetime(datetime.now().year-2, 12, 31).strftime('%Y-%m-%d')
     g.start_date = '2012-01-01'
@@ -57,23 +58,24 @@ def get_trade_pricedf(trade_df, buysell, longshort):
                    .loc[pd.IndexSlice[:,'RH',buysell,longshort], 'price']
                    .reset_index()[['tradeDate','price']]
                    .set_index('tradeDate')
-          )
+           )
     return ret
 
 
 def change_fund_code(df):
     cols = 'fundCode'
-    fundName = df[cols].apply(lambda x: 'RH' if x == '04F08900' else ('YA' if x == '04F08910' else ('LR' if x == 'PLOJ2010' else 'Unknown' )))
+
+    def get_fund_name(x):
+        return 'RH' if x == '04F08900' else ('YA' if x == '04F08910' else ('LR' if x == 'PLOJ2010' else 'Unknown'))
+
+    fund_name = df[cols].apply(get_fund_name)
     df = df.copy()
-    df[cols] = fundName
+    df[cols] = fund_name
     return df
 
 
-@tradehistory.route('/check')
-def check():
-    quick = request.args.get('quick', '7203')
-
-    sql_pl_df = sql.read_sql('''
+def get_pl_df(quick, start_date, end_date, con):
+    pl_df = sql.read_sql('''
                 SELECT processDate,advisor, side, a.quick, attribution,
                             RHAttribution AS RHAttr,
                             YAAttribution AS YAAttr,
@@ -87,42 +89,76 @@ def check():
                             a.LRExposure* IF(a.side='L', 1, -1) AS LRExposure,
                             a.name
                 FROM `t05PortfolioResponsibilities` a
-                LEFT JOIN 
+                LEFT JOIN
                   (SELECT a.adviseDate, a.code, a.beta
                    FROM t08AdvisorTag a
-                   INNER JOIN (SELECT MAX(adviseDate) AS MaxOfDate, code 
-                               FROM `t08AdvisorTag` 
-                               WHERE code = '%s') b ON a.adviseDate=b.MaxOfDate AND a.code='%s') j ON a.quick = j.code
-                WHERE a.processDate > '%s' AND a.processDate < '%s'
+                   WHERE a.adviseDate IN (SELECT MAX(adviseDate) AS MaxOfDate FROM t08AdvisorTag WHERE code = '%s')
+                        AND a.code='%s') j ON a.quick = j.code
+                WHERE a.processDate >= '%s' AND a.processDate <= '%s'
                 AND a.quick = '%s'
-    ;''' % (quick, quick, g.start_date, g.end_date, quick), g.con, coerce_float=True, parse_dates=['processDate'])
+    ;''' % (quick, quick, start_date, end_date, quick), con, coerce_float=True, parse_dates=['processDate'])
 
-    if (sql_pl_df['processDate'].count() == 0):
-       return "Sorry, no RH position for this code."
+    return pl_df
+
+
+def get_trade_df(stock_price_df, quick, start_date, end_date, con):
+    trade_df = (sql.read_sql('''SELECT  a.tradeDate, a.fundCode, a.orderType, a.side, AVG(a.price) as price
+                    FROM t08Reconcile a
+                    WHERE a.code = '%s'
+                      AND a.srcFlag='K'
+                      AND a.status='A'
+                      AND a.processDate >= '%s'
+                      AND a.processDate <= '%s'
+                      GROUP BY a.tradeDate, a.fundCode, a.orderType, a.side
+                      ORDER BY reconcileID
+                    ;
+        ;''' % (quick, start_date, end_date), con, coerce_float=True, parse_dates=['tradeDate'])
+                .pipe(change_fund_code)
+                .set_index(['tradeDate', 'fundCode', 'orderType', 'side'])
+                )
+    adj_factor_df = stock_price_df.reindex(trade_df.index.levels[0])['adj_factor']
+    return trade_df.div(adj_factor_df, axis=0, level=0)
+
+
+def get_index_df(start_date, end_date, con):
+    index_df = sql.read_sql('''SELECT b.priceDate, b.close
+        FROM `t07Index` a, `t06DailyIndex` b
+        WHERE a.indexID = b.indexID
+        AND b.priceDate >= DATE_SUB('%s', INTERVAL 1 DAY) AND b.priceDate <= '%s'
+        AND a.indexCode = 'TPX';''' % (start_date, end_date), con, parse_dates=['priceDate'], index_col='priceDate')
+
+    return index_df
+
+
+def get_stock_price_df(quick, start_date, end_date, con):
+    price_df = sql.read_sql('''SELECT a.priceDate, a.close AS close, a.adj_factor
+        FROM `t06DailyPrice` a
+        INNER JOIN t01Instrument b ON b.instrumentID = a.instrumentID
+        WHERE a.priceDate >= DATE_SUB('%s', INTERVAL 1 DAY)
+        AND a.priceDate <= '%s'
+        AND b.quick='%s';''' % (start_date, end_date, quick), con, parse_dates=['priceDate'], index_col='priceDate')
+
+    return price_df
+
+
+@tradehistory.route('/check')
+def check():
+    quick = request.args.get('quick', '7203')
+
+    sql_pl_df = get_pl_df(quick, g.start_date, g.end_date, g.con)
+
+    if sql_pl_df['processDate'].count() == 0:
+        return "Sorry, no position for this code."
 
     position_name = sql_pl_df.loc[0, 'name']
 
-
-    trade_df = (sql.read_sql('''SELECT  a.tradeDate, a.fundCode, a.orderType, a.side, AVG(a.price) as price
-                            FROM t08Reconcile a
-                            WHERE a.code = '%s'
-                              AND a.srcFlag='K'
-                              AND a.status='A'
-                              AND a.processDate > '%s'
-                              AND a.processDate < '%s'
-                              GROUP BY a.tradeDate, a.fundCode, a.orderType, a.side
-                              ORDER BY reconcileID
-                            ;
-                ;''' % (quick, g.start_date, g.end_date), g.con, coerce_float=True, parse_dates=['tradeDate'])
-              .pipe(change_fund_code)
-              .set_index(['tradeDate', 'fundCode', 'orderType', 'side'])
-            )
+    
 
     attr_df = (sql_pl_df.groupby(['firstTradeDate', 'side'])
                .sum()[['RHAttr', 'YAAttr', 'LRAttr']]
                .unstack()
                )
-    #attr_df.columns = attr_df.columns.get_level_values(1)
+
     pl_hit = dict()
     for col in ['RHAttr', 'YAAttr', 'LRAttr']:
         pl_hit[col] = dict()
@@ -135,16 +171,9 @@ def check():
         pl_hit[col]['short_ratio'] =  pl_hit[col]['short_hit'] / pl_hit[col]['short_count'] if pl_hit[col]['short_count'] > 0 else 0
         pl_hit[col]['total_ratio'] = pl_hit[col]['long_hit'] + pl_hit[col]['short_hit'] / pl_hit[col]['total_count'] if pl_hit[col]['total_count'] > 0 else 0
  
-
-    df2 = sql.read_sql('''SELECT b.priceDate, b.close
-                          FROM `t07Index` a, `t06DailyIndex` b
-                          WHERE a.indexID = b.indexID
-                          AND b.priceDate >= DATE_SUB('%s', INTERVAL 1 DAY) AND b.priceDate <= '%s'
-                          AND a.indexCode = 'TPX';''' % (sql_pl_df['processDate'].min().strftime('%Y-%m-%d'),
-                                                         sql_pl_df['processDate'].max().strftime('%Y-%m-%d')),
-                       g.con,
-                       parse_dates=['priceDate'],
-                       index_col='priceDate')
+    df2 = get_index_df(sql_pl_df['processDate'].min().strftime('%Y-%m-%d'),
+                       sql_pl_df['processDate'].max().strftime('%Y-%m-%d'),
+                       g.con)
 
     index_return = df2.pct_change().dropna()
 
@@ -166,9 +195,9 @@ def check():
     alpha_df['LR'] = attribution['LRAttr'].subtract(be['LRBetaExposure']) 
 
     rh_alpha = (alpha_df['RH'].dropna()
-                              .groupby(axis=0,level=1)
+                              .groupby(axis=0, level=1)
                               .sum()
-                              .assign( Alpha = sum_long_short)[['Alpha']]
+                              .assign(Alpha = sum_long_short)[['Alpha']]
                 )
 
     long_count = pl_hit['RHAttr']['long_count']
@@ -199,9 +228,9 @@ def check():
         op_hit[f] = dict()
         op_hit_df = op_df[f].groupby(axis=0, level=1).sum()
         op_hit[f]['long_hit'] = (op_hit_df[op_hit_df > 0]['L'].count() * 1.0 
-                                 if 'L' in op_hit and pl_hit[f+'Attr']['long_count'] > 0 else 0)
+                                 if 'L' in op_hit_df and pl_hit[f+'Attr']['long_count'] > 0 else 0)
         op_hit[f]['short_hit'] = (op_hit_df[op_hit_df > 0]['S'].count() * 1.0 
-                                  if 'S' in op_hit and pl_hit[f+'Attr']['short_count'] > 0 else 0)
+                                  if 'S' in op_hit_df and pl_hit[f+'Attr']['short_count'] > 0 else 0)
         op_hit[f]['long_ratio'] = (op_hit[f]['long_hit'] / pl_hit[f+'Attr']['long_count'] 
                                        if  pl_hit[f+'Attr']['long_count'] > 0 else 0)
         op_hit[f]['short_ratio'] = (op_hit[f]['short_hit'] / pl_hit[f+'Attr']['short_count'] 
@@ -209,12 +238,14 @@ def check():
 
     tbl = (sql_pl_df.groupby(['firstTradeDate', 'side'])
                     .sum()[['RHAttr']]
-                    .sort_index(ascending=False)
+                    .assign(Analyst=sql_pl_df.groupby(['firstTradeDate', 'side'])['advisor']
+                                             .apply(lambda df: df.iloc[0])
+                                             .values
+                            )
            )
 
     day_count = sql_pl_df.groupby(['firstTradeDate', 'side']).count()['processDate']
     tbl['Days'] = day_count
-    tbl['Analyst'] = sql_pl_df.groupby(['firstTradeDate', 'side']).apply(lambda subf: subf['advisor'].iloc[0])
     tbl['RHAttr'] = tbl['RHAttr'].map(lambda x: '{:.2f}%'.format(x * 100))
     tbl = (tbl.reset_index()
               .set_index('firstTradeDate')
@@ -231,25 +262,23 @@ def check():
     tbl = tbl.rename(columns={'side': 'Side', 'RHAttr': 'PL'})
     tbl_html = tbl.to_html(index=False, classes='table').replace('border="1"','border="0"')
 
-    df3 = sql.read_sql('''SELECT a.priceDate, a.close*a.adj_factor AS close
-                          FROM `t06DailyPrice` a
-                          INNER JOIN t01Instrument b ON b.instrumentID = a.instrumentID
-                          WHERE a.priceDate >= DATE_SUB('%s', INTERVAL 1 DAY) 
-                          AND a.priceDate <= '%s'
-                          AND b.quick='%s';''' % (sql_pl_df['processDate'].min().strftime('%Y-%m-%d'), 
-                                                  sql_pl_df['processDate'].max().strftime('%Y-%m-%d'), quick
-                                                 ), g.con, parse_dates=['priceDate'], index_col='priceDate')
+    df3 = get_stock_price_df(quick,
+                             sql_pl_df['processDate'].min().strftime('%Y-%m-%d'),
+                             sql_pl_df['processDate'].max().strftime('%Y-%m-%d'),
+                             g.con)
+
+    trade_df = get_trade_df(df3, quick, g.start_date, g.end_date, g.con)
 
     ratedf = df3.div(df2)
 
     long_price_graph = {'data': [{
                     'x': [pd.to_datetime(str(i)).strftime('%Y-%m-%d') for i in df3.index],
-                    'y': df3[col].values.tolist(),
+                    'y': df3['close'].values.tolist(),
                     'name':'Stock',
                     'line': {'width':g.lineWidth,
                              'color': "rgb(182, 182, 182)" 
                              }
-                } for col in df3.columns
+                } 
                 ]+([{
                     'x': [pd.to_datetime(str(i)).strftime('%Y-%m-%d') 
                           for i in get_trade_pricedf(trade_df, 'B', 'L').index],
@@ -258,7 +287,7 @@ def check():
                     'name': 'Buy Long',
                     'marker': {
                         'color': 'rgb(27, 93, 225)',
-                        'size':g.markerSize
+                        'size': g.markerSize
                     }
                     }] if 'RH' in trade_df.index.levels[1] and 
                            'B' in trade_df.index.levels[2] and 
@@ -324,15 +353,14 @@ def check():
                 }
     } 
 
-
     short_price_graph = {'data': [{
                     'x': [pd.to_datetime(str(i)).strftime('%Y-%m-%d') for i in df3.index],
-                    'y': df3[col].values.tolist(),
+                    'y': df3['close'].values.tolist(),
                     'name':'Stock',
                     'line': {'width':g.lineWidth,
                              'color': "rgb(182, 182, 182)" 
                              }
-                } for col in df3.columns
+                } 
                 ]+([{
                     'x': [pd.to_datetime(str(i)).strftime('%Y-%m-%d') 
                           for i in get_trade_pricedf(trade_df, 'B', 'S').index],
@@ -399,8 +427,6 @@ def check():
                 }
     } 
 
-
-    
     long_position = (sql_pl_df.groupby(['processDate', 'side'])[['RHExposure']]
                               .sum()
                               .loc[pd.IndexSlice[:,'L'],:]
@@ -410,7 +436,7 @@ def check():
                               .reindex(index_return.index)
                               .fillna(0)
                               .rename(columns={'RHExposure': 'Long Position'})
-                    )*100 if long_count > 0 else None 
+                     )*100 if long_count > 0 else None
 
     short_position = (sql_pl_df.groupby(['processDate', 'side'])[['RHExposure']]
                                .sum()
@@ -421,7 +447,7 @@ def check():
                                .reindex(index_return.index)
                                .fillna(0)
                                .rename(columns={'RHExposure': 'Short Position'})
-                     )*100 if short_count > 0 else None 
+                      )*100 if short_count > 0 else None
 
     position_size_graph = {'data': ([{
                     'x': [pd.to_datetime(str(i)).strftime('%Y-%m-%d') for i in long_position.index],
@@ -442,15 +468,14 @@ def check():
                 ] if short_count > 0 else []),
                 'layout': {
                     'margin': {'l': 40, 'r': 40},
-                    #'width': 750,
-                    #'height': 240,
+                    # 'width': 750,
+                    # 'height': 240,
                     'legend': {'font': {'size': 10}, 'x': 1.05},
                     'yaxis': {
                         'ticksuffix': '%'
                     }
                 }
     } 
-
 
     render_obj = dict()
     render_obj['name'] = position_name
@@ -460,18 +485,18 @@ def check():
     render_obj['long_rate_graph'] = long_rate_graph
     render_obj['short_price_graph'] = short_price_graph
     render_obj['short_rate_graph'] = short_rate_graph
-    render_obj['position_size_graph'] = position_size_graph 
+    render_obj['position_size_graph'] = position_size_graph
 
-    return render_template('tradehistory/result.html', 
-                            params=render_obj, 
-                            op_hit=op_hit, 
-                            alpha=alpha, 
-                            pl = (attr_df.sum()*100).to_dict(),
-                            rhop = (op_df['RH'].sum()*100).to_dict(),
-                            yaop = (op_df['YA'].sum()*100).to_dict(),
-                            lrop = (op_df['LR'].sum()*100).to_dict(),
-                            rhalpha = (alpha_df['RH'].sum()*100).to_dict(),
-                            yaalpha = (alpha_df['YA'].sum()*100).to_dict(),
-                            lralpha = (alpha_df['LR'].sum()*100).to_dict(),
-                            tbldata=pl_hit,
-                            justify='right')
+    return render_template('tradehistory/result.html',
+                           params=render_obj,
+                           op_hit=op_hit,
+                           alpha=alpha,
+                           pl=(attr_df.sum() * 100).to_dict(),
+                           rhop=(op_df['RH'].sum() * 100).to_dict(),
+                           yaop=(op_df['YA'].sum() * 100).to_dict(),
+                           lrop=(op_df['LR'].sum() * 100).to_dict(),
+                           rhalpha=(alpha_df['RH'].sum() * 100).to_dict(),
+                           yaalpha=(alpha_df['YA'].sum() * 100).to_dict(),
+                           lralpha=(alpha_df['LR'].sum() * 100).to_dict(),
+                           tbldata=pl_hit,
+                           justify='right')
