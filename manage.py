@@ -22,6 +22,14 @@ def test():
     unittest.TextTestRunner(verbosity=2).run(tests)
 
 
+@manager.command
+def profile(length=25, profile_dir=None):
+    """Start the server under profiler"""
+    from werkzeug.contrib.profiler import ProfilerMiddleware
+    app.wsgi_app = ProfilerMiddleware(app.wsgi_app, restrictions=[length], profile_dir=profile_dir)
+    app.run("127.0.0.1", 5000)
+
+
 manager.add_command('shell', Shell(make_context=make_shell_context))
 
 if __name__ == '__main__':
