@@ -41,6 +41,9 @@ def create_app(config_name):
     from .tradehistory import tradehistory as tradehistory_blueprint
     app.register_blueprint(tradehistory_blueprint, url_prefix='/tradehistory')
 
+    from .wiki import wiki as wiki_blueprint
+    app.register_blueprint(wiki_blueprint, url_prefix='/wiki')
+
     from .front import front as front_blueprint
     app.register_blueprint(front_blueprint, url_prefix='/')
 

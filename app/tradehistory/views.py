@@ -7,7 +7,7 @@ import numpy as np
 import pymysql
 from datetime import datetime, timedelta
 from decimal import *
-
+import urllib
 from . import tradehistory
 
 
@@ -23,6 +23,7 @@ def before_request():
     g.lineWidth = 3
     g.markerSize = 7
     g.thinLineWidth = 2
+    g.left_margin = 60
 
 
 @tradehistory.teardown_request
@@ -46,7 +47,7 @@ def sum_long_short(df):
 def get_ratio_df(trade_df, df2, buysell, longshort):
     ratiodf = (trade_df.sort_index()
                        .loc[pd.IndexSlice[:,'RH',buysell,longshort], ['price']]
-                       .div(df2['close'],axis=0, level=0)
+                       .div(df2,axis=0, level=0)
                        .reset_index()[['tradeDate', 'price']]
                        .set_index('tradeDate')
               )
@@ -121,13 +122,15 @@ def get_trade_df(stock_price_df, quick, start_date, end_date, con):
 
 
 def get_index_df(start_date, end_date, con):
-    index_df = sql.read_sql('''SELECT b.priceDate, b.close
+    index_df = sql.read_sql('''SELECT b.priceDate,a.indexCode, b.close
         FROM `t07Index` a, `t06DailyIndex` b
         WHERE a.indexID = b.indexID
         AND b.priceDate >= DATE_SUB('%s', INTERVAL 1 DAY) AND b.priceDate <= '%s'
-        AND a.indexCode = 'TPX';''' % (start_date, end_date), con, parse_dates=['priceDate'], index_col='priceDate')
+        AND a.indexCode IN ('TPX','KOSPI','TWSE','HSCEI');''' % (start_date, end_date), con, parse_dates=['priceDate'])
 
-    return index_df
+    p_index_df = index_df.pivot('priceDate', 'indexCode', 'close')
+    p_index_df.fillna(method='ffill', inplace=True)
+    return p_index_df
 
 
 def get_stock_price_df(quick, start_date, end_date, con):
@@ -141,6 +144,104 @@ def get_stock_price_df(quick, start_date, end_date, con):
     return price_df
 
 
+def get_index_name(quick,con):
+    result = sql.read_sql('''SELECT b.bbgCode
+        FROM t01Instrument a
+        INNER JOIN t02Exchange b ON a.exchangeID=b.exchangeID
+        WHERE a.quick='%s'
+        ;
+    ''' % quick, con).iloc[0,:].values[0]
+    
+    mapping = {
+        'JP': 'TPX',
+        'HK': 'HSCEI',
+        'TW': 'TWSE',
+        'KS': 'KOSPI'
+    }
+    return mapping[result]
+
+
+def get_wiki_df(quick, start_date, con):
+
+    t = sql.read_sql('''
+                SELECT DISTINCT processDate, a.personCode,
+                REPLACE(commentText, '\n', '<br>') AS commentText
+                FROM hkg02p.t01Person a, noteDB.Note N
+                WHERE a.personID = N.personID AND N.code='%s'
+                AND processDate >= '%s'
+                #AND commentText > ''
+                ORDER BY processDate DESC
+    ;''' % (quick, start_date), con , parse_dates=['processDate']) 
+
+    return t
+
+
+def make_table(df, wiki_df, quick, numcol, table_caption=''):
+    '''
+    turn DataFrame into HTML table
+    '''
+    count = 0
+    table_html = ''
+    style = 'class="table"'
+    field_separator = '#'
+    #df.index = df.index.map(lambda x: str(x)[:12])
+    rows = df.to_csv(sep=field_separator).split('\n')
+    wiki_rows = wiki_df.to_csv(sep=field_separator, header=False).split('\n')
+    
+    table_header = ('<table %s><thead><tr>' % style) + ''.join(
+            ['<th>' + h + '</th>' for h in rows[0].split(field_separator)[1:numcol+1]]) + '</tr></thead>'
+
+    if table_caption != '':
+        table_header += '<caption>' + table_caption + '</caption><tbody>'
+    else:
+        table_header += '<tbody>'
+
+    table_html += table_header
+
+    total_rows = 1
+    i = 1
+    j = 0
+    wiki_count = 0
+    wiki_r = wiki_rows[j].split(field_separator) if j < len(wiki_rows) else []
+        #print(wiki_r)
+    wiki_date = datetime.strptime(wiki_r[1], '%Y-%m-%d') if len(wiki_r) > 1 else datetime.now()
+    
+    while i < len(rows):
+        r = rows[i]
+        if r != '':
+            elements = r.split(field_separator)
+            start_date = datetime.strptime(elements[1], '%Y-%m-%d')
+            end_date = datetime.strptime(elements[numcol+1], '%Y-%m-%d')
+            
+            while wiki_date > end_date and j < len(wiki_rows):
+                #print 'over', wiki_r, wiki_date, end_date
+                j +=1
+                wiki_r = wiki_rows[j].split(field_separator) if j < len(wiki_rows) else []
+                wiki_date = datetime.strptime(wiki_r[1], '%Y-%m-%d') if len(wiki_r) > 1 else datetime.now()
+            
+            while wiki_date >= start_date and wiki_date <= end_date:
+                wiki_count += 1
+                #print 'ok', wiki_r
+                j += 1
+                wiki_r = wiki_rows[j].split(field_separator) if j < len(wiki_rows) else []
+                wiki_date = datetime.strptime(wiki_r[1], '%Y-%m-%d') if len(wiki_r) > 1 else datetime.now()
+            
+            #print(start_date, end_date, wiki_count)
+            if wiki_count > 0:
+                table_html += '<tr>' + ''.join([('<th><a href="/wiki/?quick=%s&startDate=%s&endDate=%s" data-remote="false" data-toggle="modal" data-target="#wikimodal">' % 
+                                             (urllib.quote(quick), elements[1].title(), elements[numcol+1].title())) + elements[1].title() + 
+                                                 '</a></th>'] + 
+                                           ['<td>' + h + '</td>' for h in  elements[2:numcol+1] ]) + '</tr>'
+            else:
+                table_html += '<tr>' + ''.join(['<th>' + elements[1].title() + '</th>'] + 
+                                           ['<td>' + h + '</td>' for h in  elements[2:numcol+1] ]) + '</tr>'
+            wiki_count = 0
+        i += 1
+    table_html += '</tbody></table>'
+
+    return table_html
+
+
 @tradehistory.route('/check')
 def check():
     quick = request.args.get('quick', '7203')
@@ -150,9 +251,9 @@ def check():
     if sql_pl_df['processDate'].count() == 0:
         return "Sorry, no position for this code."
 
-    position_name = sql_pl_df.loc[0, 'name']
+    index_name = get_index_name(quick, g.con)
 
-    
+    position_name = sql_pl_df.loc[0, 'name']
 
     attr_df = (sql_pl_df.groupby(['firstTradeDate', 'side'])
                .sum()[['RHAttr', 'YAAttr', 'LRAttr']]
@@ -188,7 +289,7 @@ def check():
                         .fillna(0)
               ) 
 
-    be = beta_exposure.mul(index_return['close'], axis='index', level=0)
+    be = beta_exposure.mul(index_return[index_name], axis='index', level=0)
     alpha_df = dict()
     alpha_df['RH'] = attribution['RHAttr'].subtract(be['RHBetaExposure'])
     alpha_df['YA'] = attribution['YAAttr'].subtract(be['YABetaExposure'])
@@ -213,9 +314,9 @@ def check():
         alpha[f]['short_ratio'] = alpha[f]['short_hit'] / pl_hit[f+'Attr']['short_count'] if pl_hit[f+'Attr']['short_count'] > 0 else 0 
 
     op_df = dict()
-    op_df['RH'] = attribution['RHAttr'].subtract(exposure['RHExposure'].mul(index_return['close'], axis='index', level=0))
-    op_df['YA'] = attribution['YAAttr'].subtract(exposure['YAExposure'].mul(index_return['close'], axis='index', level=0))
-    op_df['LR'] = attribution['LRAttr'].subtract(exposure['LRExposure'].mul(index_return['close'], axis='index', level=0))
+    op_df['RH'] = attribution['RHAttr'].subtract(exposure['RHExposure'].mul(index_return[index_name], axis='index', level=0))
+    op_df['YA'] = attribution['YAAttr'].subtract(exposure['YAExposure'].mul(index_return[index_name], axis='index', level=0))
+    op_df['LR'] = attribution['LRAttr'].subtract(exposure['LRExposure'].mul(index_return[index_name], axis='index', level=0))
 
     rh_op = (op_df['RH'].dropna()
                        .groupby(axis=0,level=1)
@@ -246,6 +347,7 @@ def check():
 
     day_count = sql_pl_df.groupby(['firstTradeDate', 'side']).count()['processDate']
     tbl['Days'] = day_count
+    tbl['CloseDate'] = (sql_pl_df.groupby(['firstTradeDate', 'side'], sort=False)['processDate'].max())
     tbl['RHAttr'] = tbl['RHAttr'].map(lambda x: '{:.2f}%'.format(x * 100))
     tbl = (tbl.reset_index()
               .set_index('firstTradeDate')
@@ -258,9 +360,11 @@ def check():
     tbl = tbl.reset_index()
     tbl['Alpha'] = tbl['Alpha'].map(lambda x: '{:.2f}%'.format(x * 100))
     tbl['OP'] = tbl['OP'].map(lambda x: '{:.2f}%'.format(x * 100))
-    tbl = tbl[['Date', 'side', 'Analyst', 'Days', 'RHAttr', 'Alpha', 'OP']]
+    tbl = tbl[['Date', 'side', 'Analyst', 'Days', 'RHAttr', 'Alpha', 'OP', 'CloseDate']]
     tbl = tbl.rename(columns={'side': 'Side', 'RHAttr': 'PL'})
-    tbl_html = tbl.to_html(index=False, classes='table').replace('border="1"','border="0"')
+
+    wiki_df = get_wiki_df(quick, g.start_date, g.con)
+    tbl_html = make_table(tbl, wiki_df, quick, numcol=7)
 
     df3 = get_stock_price_df(quick,
                              sql_pl_df['processDate'].min().strftime('%Y-%m-%d'),
@@ -269,7 +373,7 @@ def check():
 
     trade_df = get_trade_df(df3, quick, g.start_date, g.end_date, g.con)
 
-    ratedf = df3.div(df2)
+    ratedf = df3[['close']].div(df2[index_name], axis=0)
 
     long_price_graph = {'data': [{
                     'x': [pd.to_datetime(str(i)).strftime('%Y-%m-%d') for i in df3.index],
@@ -305,7 +409,7 @@ def check():
                            'S' in trade_df.index.levels[2] and 
                            'L' in trade_df.index.levels[3] else []),
                 'layout': {
-                    'margin': {'l': 40, 'r': 40},
+                    'margin': {'l': g.left_margin, 'r': 40},
                     #'width': 750,
                     #'height': 240,
                     'legend': {'font': {'size': 10}, 'x': 1.05}
@@ -322,8 +426,8 @@ def check():
                 } for col in ratedf.columns
                 ]+([{
                     'x': [pd.to_datetime(str(i)).strftime('%Y-%m-%d') 
-                          for i in get_ratio_df(trade_df, df2, 'B','L').index],
-                    'y': get_ratio_df(trade_df, df2, 'B','L')['price'].values.tolist(),
+                          for i in get_ratio_df(trade_df, df2[index_name], 'B','L').index],
+                    'y': get_ratio_df(trade_df, df2[index_name], 'B','L')['price'].values.tolist(),
                     'mode': 'markers',
                     'name': 'BL Ratio',
                     'marker': {
@@ -334,8 +438,8 @@ def check():
                            'B' in trade_df.index.levels[2] and 
                            'L' in trade_df.index.levels[3] else [])+([{
                     'x': [pd.to_datetime(str(i)).strftime('%Y-%m-%d') 
-                          for i in get_ratio_df(trade_df, df2, 'S','L').index],
-                    'y': get_ratio_df(trade_df, df2, 'S','L')['price'].values.tolist(),
+                          for i in get_ratio_df(trade_df, df2[index_name], 'S','L').index],
+                    'y': get_ratio_df(trade_df, df2[index_name], 'S','L')['price'].values.tolist(),
                     'mode': 'markers',
                     'name': 'SL Ratio',
                     'marker': {
@@ -346,7 +450,7 @@ def check():
                            'S' in trade_df.index.levels[2] and 
                            'L' in trade_df.index.levels[3] else []),
                 'layout': {
-                    'margin': {'l': 40, 'r': 40},
+                    'margin': {'l': g.left_margin, 'r': 40},
                     #'width': 750,
                     #'height': 240,
                     'legend': {'font': {'size': 10}, 'x': 1.05}
@@ -383,7 +487,7 @@ def check():
                     }
                     }] if 'RH' in trade_df.index.levels[1] and 'S' in trade_df.index.levels[2] and 'S' in trade_df.index.levels[3] else []),
                 'layout': {
-                    'margin': {'l': 40, 'r': 40},
+                    'margin': {'l': g.left_margin, 'r': 40},
                     #'width': 750,
                     #'height': 240,
                     'legend': {'font': {'size': 10}, 'x': 1.05}
@@ -397,21 +501,23 @@ def check():
                     'line': {'width':g.lineWidth,
                              'color': "rgb(182, 182, 182)" 
                              }
-                } for col in df3.columns
+                } for col in ratedf.columns
                 ]+([{
                     'x': [pd.to_datetime(str(i)).strftime('%Y-%m-%d') 
-                          for i in get_ratio_df(trade_df, df2, 'B','S').index],
-                    'y': get_ratio_df(trade_df, df2, 'B','S')['price'].values.tolist(),
+                          for i in get_ratio_df(trade_df, df2[index_name], 'B','S').index],
+                    'y': get_ratio_df(trade_df, df2[index_name], 'B','S')['price'].values.tolist(),
                     'mode': 'markers',
                     'name': 'BC Ratio',
                     'marker': {
                         'color': 'rgb(27, 93, 225)',
                         'size':g.markerSize
                     }
-                    }] if 'RH' in trade_df.index.levels[1] and 'B' in trade_df.index.levels[2] and 'S' in trade_df.index.levels[3] else [])+([{
+                    }] if 'RH' in trade_df.index.levels[1] and 
+                            'B' in trade_df.index.levels[2] and 
+                            'S' in trade_df.index.levels[3] else [])+([{
                     'x': [pd.to_datetime(str(i)).strftime('%Y-%m-%d') 
-                          for i in get_ratio_df(trade_df, df2, 'S','S').index],
-                    'y': get_ratio_df(trade_df, df2, 'S','S')['price'].values.tolist(),
+                          for i in get_ratio_df(trade_df, df2[index_name], 'S','S').index],
+                    'y': get_ratio_df(trade_df, df2[index_name], 'S','S')['price'].values.tolist(),
                     'mode': 'markers',
                     'name': 'SS Ratio',
                     'marker': {
@@ -420,7 +526,7 @@ def check():
                     }
                     }] if 'RH' in trade_df.index.levels[1] and 'S' in trade_df.index.levels[2] and 'S' in trade_df.index.levels[3] else []),
                 'layout': {
-                    'margin': {'l': 40, 'r': 40},
+                    'margin': {'l': g.left_margin, 'r': 40},
                     #'width': 750,
                     #'height': 240,
                     'legend': {'font': {'size': 10}, 'x': 1.05}
@@ -467,7 +573,7 @@ def check():
                 } for col in short_position.columns
                 ] if short_count > 0 else []),
                 'layout': {
-                    'margin': {'l': 40, 'r': 40},
+                    'margin': {'l': g.left_margin, 'r': 40},
                     # 'width': 750,
                     # 'height': 240,
                     'legend': {'font': {'size': 10}, 'x': 1.05},

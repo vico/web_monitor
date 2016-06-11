@@ -61,9 +61,9 @@
                     <td></td>
                     <td></td>
                     <td></td>
-                    <td>{{'{:.0f}%'.format((tbldata['RHAttr']['long_ratio']+tbldata['RHAttr']['short_ratio'])/2*100)}}</td>
-                    <td>{{'{:.0f}%'.format((op_hit['RH']['long_ratio']+op_hit['RH']['short_ratio'])/2*100)}}</td>
-                    <td>{{'{:.0f}%'.format((alpha['RH']['long_ratio']+alpha['RH']['short_ratio'])/2*100)}}</td>
+                    <td>{{'{:.0f}%'.format((tbldata['RHAttr']['long_ratio']+tbldata['RHAttr']['short_ratio'])/(tbldata['RHAttr']['long_count'] + tbldata['RHAttr']['short_count'])*100)}}</td>
+                    <td>{{'{:.0f}%'.format((op_hit['RH']['long_ratio']+op_hit['RH']['short_ratio'])/(tbldata['RHAttr']['long_count'] + tbldata['RHAttr']['short_count'])*100)}}</td>
+                    <td>{{'{:.0f}%'.format((alpha['RH']['long_ratio']+alpha['RH']['short_ratio'])/(tbldata['RHAttr']['long_count'] + tbldata['RHAttr']['short_count'])*100)}}</td>
                 </tr>
                 {% endif %}
                 {% endif %}
@@ -106,9 +106,9 @@
                     <td></td>
                     <td></td>
                     <td></td>
-                    <td>{{'{:.0f}%'.format((tbldata.YAAttr.long_ratio+tbldata.YAAttr.short_ratio)/2*100)}}</td>
-                    <td>{{'{:.0f}%'.format((op_hit.YA.long_ratio+op_hit.YA.short_ratio)/2*100)}}</td>
-                    <td>{{'{:.0f}%'.format((alpha.YA.long_ratio+alpha.YA.short_ratio)/2*100)}}</td>
+                    <td>{{'{:.0f}%'.format((tbldata.YAAttr.long_ratio+tbldata.YAAttr.short_ratio)/(tbldata.YAAttr.long_count + tbldata.YAAttr.short_count)*100)}}</td>
+                    <td>{{'{:.0f}%'.format((op_hit.YA.long_ratio+op_hit.YA.short_ratio)/(tbldata.YAAttr.long_count + tbldata.YAAttr.short_count)*100)}}</td>
+                    <td>{{'{:.0f}%'.format((alpha.YA.long_ratio+alpha.YA.short_ratio)/(tbldata.YAAttr.long_count + tbldata.YAAttr.short_count)*100)}}</td>
                 </tr>
                 {% endif %}
                 {% endif %}
@@ -150,9 +150,9 @@
                     <td></td>
                     <td></td>
                     <td></td>
-                    <td>{{'{:.0f}%'.format((tbldata.LRAttr.long_ratio+tbldata.LRAttr.short_ratio)/2*100)}}</td>
-                    <td>{{'{:.0f}%'.format((op_hit.LR.long_ratio+op_hit.LR.short_ratio)/2*100)}}</td>
-                    <td>{{'{:.0f}%'.format((alpha.LR.long_ratio+alpha.LR.short_ratio)/2*100)}}</td>
+                    <td>{{'{:.0f}%'.format((tbldata.LRAttr.long_ratio+tbldata.LRAttr.short_ratio)/(tbldata.LRAttr.long_count + tbldata.LRAttr.short_count)*100)}}</td>
+                    <td>{{'{:.0f}%'.format((op_hit.LR.long_ratio+op_hit.LR.short_ratio)/(tbldata.LRAttr.long_count + tbldata.LRAttr.short_count)*100)}}</td>
+                    <td>{{'{:.0f}%'.format((alpha.LR.long_ratio+alpha.LR.short_ratio)/(tbldata.LRAttr.long_count + tbldata.LRAttr.short_count)*100)}}</td>
                 </tr>
                 {% endif %}
                 {% endif %}
@@ -182,6 +182,39 @@
 <div class="col-md-5">
     {{ params['table'] | safe }}
 </div>
+
+<script src="{{ url_for('static', filename='jquery-2.2.0.min.js') }}"></script>
+
+
+<!-- wiki display modal -->
+<div class="modal fade" id="wikimodal" role="dialog" aria-labelledby="modalTitle">
+   <div class="modal-dialog" role="document">
+       <div class="modal-content">
+            <div class="modal-header">  
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+            <h4 class="modal-title" id="myModalLabel">Wiki Comment</h4>
+          </div>
+          <div class="modal-body">
+            ...
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+          </div>
+       </div>
+   </div>
+</div>
+
+
+<script>
+    $(document).ready(function() {
+        $('#wikimodal').on('show.bs.modal', function(e) {
+            var link = $(e.relatedTarget);
+            $(this).find(".modal-body").load(link.attr("href"));
+
+        });
+     });
+ </script>
+
 
 {% if tbldata['RHAttr']['long_count'] > 0 %}
   <script>
@@ -229,4 +262,9 @@
     }
   </script>
 {% endif %}
+
+
+
+
+
 {% endblock %}
