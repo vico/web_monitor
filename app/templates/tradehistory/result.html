@@ -14,175 +14,85 @@
         <button type="submit" class="btn btn-default">Go</button>
     </form>
 </div>
-<div class="col-md-7">
+<div class="col-md-12">
     <div class="col-md-6">
         <table class="table">
             <thead>
                 <tr>
-                    <th></th><th></th><th>Trade</th><th>PL</th><th>Outperformance</th><th>Alpha</th><th>Win%</th>
+                    <th></th><th></th><th>Trade</th><th>PL</th><th>Outperf.</th><th>Alpha</th><th>Win%</th>
                     <th>OP%</th><th>Al.%</th>
                 </tr>
             </thead>
             <tbody>
-                {% if alpha['RH'] is defined and op_hit['RH'] is defined %}
-                {% if tbldata['RHAttr']['long_count'] > 0 %}
+                {% for fund in ['RH','YA','LR'] %}
+                
+                {% if alpha[fund] is defined and op_hit[fund] is defined %}
+                {% if tbldata[fund+'Attr']['long_count'] > 0 %}
                 <tr>
                     <td>RH</td>
                     <td>L</td>
-                    <td>{{tbldata['RHAttr']['long_count']}}</td>
-                    <td>{{'{:.2f}%'.format(pl[('RHAttr', 'L')])}}</td>
-                    <td>{{'{:.2f}%'.format(rhop['L'])}}</td>
-                    <td>{{'{:.2f}%'.format(rhalpha['L'])}}</td>
-                    <td>{{'{:.0f}%'.format(tbldata['RHAttr']['long_ratio']*100)}}</td>
-                    <td>{{'{:.0f}%'.format(op_hit['RH']['long_ratio']*100)}}</td>
-                    <td>{{'{:.0f}%'.format(alpha['RH']['long_ratio']*100)}}</td>
+                    <td>{{tbldata[fund+'Attr']['long_count']}}</td>
+                    <td>{{'{:.2f}%'.format(pl[(fund+'Attr', 'L')])}}</td>
+                    <td>{{'{:.2f}%'.format( rhop['L'] if fund == 'RH' else (yaop['L'] if fund=='YA' else (lrop['L'] if fund == 'LR' else 0)))}}</td>
+                    <td>{{'{:.2f}%'.format(rhalpha['L'] if fund == 'RH' else (yaalpha['L'] if fund == 'YA' else (lralpha['L'] if fund == 'LR' else 0)))}}</td>
+                    <td>{{'{:.0f}%'.format(tbldata[fund+'Attr']['long_ratio']*100)}}</td>
+                    <td>{{'{:.0f}%'.format(op_hit[fund]['long_ratio']*100)}}</td>
+                    <td>{{'{:.0f}%'.format(alpha[fund]['long_ratio']*100)}}</td>
                 </tr>
                 {% endif %}
 
                 {% if tbldata.RHAttr.short_count > 0 %}
                 <tr>
-                    <td>{{ '' if tbldata.RHAttr.long_count > 0 else 'RH' }}</td>
+                    <td>{{ '' if tbldata[fund + 'Attr'].long_count > 0 else fund }}</td>
                     <td>S</td>
-                    <td>{{tbldata['RHAttr']['short_count']}}</td>
-                    <td>{{'{:.2f}%'.format(pl[('RHAttr', 'S')])}}</td>
-                    <td>{{'{:.2f}%'.format(rhop['S'])}}</td>
-                    <td>{{'{:.2f}%'.format(rhalpha['S'])}}</td>
-                    <td>{{'{:.0f}%'.format(tbldata['RHAttr']['short_ratio']*100)}}</td>
-                    <td>{{'{:.0f}%'.format(op_hit['RH']['short_ratio']*100)}}</td>
-                    <td>{{'{:.0f}%'.format(alpha['RH']['short_ratio']*100)}}</td>
+                    <td>{{tbldata[fund+'Attr']['short_count']}}</td>
+                    <td>{{'{:.2f}%'.format(pl[(fund+'Attr', 'S')])}}</td>
+                    <td>{{'{:.2f}%'.format(rhop['S'] if fund=='RH' else (yaop['S'] if fund == 'YA' else (lrop['S'] if fund == 'LR' else 0)))}}</td>
+                    <td>{{'{:.2f}%'.format(rhalpha['S'] if fund == 'RH' else (yaalpha['S'] if fund == 'YA' else (lralpha['S'] if fund == 'LR' else 0)))}}</td>
+                    <td>{{'{:.0f}%'.format(tbldata[fund + 'Attr']['short_ratio']*100)}}</td>
+                    <td>{{'{:.0f}%'.format(op_hit[fund]['short_ratio']*100)}}</td>
+                    <td>{{'{:.0f}%'.format(alpha[fund]['short_ratio']*100)}}</td>
                 </tr>
                 {% endif %}
 
-                {% if tbldata['RHAttr']['long_count'] > 0 and tbldata['RHAttr']['short_count'] > 0 %}
+                {% if tbldata[fund+'Attr']['long_count'] > 0 and tbldata[fund+'Attr']['short_count'] > 0 %}
                 <tr>
                     <td></td>
                     <td>Total</td>
-                    <td>{{tbldata['RHAttr']['long_count'] + tbldata['RHAttr']['short_count']}}</td>
+                    <td>{{tbldata[fund+'Attr']['long_count'] + tbldata[fund+'Attr']['short_count']}}</td>
                     <td></td>
                     <td></td>
                     <td></td>
-                    <td>{{'{:.0f}%'.format((tbldata['RHAttr']['long_ratio']+tbldata['RHAttr']['short_ratio'])/(tbldata['RHAttr']['long_count'] + tbldata['RHAttr']['short_count'])*100)}}</td>
-                    <td>{{'{:.0f}%'.format((op_hit['RH']['long_ratio']+op_hit['RH']['short_ratio'])/(tbldata['RHAttr']['long_count'] + tbldata['RHAttr']['short_count'])*100)}}</td>
-                    <td>{{'{:.0f}%'.format((alpha['RH']['long_ratio']+alpha['RH']['short_ratio'])/(tbldata['RHAttr']['long_count'] + tbldata['RHAttr']['short_count'])*100)}}</td>
+                    <td>{{'{:.0f}%'.format(tbldata[fund+'Attr']['total_ratio']*100)}}</td>
+                    <td>{{'{:.0f}%'.format(op_hit[fund]['total_ratio']*100)}}</td>
+                    <td>{{'{:.0f}%'.format(alpha[fund]['total_ratio']*100)}}</td>
                 </tr>
                 {% endif %}
                 {% endif %}
-
-
-                {% if alpha.YA is defined and op_hit.YA is defined %}
-                {% if tbldata['YAAttr']['long_count'] > 0 %}
-                <tr>
-                    <td>YA</td>
-                    <td>L</td>
-                    <td>{{tbldata['YAAttr']['long_count']}}</td>
-                    <td>{{'{:.2f}%'.format(pl[('YAAttr', 'L')])}}</td>
-                    <td>{{'{:.2f}%'.format(yaop['L'])}}</td>
-                    <td>{{'{:.2f}%'.format(yaalpha['L'])}}</td>
-                    <td>{{'{:.0f}%'.format(tbldata['YAAttr']['long_ratio']*100)}}</td>
-                    <td>{{'{:.0f}%'.format(op_hit['YA']['long_ratio']*100)}}</td>
-                    <td>{{'{:.0f}%'.format(alpha['YA']['long_ratio']*100)}}</td>
-                </tr>
-                {% endif %}
-
-                {% if tbldata.YAAttr.short_count > 0 %}
-                <tr>
-                    <td>{{ '' if tbldata.YAAttr.long_count > 0 else 'YA' }}</td>
-                    <td>S</td>
-                    <td>{{tbldata['YAAttr']['short_count']}}</td>
-                    <td>{{'{:.2f}%'.format(pl[('YAAttr', 'S')])}}</td>
-                    <td>{{'{:.2f}%'.format(yaop['S'])}}</td>
-                    <td>{{'{:.2f}%'.format(yaalpha['S'])}}</td>
-                    <td>{{'{:.0f}%'.format(tbldata.YAAttr.short_ratio*100)}}</td>
-                    <td>{{'{:.0f}%'.format(op_hit.YA.short_ratio*100)}}</td>
-                    <td>{{'{:.0f}%'.format(alpha.YA.short_ratio*100)}}</td>
-                </tr>
-                {% endif %}
-
-                {% if tbldata.YAAttr.long_count > 0 and tbldata.YAAttr.short_count > 0 %}
-                <tr>
-                    <td></td>
-                    <td>Total</td>
-                    <td>{{tbldata.YAAttr.long_count + tbldata.YAAttr.short_count}}</td>
-                    <td></td>
-                    <td></td>
-                    <td></td>
-                    <td>{{'{:.0f}%'.format((tbldata.YAAttr.long_ratio+tbldata.YAAttr.short_ratio)/(tbldata.YAAttr.long_count + tbldata.YAAttr.short_count)*100)}}</td>
-                    <td>{{'{:.0f}%'.format((op_hit.YA.long_ratio+op_hit.YA.short_ratio)/(tbldata.YAAttr.long_count + tbldata.YAAttr.short_count)*100)}}</td>
-                    <td>{{'{:.0f}%'.format((alpha.YA.long_ratio+alpha.YA.short_ratio)/(tbldata.YAAttr.long_count + tbldata.YAAttr.short_count)*100)}}</td>
-                </tr>
-                {% endif %}
-                {% endif %}
-
-                {% if alpha.LR is defined and op_hit.LR is defined %}
-                {% if tbldata.LRAttr.long_count > 0 %}
-                <tr>
-                    <td>LR</td>
-                    <td>L</td>
-                    <td>{{tbldata.LRAttr.long_count}}</td>
-                    <td>{{'{:.2f}%'.format(pl[('LRAttr', 'L')])}}</td>
-                    <td>{{'{:.2f}%'.format(lrop['L'])}}</td>
-                    <td>{{'{:.2f}%'.format(lralpha['L'])}}</td>
-                    <td>{{'{:.0f}%'.format(tbldata['LRAttr']['long_ratio']*100)}}</td>
-                    <td>{{'{:.0f}%'.format(op_hit['LR']['long_ratio']*100)}}</td>
-                    <td>{{'{:.0f}%'.format(alpha['LR']['long_ratio']*100)}}</td>
-                </tr>
-                {% endif %}
-
-                {% if tbldata.LRAttr.short_count > 0 %}
-                <tr>
-                    <td>{{ '' if tbldata.LRAttr.long_count > 0 else 'LR' }}</td>
-                    <td>S</td>
-                    <td>{{tbldata['LRAttr']['short_count']}}</td>
-                    <td>{{'{:.2f}%'.format(pl[('LRAttr', 'S')])}}</td>
-                    <td>{{'{:.2f}%'.format(lrop['S'])}}</td>
-                    <td>{{'{:.2f}%'.format(lralpha['S'])}}</td>
-                    <td>{{'{:.0f}%'.format(tbldata.LRAttr.short_ratio*100)}}</td>
-                    <td>{{'{:.0f}%'.format(op_hit.LR.short_ratio*100)}}</td>
-                    <td>{{'{:.0f}%'.format(alpha.LR.short_ratio*100)}}</td>
-                </tr>
-                {% endif %}
-
-                {% if tbldata.LRAttr.long_count > 0 and tbldata.LRAttr.short_count > 0 %}
-                <tr>
-                    <td></td>
-                    <td>Total</td>
-                    <td>{{tbldata.LRAttr.long_count + tbldata.LRAttr.short_count}}</td>
-                    <td></td>
-                    <td></td>
-                    <td></td>
-                    <td>{{'{:.0f}%'.format((tbldata.LRAttr.long_ratio+tbldata.LRAttr.short_ratio)/(tbldata.LRAttr.long_count + tbldata.LRAttr.short_count)*100)}}</td>
-                    <td>{{'{:.0f}%'.format((op_hit.LR.long_ratio+op_hit.LR.short_ratio)/(tbldata.LRAttr.long_count + tbldata.LRAttr.short_count)*100)}}</td>
-                    <td>{{'{:.0f}%'.format((alpha.LR.long_ratio+alpha.LR.short_ratio)/(tbldata.LRAttr.long_count + tbldata.LRAttr.short_count)*100)}}</td>
-                </tr>
-                {% endif %}
-                {% endif %}
+            {% endfor %}
+                
             </tbody>
         </table>
     </div>
-    <div class="col-md-12">
-       {% if tbldata['RHAttr']['long_count'] > 0 %}
-       <h4>Long Charts</h4>
-       <div id="long_price_graph"></div>
-       <div id="long_rate_graph"></div>
-       {% endif %}
+    
+    <div class="col-md-6">
+        {{ params['table'] | safe }}
+    </div>
+</div>
 
-       {% if tbldata['RHAttr']['long_count'] > 0 or tbldata['RHAttr']['short_count'] > 0 %}
+<div class="col-md-12">
+        {% if tbldata['RHAttr']['long_count'] > 0 or tbldata['RHAttr']['short_count'] > 0 %}
        <h4>Position Size Chart</h4>
        <div id="position_size_graph"></div> 
        {% endif %}
 
-       {% if tbldata.RHAttr.short_count > 0 %}
-       <h4>Short Charts</h4>
-       <div id="short_price_graph"></div>
-       <div id="short_rate_graph"></div>
+       {% if tbldata['RHAttr']['long_count'] > 0 or tbldata['RHAttr']['short_count'] > 0 %}
+       <h4>Trade Charts</h4>
+       <div id="long_price_graph"></div>
+       <div id="long_rate_graph"></div>
        {% endif %}
-    </div>
-
+       
 </div>
-<div class="col-md-5">
-    {{ params['table'] | safe }}
-</div>
-
 <script src="{{ url_for('static', filename='jquery-2.2.0.min.js') }}"></script>
 
 
@@ -205,18 +115,8 @@
 </div>
 
 
-<script>
-    $(document).ready(function() {
-        $('#wikimodal').on('show.bs.modal', function(e) {
-            var link = $(e.relatedTarget);
-            $(this).find(".modal-body").load(link.attr("href"));
 
-        });
-     });
- </script>
-
-
-{% if tbldata['RHAttr']['long_count'] > 0 %}
+{% if tbldata['RHAttr']['long_count'] > 0 or tbldata['RHAttr']['short_count'] > 0 %}
   <script>
      long_plot = function() {
      long_price_graph = document.getElementById("long_price_graph");
@@ -248,19 +148,7 @@
 {% endif %}
 
 {% if tbldata['RHAttr']['short_count'] > 0 %}
-  <script>
-      short_plot = function() {
-         short_price_graph = document.getElementById("short_price_graph");
-         short_rate_graph = document.getElementById('short_rate_graph');
-        Plotly.plot( short_price_graph, {{params['short_price_graph'].data | safe }}, {{ params['short_price_graph'].layout | safe }});
-        Plotly.plot( short_rate_graph, {{params['short_rate_graph'].data | safe }}, {{ params['short_rate_graph'].layout | safe }});
-        };
-      if (document.readyState === 'complete' || document.readyState !== 'loading') {
-        short_plot();
-    } else {
-        document.addEventListener('DOMContentLoaded', short_plot);
-    }
-  </script>
+  
 {% endif %}
 
 

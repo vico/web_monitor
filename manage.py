@@ -5,7 +5,7 @@ from app.models import User
 from flask.ext.script import Manager, Shell
 
 
-app = create_app(os.getenv('FLASK_CONFIG') or 'default')
+app = create_app(os.environ.get('FLASK_CONFIG') or 'default')
 
 manager = Manager(app)
 
@@ -21,14 +21,11 @@ def test():
     tests = unittest.TestLoader().discover('tests')
     unittest.TextTestRunner(verbosity=2).run(tests)
 
-
 @manager.command
 def profile(length=25, profile_dir=None):
-    """Start the server under profiler"""
     from werkzeug.contrib.profiler import ProfilerMiddleware
     app.wsgi_app = ProfilerMiddleware(app.wsgi_app, restrictions=[length], profile_dir=profile_dir)
-    app.run("127.0.0.1", 5000)
-
+    app.run("0.0.0.0", 5000)
 
 manager.add_command('shell', Shell(make_context=make_shell_context))
 

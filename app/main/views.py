@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 from decimal import *
 from cache import cache
 from flask.ext.login import login_required
+import json
 
 from . import main
 
@@ -20,11 +21,11 @@ NUMBER_OF_TOP_POSITIONS = 8
 def break_into_page(df, start_new_page=True, finalize_last_page=True,
                     number_of_row_to_break_first_page=NUMBER_OF_ROW_PER_PAGE, table_type='summary',
                     table_caption=''):
-    """
+    '''
     break a dataframe into many page, each page has NUMBER_OF_ROW_PER_PAGE
     return HTML format of pages and total number of rows
     :rtype: str, int
-    """
+    '''
     count = 0
     table_html = ''
     style = 'border="1" class="dataframe borderTable"'
@@ -47,15 +48,13 @@ def break_into_page(df, start_new_page=True, finalize_last_page=True,
     for r in rows[1:]:
         if is_first_page and count > number_of_row_to_break_first_page and r != '':
             table_html += (
-                          '</tbody></table></section><section class="sheet padding-10mm"><table %s>' % style
-                          ) + table_header
+                          '</tbody></table></section><section class="sheet padding-10mm"><table %s>' % style) + table_header
             count = 0
             total_rows += 1
             is_first_page = False
         elif count > NUMBER_OF_ROW_PER_PAGE and r != '':
             table_html += (
-                          '</tbody></table></section><section class="sheet padding-10mm"><table %s>' % style
-                          ) + table_header
+                          '</tbody></table></section><section class="sheet padding-10mm"><table %s>' % style) + table_header
             count = 0
             total_rows += 1
         if r != '':
@@ -107,8 +106,8 @@ def add_to_page(df, current_page, remaining_row_number, table_type='summary', ta
 
 @main.before_request
 def before_request():
-    g.con = pymysql.connect(host='127.0.0.1', user='root', passwd='root', db='hkg02p')
-    g.startDate = datetime(datetime.now().year-2, 12, 31).strftime('%Y-%m-%d')
+    g.con = pymysql.connect(host='localhost', user='root', passwd='root', db='hkg02p')
+    g.startDate = datetime(datetime.now().year-1, 12, 31).strftime('%Y-%m-%d')
     g.endDate = datetime.now().strftime('%Y-%m-%d')  # not include
     g.reportAdvisor = 'AP'
     g.lineWidth = 3
@@ -131,7 +130,7 @@ def before_request():
 
 
 @main.teardown_request
-def teardown_request():
+def teardown_request(exception):
     db = getattr(g, 'db', None)
     if db is not None:
         db.close()
@@ -155,8 +154,7 @@ def get_turnover_df(from_date, end_date):
         a.strategy,
         a.sector,
         IF (f.value IS NOT NULL, f.value, 'N.A.') AS GICS,
-        IF (i.value = 'REIT', 'Real Estate',  IF(i.value='ETP', 'Index',
-                                                IF(g.value IS NOT NULL, g.value, 'Non-Japan'))) AS TOPIX,
+        IF (i.value = 'REIT', 'Real Estate',  IF(i.value='ETP', 'Index', IF(g.value IS NOT NULL, g.value, 'Non-Japan'))) AS TOPIX,
         IF(a.side='L', a.firstTradeDateLong, firstTradeDateShort) AS firstTradeDate,
         IF(c.instrumentType <> 'EQ', 'Index',
             IF(h.value*d.rate < 250000000,'Micro',
@@ -170,8 +168,7 @@ def get_turnover_df(from_date, end_date):
         INNER JOIN t06DailyCrossRate d ON a.processDate = d.priceDate AND a.ccy = d.base AND d.quote='USD'
         LEFT JOIN t06DailyBBStaticSnapshot h ON c.instrumentID = h.instrumentID AND h.dataType = 'CUR_MKT_CAP'
         LEFT JOIN t06DailyBBStaticSnapshot f ON c.instrumentID = f.instrumentID AND f.dataType = 'GICS_SECTOR_NAME'
-        LEFT JOIN t06DailyBBStaticSnapshot g ON c.instrumentID = g.instrumentID
-                AND g.dataType = 'JAPANESE_INDUSTRY_GROUP_NAME_ENG'
+        LEFT JOIN t06DailyBBStaticSnapshot g ON c.instrumentID = g.instrumentID AND g.dataType = 'JAPANESE_INDUSTRY_GROUP_NAME_ENG'
         LEFT JOIN t06DailyBBStaticSnapshot i ON c.instrumentID = i.instrumentID AND i.dataType = 'SECURITY_TYP'
         WHERE processDate = '%s'
     UNION
@@ -185,8 +182,7 @@ def get_turnover_df(from_date, end_date):
         e.strategy,
         e.sector,
         IF (f.value IS NOT NULL, f.value, 'N.A.') AS GICS,
-        IF (i.value = 'REIT', 'Real Estate',  IF(i.value='ETP', 'Index',
-                                                IF(g.value IS NOT NULL, g.value, 'Non-Japan'))) AS TOPIX,
+        IF (i.value = 'REIT', 'Real Estate',  IF(i.value='ETP', 'Index', IF(g.value IS NOT NULL, g.value, 'Non-Japan'))) AS TOPIX,
         aa.firstTradeDate,
         aa.MktCap
         FROM (
@@ -208,10 +204,7 @@ def get_turnover_df(from_date, end_date):
         a.strategy,
         IF (z.side='L', firstTradeDateLong, firstTradeDateShort) AS firstTradeDate,
         IF(c.instrumentType <> 'EQ', 'Index', IF(h.value*j.rate < 250000000,'Micro',
-                        IF(h.value*j.rate <1000000000, 'Small',
-                            IF(h.value*j.rate <5000000000, 'Mid',
-                                IF(h.value*j.rate <20000000000, 'Large',
-                                    IF(h.value IS NULL, 'Micro','Mega'))) ))) AS MktCap
+                        IF(h.value*j.rate <1000000000, 'Small', IF(h.value*j.rate <5000000000, 'Mid', IF(h.value*j.rate <20000000000, 'Large', IF(h.value IS NULL, 'Micro','Mega'))) ))) AS MktCap
         FROM t08AdvisorTag a
         INNER JOIN t08Reconcile b ON a.code = b.code
         INNER JOIN t01Instrument c ON (b.equityType = c.instrumentType) AND (b.code = c.quick)
@@ -227,15 +220,13 @@ def get_turnover_df(from_date, end_date):
         GROUP BY c.instrumentID, b.tradeDate, b.orderType, b.reconcileID, b.side, Qty, Notl, b.code
         ORDER BY b.code
         ) aa
-        LEFT JOIN t08AdvisorTag e ON aa.code = e.code AND aa.MaxOfDate = e.adviseDate
+        LEFT JOIN t08AdvisorTag e ON (aa.MaxOfDate = e.adviseDate) AND (aa.code = e.code)
         LEFT JOIN t06DailyBBStaticSnapshot f ON aa.instrumentID = f.instrumentID AND f.dataType = 'GICS_SECTOR_NAME'
-        LEFT JOIN t06DailyBBStaticSnapshot g ON aa.instrumentID = g.instrumentID
-                AND g.dataType = 'JAPANESE_INDUSTRY_GROUP_NAME_ENG'
+        LEFT JOIN t06DailyBBStaticSnapshot g ON aa.instrumentID = g.instrumentID AND g.dataType = 'JAPANESE_INDUSTRY_GROUP_NAME_ENG'
         LEFT JOIN t06DailyBBStaticSnapshot i ON aa.instrumentID = i.instrumentID AND i.dataType = 'SECURITY_TYP'
         WHERE (aa.side="L" AND aa.orderType="B") OR (aa.side="S" AND aa.orderType="S")
         ;
-         ''' % (from_date,
-                from_date, end_date), g.con, parse_dates=['tradeDate'], coerce_float=True, index_col='tradeDate')
+         ''' % (from_date, from_date, end_date), g.con, parse_dates=['tradeDate'], coerce_float=True, index_col='tradeDate')
 
     return sql_turnover_df
 
@@ -287,10 +278,8 @@ def get_pl_df(from_date, end_date):
                 INNER JOIN `t06DailyCrossRate` b ON a.processDate=b.priceDate AND a.CCY=b.base AND b.quote='USD'
                 INNER JOIN t01Instrument c ON c.instrumentID = a.instrumentID
                 LEFT JOIN t06DailyBBStaticSnapshot d ON d.instrumentID = a.instrumentID AND d.dataType = 'CUR_MKT_CAP'
-                LEFT JOIN t06DailyBBStaticSnapshot f ON d.instrumentID = f.instrumentID
-                        AND f.dataType = 'GICS_SECTOR_NAME'
-                LEFT JOIN t06DailyBBStaticSnapshot g ON d.instrumentID = g.instrumentID
-                        AND g.dataType = 'JAPANESE_INDUSTRY_GROUP_NAME_ENG'
+                LEFT JOIN t06DailyBBStaticSnapshot f ON d.instrumentID = f.instrumentID AND f.dataType = 'GICS_SECTOR_NAME'
+                LEFT JOIN t06DailyBBStaticSnapshot g ON d.instrumentID = g.instrumentID AND g.dataType = 'JAPANESE_INDUSTRY_GROUP_NAME_ENG'
                 LEFT JOIN t06DailyBBStaticSnapshot i ON d.instrumentID = i.instrumentID AND i.dataType = 'SECURITY_TYP'
                 WHERE processDate > '%s' AND processDate < '%s'
                 AND advisor <> ''
@@ -313,8 +302,7 @@ def get_aum_df(from_date, end_date):
             GROUP BY processDate, portfolioID
             ) a
             GROUP BY processDate
-            ;''' % (from_date, end_date),
-                          g.con, coerce_float=True, parse_dates=['processDate'], index_col='processDate')
+            ;''' % (from_date, end_date), g.con, coerce_float=True, parse_dates=['processDate'], index_col='processDate')
 
     aum_df['Total'] = aum_df['RHAUM'] + aum_df['YAAUM'] + aum_df['LRAUM']
     return aum_df
@@ -366,6 +354,13 @@ def get_index_return(from_date, end_date):
 def get_code_name_map():
     code_name_map = sql.read_sql('''SELECT quick, name FROM t01Instrument;''', g.con)
     return code_name_map
+
+
+def sum_or_first(arr):
+    if arr.dtype == np.float64:
+        return arr.sum()
+    else:
+        return arr[0]
 
 
 @main.route('/', methods=['GET', 'POST'])
@@ -564,7 +559,7 @@ def index():
         else:
             range2 = [-negative_index_bound, positive_pl_bound*negative_index_bound/negative_pl_bound]
 
-    range2 = map(lambda p: p * 100, range2)
+    range2 = map(lambda x: x*100, range2)
 
     render_obj = dict()
     render_obj['graph_width'] = 750
@@ -613,7 +608,7 @@ def index():
                     },
                     'legend': {'font': {'size': render_obj['tick_font_size']}, 'x': 1.05}
                 }
-                }
+    }
 
     netop_graph = [{
                        'x': [pd.to_datetime(str(i)).strftime('%Y-%m-%d') for i in net_op.index],
@@ -637,10 +632,7 @@ def index():
                   } for col in beta_op.columns
                   ]
 
-    exposure_graph_df = (all_fund_exposure_in_money[:, param_adviser].unstack()
-                                                                     .reindex(all_fund_exposure_in_money.index
-                                                                                                        .levels[0])
-                                                                     .dropna())
+    exposure_graph_df = all_fund_exposure_in_money[:, param_adviser].unstack().reindex(all_fund_exposure_in_money.index.levels[0]).dropna()
     exposure_graph_range = [0, exposure_graph_df.stack().max()]
     exposure_graph = {'data': [{
                           'x': [pd.to_datetime(str(i)).strftime('%Y-%m-%d') for i in exposure_graph_df.index],
@@ -715,7 +707,7 @@ def index():
                                     'width': g.lineWidth if (col == param_adviser) else g.thinLineWidth
 
                                 }
-                            } for col in short_exposure.index.levels[1] if col not in g.dropList],
+                            } for col in short_exposure.index.levels[1] if not col in g.dropList],
                             'layout': {
                                 'margin': {'t': render_obj['margin_top'], 'b': render_obj['margin_bottom'],
                                            'l': render_obj['margin_left'], 'r': render_obj['margin_right']+20},
@@ -731,7 +723,7 @@ def index():
                                 'legend': {'font': {'size': render_obj['tick_font_size']}},
                                 'showlegend': False
                             }
-                            }
+                        }
 
     names_graph = [{
                        'x': [pd.to_datetime(str(i)).strftime('%Y-%m-%d') for i in names_df[:, col].index],
@@ -770,8 +762,8 @@ def index():
     # TODO: ranking table not fit page well
 
     size_turnover = (scale_table.groupby(["advisor", "MktCap"])
-                                .sum()[['JPYPL']]
-                                .loc[param_adviser])
+                         .sum()[['JPYPL']]
+                         .loc[param_adviser])
 
     size_turnover = size_turnover.merge(fund_scale, left_index=True, right_index=True, how='outer').fillna(0).merge(
         scale_pl, left_index=True, right_index=True, how='outer')
@@ -792,23 +784,23 @@ def index():
                  'S': 'ShortPL', 'TO': 'TO %'})
 
     gics_table = (turnover_df.truncate(after=end_date)
-                             .groupby(["advisor", "GICS"])
-                             .sum()[['JPYPL']]
-                             .loc[param_adviser])
+                      .groupby(["advisor", "GICS"])
+                      .sum()[['JPYPL']]
+                      .loc[param_adviser])
 
     fund_gics = (sql_pl_df.groupby(['advisor', 'GICS'])
-                          .sum()[['RHAttr', 'YAAttr', 'LRAttr']]
-                          .loc[param_adviser])
+                     .sum()[['RHAttr', 'YAAttr', 'LRAttr']]
+                     .loc[param_adviser])
 
     gics_pl = (sql_pl_df.groupby(['advisor', 'GICS', 'side'])
-                        .sum()[['attribution']]
-                        .loc[param_adviser]
-                        .unstack()['attribution']
-                        .fillna(0))
+               .sum()[['attribution']]
+               .loc[param_adviser]
+               .unstack()['attribution']
+               .fillna(0))
 
     gics_table = (gics_table.merge(fund_gics, left_index=True, right_index=True, how='outer')
-                            .merge(gics_pl, left_index=True, right_index=True, how='outer')
-                            .fillna(0))
+        .merge(gics_pl, left_index=True, right_index=True, how='outer')
+        .fillna(0))
 
     total_turnover = gics_table['JPYPL'].sum()
     gics_table['TO'] = gics_table['JPYPL'] / total_turnover
@@ -832,24 +824,24 @@ def index():
     t = sql_pl_df.merge(code_beta_df, left_on='quick', right_on='code', how='left')
 
     sector_table = (turnover_df.truncate(after=end_date)
-                               .groupby(["advisor", "sector"])
-                               .sum()[['JPYPL']]
-                               .loc[param_adviser])
+                        .groupby(["advisor", "sector"])
+                        .sum()[['JPYPL']]
+                        .loc[param_adviser])
 
     fund_sector = (t.groupby(['advisor', 'sector'])
-                    .sum()[['RHAttr', 'YAAttr', 'LRAttr']]
-                    .loc[param_adviser])
+                       .sum()[['RHAttr', 'YAAttr', 'LRAttr']]
+                       .loc[param_adviser])
 
     sector_pl = (t.groupby(['advisor', 'sector', 'side'])
-                  .sum()[['attribution']]
-                  .loc[param_adviser]
-                  .unstack()['attribution']
-                  .fillna(0))
+                 .sum()[['attribution']]
+                 .loc[param_adviser]
+                 .unstack()['attribution']
+                 .fillna(0))
 
     sector_table = (sector_table.merge(fund_sector, left_index=True, right_index=True, how='outer')
-                                .fillna(0)
-                                .merge(sector_pl, left_index=True, right_index=True, how='outer')
-                                .fillna(0))
+                    .fillna(0)
+                    .merge(sector_pl, left_index=True, right_index=True, how='outer')
+                    .fillna(0))
 
     sector_total_turnover = sector_table['JPYPL'].sum()
 
@@ -866,8 +858,7 @@ def index():
 
     sector_total = pd.DataFrame(sector_series).T
     sector_table = pd.concat([sector_table, sector_total])
-    sector_table['Return'] = ((sector_table['L'] + sector_table['S']) /
-                              sector_table['JPYPL']).replace([np.inf, -np.inf], 0)
+    sector_table['Return'] = ((sector_table['L'] + sector_table['S']) / sector_table['JPYPL']).replace([np.inf, -np.inf], 0)
     sector_table = sector_table[['RHAttr', 'YAAttr', 'LRAttr', 'L', 'S', 'JPYPL', 'TO', 'Return']]
     sector_table = sector_table.rename(
             columns={'JPYPL': 'Turnover', 'RHAttr': 'Rockhampton', 'YAAttr': 'Yaraka', 'LRAttr': 'Longreach',
@@ -984,19 +975,18 @@ def index():
     strategy_series.name = 'Total'
     strategy_total = pd.DataFrame(strategy_series).T
     strategy_table = pd.concat([strategy_table, strategy_total])
-    strategy_table['Return'] = ((strategy_table['L'] + strategy_table['S'].fillna(0)) /
-                                strategy_table['JPYPL']).replace([np.inf, -np.inf], 0)
+    strategy_table['Return'] = ((strategy_table['L'] + strategy_table['S'].fillna(0)) / strategy_table['JPYPL']).replace(
+            [np.inf, -np.inf], 0)
     strategy_table = strategy_table[['RHAttr', 'YAAttr', 'LRAttr', 'L', 'S', 'JPYPL', 'TO', 'Return']]
     strategy_table = strategy_table.rename(
             columns={'JPYPL': 'Turnover', 'RHAttr': 'Rockhampton', 'YAAttr': 'Yaraka', 'LRAttr': 'Longreach',
                      'L': 'LongPL',
                      'S': 'ShortPL', 'TO': 'TO %'})
     position_table = (turnover_df.truncate(after=end_date)
-                      .groupby(["advisor", "code", "name"])
-                      .sum()[['JPYPL']]
+                      .groupby(["advisor", "code"])
+                      .agg(sum_or_first)[['name', 'JPYPL']]
                       .loc[param_adviser]
-                      .reset_index()
-                      .set_index('code'))
+                      )
 
     position_pl = (sql_pl_df.groupby(['advisor', 'quick', 'name'])
                    .sum()[['RHAttr', 'YAAttr', 'LRAttr']]

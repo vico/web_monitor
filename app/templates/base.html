@@ -43,6 +43,7 @@
 {% endblock %}
 
 {% block content %}
+<!--script src="{{ url_for('static', filename='jquery-2.2.0.min.js') }}"></script-->
 
 <div class="container">
     {% for message in get_flashed_messages() %}
@@ -57,7 +58,8 @@
 {% endblock %}
 
 {% block scripts %}
+{{ super() }}
 <script src="{{ url_for('static', filename='plotly-latest.min.js') }}"></script>
 {# moment.include_moment() #}
-{{ super() }}
+
 {% endblock %}

@@ -1,7 +1,7 @@
 from flask import request, g, render_template
 
 import pandas as pd
-from pandas import DataFrame
+from pandas import DataFrame, Series
 from pandas.io import sql
 import numpy as np
 import pymysql
@@ -9,11 +9,14 @@ from datetime import datetime, timedelta
 from decimal import *
 import urllib
 from . import tradehistory
+import re
+from dateutil.parser import parse
+import pymysql.cursors
 
 
 @tradehistory.before_request
 def before_request():
-    g.con = pymysql.connect(host='localhost', user='root', passwd='root', db='hkg02p')
+    g.con = pymysql.connect(host='192.168.1.147', user='uploader', passwd='fA6ZxopGrbdb')
         #(host='localhost', user='root', passwd='root', db='hkg02p')
         #(host='192.168.1.147', user='uploader', passwd='fA6ZxopGrbdb', db='hkg02p')
     # g.start_date = datetime(datetime.now().year-2, 12, 31).strftime('%Y-%m-%d')
@@ -89,11 +92,11 @@ def get_pl_df(quick, start_date, end_date, con):
                             a.YAExposure* IF(a.side='L', 1, -1) AS YAExposure,
                             a.LRExposure* IF(a.side='L', 1, -1) AS LRExposure,
                             a.name
-                FROM `t05PortfolioResponsibilities` a
+                FROM hkg02p.t05PortfolioResponsibilities a
                 LEFT JOIN
                   (SELECT a.adviseDate, a.code, a.beta
-                   FROM t08AdvisorTag a
-                   WHERE a.adviseDate IN (SELECT MAX(adviseDate) AS MaxOfDate FROM t08AdvisorTag WHERE code = '%s')
+                   FROM hkg02p.t08AdvisorTag a
+                   WHERE a.adviseDate IN (SELECT MAX(adviseDate) AS MaxOfDate FROM hkg02p.t08AdvisorTag WHERE code = '%s')
                         AND a.code='%s') j ON a.quick = j.code
                 WHERE a.processDate >= '%s' AND a.processDate <= '%s'
                 AND a.quick = '%s'
@@ -104,7 +107,7 @@ def get_pl_df(quick, start_date, end_date, con):
 
 def get_trade_df(stock_price_df, quick, start_date, end_date, con):
     trade_df = (sql.read_sql('''SELECT  a.tradeDate, a.fundCode, a.orderType, a.side, AVG(a.price) as price
-                    FROM t08Reconcile a
+                    FROM hkg02p.t08Reconcile a
                     WHERE a.code = '%s'
                       AND a.srcFlag='K'
                       AND a.status='A'
@@ -123,7 +126,7 @@ def get_trade_df(stock_price_df, quick, start_date, end_date, con):
 
 def get_index_df(start_date, end_date, con):
     index_df = sql.read_sql('''SELECT b.priceDate,a.indexCode, b.close
-        FROM `t07Index` a, `t06DailyIndex` b
+        FROM hkg02p.t07Index a, hkg02p.t06DailyIndex b
         WHERE a.indexID = b.indexID
         AND b.priceDate >= DATE_SUB('%s', INTERVAL 1 DAY) AND b.priceDate <= '%s'
         AND a.indexCode IN ('TPX','KOSPI','TWSE','HSCEI');''' % (start_date, end_date), con, parse_dates=['priceDate'])
@@ -135,19 +138,18 @@ def get_index_df(start_date, end_date, con):
 
 def get_stock_price_df(quick, start_date, end_date, con):
     price_df = sql.read_sql('''SELECT a.priceDate, a.close AS close, a.adj_factor
-        FROM `t06DailyPrice` a
-        INNER JOIN t01Instrument b ON b.instrumentID = a.instrumentID
+        FROM hkg02p.t06DailyPrice a
+        INNER JOIN hkg02p.t01Instrument b ON b.instrumentID = a.instrumentID
         WHERE a.priceDate >= DATE_SUB('%s', INTERVAL 1 DAY)
         AND a.priceDate <= '%s'
         AND b.quick='%s';''' % (start_date, end_date, quick), con, parse_dates=['priceDate'], index_col='priceDate')
 
     return price_df
 
-
 def get_index_name(quick,con):
     result = sql.read_sql('''SELECT b.bbgCode
-        FROM t01Instrument a
-        INNER JOIN t02Exchange b ON a.exchangeID=b.exchangeID
+        FROM hkg02p.t01Instrument a
+        INNER JOIN hkg02p.t02Exchange b ON a.exchangeID=b.exchangeID
         WHERE a.quick='%s'
         ;
     ''' % quick, con).iloc[0,:].values[0]
@@ -161,10 +163,50 @@ def get_index_name(quick,con):
     return mapping[result]
 
 
+def parse_text(text):
+    """
+    parse text into a dict of catalyst for each instrument
+    """
+
+    date_list = re.split("^\s*\n", text, flags=re.MULTILINE)
+        
+    return date_list
+
+
+def parse_catalyst(entry, date):
+    """
+    parse catalyst for each instrument on some day
+    """
+    ret = dict()
+    l = re.split('\s\s+', entry)
+    if entry.find('H-20') > -1 or len(l) < 2:
+        return None
+    
+    ret['processDate'] = date
+    ret['personCode'] = l[1].split('(')[-1].split(')')[0] if l[1].find(')') > -1 else ''
+    ret['code'] = l[1].split(']')[0][2:]
+    ret['commentText'] = ''
+
+    if (len(l) > 3):
+        ret['catalystText'] = l[3]
+        #ret['recommendation'] = l[2]
+    elif l[1].find(')') > -1 and len(l[1].split(')')[1]) > 0 and len(l)>2:
+        ret['catalystText'] = l[2]
+        #ret['recommendation'] = l[1].split(')')[1].strip()
+    elif len(l) > 2 and len(l[2]) >= 24:
+        ret['catalystText'] = l[2][24:]
+    else:
+        ret['catalystText'] = ''
+        #ret['recommendation'] = '' 
+
+    return ret
+
+
 def get_wiki_df(quick, start_date, con):
 
     t = sql.read_sql('''
                 SELECT DISTINCT processDate, a.personCode,
+                catalystText,
                 REPLACE(commentText, '\n', '<br>') AS commentText
                 FROM hkg02p.t01Person a, noteDB.Note N
                 WHERE a.personID = N.personID AND N.code='%s'
@@ -173,7 +215,45 @@ def get_wiki_df(quick, start_date, con):
                 ORDER BY processDate DESC
     ;''' % (quick, start_date), con , parse_dates=['processDate']) 
 
-    return t
+    with g.con.cursor() as cursor:
+        # Read a single record
+        sqlstr = """SELECT p.page_title, t.old_text, r.rev_id, r.rev_user, r.rev_timestamp, p.page_id
+                FROM wikidbTKY.page p
+                INNER JOIN wikidbTKY.revision r ON p.page_id=r.rev_page 
+                    AND r.rev_id = (SELECT MAX(rev_id) FROM wikidbTKY.revision WHERE rev_page=p.page_id)
+                INNER JOIN wikidbTKY.text t ON t.old_id = r.rev_text_id
+                #WHERE p.page_id IN (20,5701, 4616, 2831, 2826, 1756, 1751) 
+                WHERE p.page_id IN (20,5701, 4616, 2831, 2826)
+        """
+
+        cursor.execute(sqlstr)
+        sql_result = cursor.fetchall()
+
+    result = "".join([row[1] for row in sql_result])
+
+    rets = []
+
+    for e in parse_text(result):
+        wikis = [wiki for wiki in e.split('\n') if wiki.strip() != '' and wiki.find('Recommendation') == -1]
+        
+        if len(wikis) > 2 and wikis[0].find('[[') == -1:
+            date = parse(wikis[0].strip())
+            for wiki in wikis[1:]:
+                w = parse_catalyst(wiki, date)
+                if w != None and w['code'] == quick:
+                    rets.append(w)
+        elif len(wikis) <= 1 and wikis[0].find('[[') == -1:
+            date = parse(wikis[0].strip())
+        elif len(wikis) >= 1 and wikis[0].find('[[') > -1:
+            for wiki in wikis:
+                w = parse_catalyst(wiki, date)
+                if w != None and w['code'] == quick:
+                    rets.append(w) 
+
+    old_wiki = (DataFrame(rets)[['processDate', 'personCode', 'catalystText', 'commentText']]
+                .set_index('processDate').sort_index(ascending=False).reset_index())  if len(rets) > 0 else DataFrame()
+    
+    return pd.concat([t, old_wiki], ignore_index=True)
 
 
 def make_table(df, wiki_df, quick, numcol, table_caption=''):
@@ -219,17 +299,22 @@ def make_table(df, wiki_df, quick, numcol, table_caption=''):
                 wiki_r = wiki_rows[j].split(field_separator) if j < len(wiki_rows) else []
                 wiki_date = datetime.strptime(wiki_r[1], '%Y-%m-%d') if len(wiki_r) > 1 else datetime.now()
             
+            link_date = wiki_date
             while wiki_date >= start_date and wiki_date <= end_date:
                 wiki_count += 1
                 #print 'ok', wiki_r
                 j += 1
+                link_date = wiki_date
                 wiki_r = wiki_rows[j].split(field_separator) if j < len(wiki_rows) else []
                 wiki_date = datetime.strptime(wiki_r[1], '%Y-%m-%d') if len(wiki_r) > 1 else datetime.now()
             
             #print(start_date, end_date, wiki_count)
+            if wiki_date >= start_date - timedelta(2) and wiki_date.strftime('%Y-%m-%d') != datetime.now().strftime('%Y-%m-%d'):
+                link_date = wiki_date
+
             if wiki_count > 0:
-                table_html += '<tr>' + ''.join([('<th><a href="/wiki/?quick=%s&startDate=%s&endDate=%s" data-remote="false" data-toggle="modal" data-target="#wikimodal">' % 
-                                             (urllib.quote(quick), elements[1].title(), elements[numcol+1].title())) + elements[1].title() + 
+                table_html += '<tr>' + ''.join([('<th><a href="/wiki/?quick=%s&start=%s&end=%s&open=%s#%s" onclick="var left = window.screen.width/2 -500/2; window.open(this.href, \'Wiki\', \'width=500, height=500, left=\'+left+\',top=100, resizable,location=no\'); return false;">' % 
+                                             (urllib.quote(quick), g.start_date, g.end_date, elements[1].title(), link_date.strftime('%Y-%m-%d'))) + elements[1].title() + 
                                                  '</a></th>'] + 
                                            ['<td>' + h + '</td>' for h in  elements[2:numcol+1] ]) + '</tr>'
             else:
@@ -240,7 +325,6 @@ def make_table(df, wiki_df, quick, numcol, table_caption=''):
     table_html += '</tbody></table>'
 
     return table_html
-
 
 @tradehistory.route('/check')
 def check():
@@ -270,7 +354,7 @@ def check():
         pl_hit[col]['total_count'] = pl_hit[col]['long_count'] + pl_hit[col]['short_count']
         pl_hit[col]['long_ratio'] =  pl_hit[col]['long_hit'] / pl_hit[col]['long_count'] if pl_hit[col]['long_count'] > 0 else 0
         pl_hit[col]['short_ratio'] =  pl_hit[col]['short_hit'] / pl_hit[col]['short_count'] if pl_hit[col]['short_count'] > 0 else 0
-        pl_hit[col]['total_ratio'] = pl_hit[col]['long_hit'] + pl_hit[col]['short_hit'] / pl_hit[col]['total_count'] if pl_hit[col]['total_count'] > 0 else 0
+        pl_hit[col]['total_ratio'] = (pl_hit[col]['long_hit'] + pl_hit[col]['short_hit']) / pl_hit[col]['total_count'] if pl_hit[col]['total_count'] > 0 else 0
  
     df2 = get_index_df(sql_pl_df['processDate'].min().strftime('%Y-%m-%d'),
                        sql_pl_df['processDate'].max().strftime('%Y-%m-%d'),
@@ -312,6 +396,8 @@ def check():
         alpha[f]['short_hit'] = alpha_hit[alpha_hit > 0]['S'].count() * 1.0 if 'S' in alpha_hit and pl_hit[f+'Attr']['short_count'] > 0 else 0
         alpha[f]['long_ratio'] = alpha[f]['long_hit'] / pl_hit[f+'Attr']['long_count'] if pl_hit[f+'Attr']['long_count'] > 0 else 0
         alpha[f]['short_ratio'] = alpha[f]['short_hit'] / pl_hit[f+'Attr']['short_count'] if pl_hit[f+'Attr']['short_count'] > 0 else 0 
+        alpha[f]['total_ratio'] = ( (alpha[f]['long_hit']+alpha[f]['short_hit'])/pl_hit[f+'Attr']['total_count'] 
+                                    if pl_hit[f+'Attr']['total_count'] > 0 else 0)
 
     op_df = dict()
     op_df['RH'] = attribution['RHAttr'].subtract(exposure['RHExposure'].mul(index_return[index_name], axis='index', level=0))
@@ -336,6 +422,8 @@ def check():
                                        if  pl_hit[f+'Attr']['long_count'] > 0 else 0)
         op_hit[f]['short_ratio'] = (op_hit[f]['short_hit'] / pl_hit[f+'Attr']['short_count'] 
                                         if pl_hit[f+'Attr']['short_count'] > 0 else 0)
+        op_hit[f]['total_ratio'] = ( (op_hit[f]['long_hit'] + op_hit[f]['short_hit'])/pl_hit[f+'Attr']['total_count']
+                                        if pl_hit[f+'Attr']['total_count'] > 0 else 0 )
 
     tbl = (sql_pl_df.groupby(['firstTradeDate', 'side'])
                     .sum()[['RHAttr']]
@@ -364,6 +452,7 @@ def check():
     tbl = tbl.rename(columns={'side': 'Side', 'RHAttr': 'PL'})
 
     wiki_df = get_wiki_df(quick, g.start_date, g.con)
+    
     tbl_html = make_table(tbl, wiki_df, quick, numcol=7)
 
     df3 = get_stock_price_df(quick,
@@ -373,12 +462,26 @@ def check():
 
     trade_df = get_trade_df(df3, quick, g.start_date, g.end_date, g.con)
 
+    test = trade_df.copy()
+    test = (test.reset_index()[['tradeDate', 'orderType', 'side']]
+                .drop_duplicates()
+                .set_index('tradeDate')
+                .assign(order = lambda df: df['orderType']+df['side'])[['order']]
+                .groupby(level=0)
+                .apply(lambda df: Series(dict(orderType= df['order'].str.cat(sep=","))))
+           )
+    
+    order_df = DataFrame(test, index=test.index.union(wiki_df['processDate'].drop_duplicates())).fillna(method="bfill")
+    
+    ret_df = wiki_df.merge(order_df, left_on='processDate', right_index=True, how='left')
+
     ratedf = df3[['close']].div(df2[index_name], axis=0)
 
     long_price_graph = {'data': [{
                     'x': [pd.to_datetime(str(i)).strftime('%Y-%m-%d') for i in df3.index],
                     'y': df3['close'].values.tolist(),
                     'name':'Stock',
+                    'hoverinfo': 'none',
                     'line': {'width':g.lineWidth,
                              'color': "rgb(182, 182, 182)" 
                              }
@@ -386,7 +489,7 @@ def check():
                 ]+([{
                     'x': [pd.to_datetime(str(i)).strftime('%Y-%m-%d') 
                           for i in get_trade_pricedf(trade_df, 'B', 'L').index],
-                    'y': get_trade_pricedf(trade_df, 'B', 'L')['price'].values.tolist(),
+                    'y': get_trade_pricedf(trade_df, 'B', 'L')['price'].fillna(method="ffill").values.tolist(),
                     'mode': 'markers',
                     'name': 'Buy Long',
                     'marker': {
@@ -407,7 +510,27 @@ def check():
                     }
                     }] if 'RH' in trade_df.index.levels[1] and 
                            'S' in trade_df.index.levels[2] and 
-                           'L' in trade_df.index.levels[3] else []),
+                           'L' in trade_df.index.levels[3] else [])+([{
+                    'x': [pd.to_datetime(str(i)).strftime('%Y-%m-%d') 
+                          for i in get_trade_pricedf(trade_df, 'B', 'S').index],
+                    'y': get_trade_pricedf(trade_df, 'B', 'S')['price'].fillna(method="ffill").values.tolist(),
+                    'mode': 'markers',
+                    'name': 'Buy Cover',
+                    'marker': {
+                        'color': 'rgb(121, 176, 255)',
+                        'size':g.markerSize
+                    }
+                    }] if 'RH' in trade_df.index.levels[1] and 'B' in trade_df.index.levels[2] and 'S' in trade_df.index.levels[3] else [])+([{
+                    'x': [pd.to_datetime(str(i)).strftime('%Y-%m-%d') 
+                          for i in get_trade_pricedf(trade_df, 'S', 'S').index],
+                    'y': get_trade_pricedf(trade_df, 'S', 'S')['price'].values.tolist(),
+                    'mode': 'markers',
+                    'name': 'Sell Short',
+                    'marker': {
+                        'color': 'rgb(255,124,144)',
+                        'size':g.markerSize
+                    }
+                    }] if 'RH' in trade_df.index.levels[1] and 'S' in trade_df.index.levels[2] and 'S' in trade_df.index.levels[3] else []),
                 'layout': {
                     'margin': {'l': g.left_margin, 'r': 40},
                     #'width': 750,
@@ -420,6 +543,7 @@ def check():
                     'x': [pd.to_datetime(str(i)).strftime('%Y-%m-%d') for i in ratedf.index],
                     'y': ratedf[col].dropna().values.tolist(),
                     'name':'Ratio',
+                    'hoverinfo': 'none',
                     'line': {'width':g.lineWidth,
                              'color': "rgb(182, 182, 182)" 
                              }
@@ -427,7 +551,7 @@ def check():
                 ]+([{
                     'x': [pd.to_datetime(str(i)).strftime('%Y-%m-%d') 
                           for i in get_ratio_df(trade_df, df2[index_name], 'B','L').index],
-                    'y': get_ratio_df(trade_df, df2[index_name], 'B','L')['price'].values.tolist(),
+                    'y': get_ratio_df(trade_df, df2[index_name], 'B','L')['price'].fillna(method="ffill").values.tolist(),
                     'mode': 'markers',
                     'name': 'BL Ratio',
                     'marker': {
@@ -448,68 +572,14 @@ def check():
                     }
                     }] if 'RH' in trade_df.index.levels[1] and 
                            'S' in trade_df.index.levels[2] and 
-                           'L' in trade_df.index.levels[3] else []),
-                'layout': {
-                    'margin': {'l': g.left_margin, 'r': 40},
-                    #'width': 750,
-                    #'height': 240,
-                    'legend': {'font': {'size': 10}, 'x': 1.05}
-                }
-    } 
-
-    short_price_graph = {'data': [{
-                    'x': [pd.to_datetime(str(i)).strftime('%Y-%m-%d') for i in df3.index],
-                    'y': df3['close'].values.tolist(),
-                    'name':'Stock',
-                    'line': {'width':g.lineWidth,
-                             'color': "rgb(182, 182, 182)" 
-                             }
-                } 
-                ]+([{
-                    'x': [pd.to_datetime(str(i)).strftime('%Y-%m-%d') 
-                          for i in get_trade_pricedf(trade_df, 'B', 'S').index],
-                    'y': get_trade_pricedf(trade_df, 'B', 'S')['price'].values.tolist(),
-                    'mode': 'markers',
-                    'name': 'Buy Cover',
-                    'marker': {
-                        'color': 'rgb(27, 93, 225)',
-                        'size':g.markerSize
-                    }
-                    }] if 'RH' in trade_df.index.levels[1] and 'B' in trade_df.index.levels[2] and 'S' in trade_df.index.levels[3] else [])+([{
-                    'x': [pd.to_datetime(str(i)).strftime('%Y-%m-%d') 
-                          for i in get_trade_pricedf(trade_df, 'S', 'S').index],
-                    'y': get_trade_pricedf(trade_df, 'S', 'S')['price'].values.tolist(),
-                    'mode': 'markers',
-                    'name': 'Sell Short',
-                    'marker': {
-                        'color': 'rgb(214,39,40)',
-                        'size':g.markerSize
-                    }
-                    }] if 'RH' in trade_df.index.levels[1] and 'S' in trade_df.index.levels[2] and 'S' in trade_df.index.levels[3] else []),
-                'layout': {
-                    'margin': {'l': g.left_margin, 'r': 40},
-                    #'width': 750,
-                    #'height': 240,
-                    'legend': {'font': {'size': 10}, 'x': 1.05}
-                }
-    } 
-
-    short_rate_graph = {'data': [{
-                    'x': [pd.to_datetime(str(i)).strftime('%Y-%m-%d') for i in ratedf.index],
-                    'y': ratedf[col].dropna().values.tolist(),
-                    'name':'Ratio',
-                    'line': {'width':g.lineWidth,
-                             'color': "rgb(182, 182, 182)" 
-                             }
-                } for col in ratedf.columns
-                ]+([{
+                           'L' in trade_df.index.levels[3] else [])+([{
                     'x': [pd.to_datetime(str(i)).strftime('%Y-%m-%d') 
                           for i in get_ratio_df(trade_df, df2[index_name], 'B','S').index],
-                    'y': get_ratio_df(trade_df, df2[index_name], 'B','S')['price'].values.tolist(),
+                    'y': get_ratio_df(trade_df, df2[index_name], 'B','S')['price'].fillna(method="ffill").values.tolist(),
                     'mode': 'markers',
                     'name': 'BC Ratio',
                     'marker': {
-                        'color': 'rgb(27, 93, 225)',
+                        'color': 'rgb(121, 176, 255)',
                         'size':g.markerSize
                     }
                     }] if 'RH' in trade_df.index.levels[1] and 
@@ -521,7 +591,7 @@ def check():
                     'mode': 'markers',
                     'name': 'SS Ratio',
                     'marker': {
-                        'color': 'rgb(214,39,40)',
+                        'color': 'rgb(255,124,144)',
                         'size':g.markerSize
                     }
                     }] if 'RH' in trade_df.index.levels[1] and 'S' in trade_df.index.levels[2] and 'S' in trade_df.index.levels[3] else []),
@@ -532,6 +602,8 @@ def check():
                     'legend': {'font': {'size': 10}, 'x': 1.05}
                 }
     } 
+
+     
 
     long_position = (sql_pl_df.groupby(['processDate', 'side'])[['RHExposure']]
                               .sum()
@@ -555,30 +627,108 @@ def check():
                                .rename(columns={'RHExposure': 'Short Position'})
                       )*100 if short_count > 0 else None
 
+    wiki_text = (ret_df.assign(text = lambda df: df['personCode']+ '(' + df['orderType'] +'): '+ ': '+df['catalystText'])[['processDate', 'text']]
+                        .groupby('processDate')
+                        .apply(lambda df: df['text'].str.cat(sep='<BR>'))
+                 ) 
+
+    wiki_g = ( (long_position.reindex(wiki_text.index)['Long Position'] if long_count > 0 else 0) + 
+                 (short_position.reindex(wiki_text.index)['Short Position'] if short_count > 0 else 0) )
+
+    # wiki_g = ( (long_position.reindex(wiki_text.index)['Long Position'] ) + 
+    #              (short_position.reindex(wiki_text.index)['Short Position'] ) )
+    # calculate the ratio of negaive and positive range for each graphs
+
+    positive_pl_bound = 1.1*abs(max([max(long_position.max().values)])) if long_count > 0 else 0
+    negative_pl_bound = 1.1*abs(min([min(short_position.min().values)])) if short_count > 0 else 0
+     
+    if long_count > 0 and short_count > 0:
+         positive_pl_bound = 1.1*abs(max([max(long_position.max().values), min(short_position.min().values), 0]))
+         negative_pl_bound = 1.1*abs(max([max(long_position.max().values), min(short_position.min().values), 0]))
+
+    positive_index_bound = 1.1*abs(max([df3['close'].max()]))
+    
+    range1 = [-negative_pl_bound, positive_pl_bound]
+    range2 = [-positive_index_bound, positive_index_bound]
+    
+    
+    if long_count > 0 and short_count == 0:
+        range1 = [0, positive_pl_bound]
+        range2 = [0, positive_index_bound]
+    elif long_count == 0 and short_count > 0:
+        range1 = [-negative_pl_bound, negative_pl_bound]
+        range2 = [-positive_index_bound, positive_index_bound]
+    
+
     position_size_graph = {'data': ([{
                     'x': [pd.to_datetime(str(i)).strftime('%Y-%m-%d') for i in long_position.index],
                     'y': long_position[col].values.tolist(),
                     'name':'Long Position',
-                    'line': {'width':g.lineWidth,
-                             'color': 'rgb(27, 93, 225)'
-                             }
+                    'hoverinfo': 'none',
+                    'type' :'bar',
+                    'marker': {
+                        'color':'rgb(27, 93, 225)'
+                        }
+                    #'line': {'width':g.lineWidth,
+                    #         'color': 'rgb(27, 93, 225)'
+                    #         }
                 } for col in long_position.columns
                 ] if long_count > 0 else []) +([{
                     'x': [pd.to_datetime(str(i)).strftime('%Y-%m-%d') for i in short_position.index],
                     'y': short_position[col].values.tolist(),
                     'name':'Short Position',
-                    'line': {'width':g.lineWidth,
-                             'color': 'rgb(214,39,40)'
-                             }
+                    'hoverinfo': 'none',
+                    'type': 'bar',
+                    'marker' :{
+                        'color':'rgb(214,39,40)'
+                        }
+                    #'line': {'width':g.lineWidth,
+                    #         'color': 'rgb(214,39,40)'
+                    #         }
                 } for col in short_position.columns
-                ] if short_count > 0 else []),
+                ] if short_count > 0 else []) + ([{
+                        'x': [pd.to_datetime(str(i)).strftime('%Y-%m-%d') for i in wiki_g.index],
+                        'y': wiki_g.fillna(0).values.tolist(),
+                        'mode': 'markers',
+                        'name': 'Wiki',
+                        'text': wiki_text.values.tolist(),
+                        'hoverinfo': 'text',
+                        'marker': {
+                            'color': 'green',
+                            'size' : 10
+                            #'symbol': 18
+                        }
+                    }
+                ]
+                )+ ([{
+                    'x': [pd.to_datetime(str(i)).strftime('%Y-%m-%d') for i in df3.index],
+                    'y': df3['close'].values.tolist(),
+                    'name':'Stock',
+                    'hoverinfo': 'none',
+                    #'fill': 'tozeroy',
+                    'line': {
+                        'color': 'black',
+                        'width': 2
+                        },
+                    'yaxis': 'y2'
+                } 
+                ]
+                    ),
                 'layout': {
                     'margin': {'l': g.left_margin, 'r': 40},
                     # 'width': 750,
                     # 'height': 240,
                     'legend': {'font': {'size': 10}, 'x': 1.05},
                     'yaxis': {
-                        'ticksuffix': '%'
+                        'overlaying': 'y2',
+                        'ticksuffix': '%',
+                        'range' : range1
+                    },
+                    'yaxis2': {
+                        'side': 'right',
+                        'title': 'Price',
+                        'tickfont': {'size': 10},
+                        'range': range2
                     }
                 }
     } 
@@ -589,8 +739,6 @@ def check():
     render_obj['table'] = tbl_html
     render_obj['long_price_graph'] = long_price_graph
     render_obj['long_rate_graph'] = long_rate_graph
-    render_obj['short_price_graph'] = short_price_graph
-    render_obj['short_rate_graph'] = short_rate_graph
     render_obj['position_size_graph'] = position_size_graph
 
     return render_template('tradehistory/result.html',
