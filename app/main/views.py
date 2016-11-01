@@ -360,7 +360,7 @@ def sum_or_first(arr):
     if arr.dtype == np.float64:
         return arr.sum()
     else:
-        return arr[0]
+        return arr[-1] # return newest name since 3626 changed their name duplicated count
 
 
 @main.route('/', methods=['GET', 'POST'])
@@ -387,6 +387,13 @@ def index():
 
     # create new column which contain turnover in JPY
     turnover_df['JPYPL'] = turnover_df['Turnover']
+
+    # process case when there are 2 advs for one code
+    # first need to divided the turnover equally
+    turnover_df.loc[turnover_df['advisor'].str.contains('/'), 'JPYPL'] /= 2
+    # next, replace adv code with currently selected code
+    turnover_df['advisor'] = turnover_df['advisor'].str.replace(r"%s/.*|.*/%s" % (param_adviser, param_adviser),
+                                                                param_adviser)
 
     # calculate total turnover for each side
     total_turnover = turnover_df.truncate(after=end_date).groupby(['side']).sum()['JPYPL']
@@ -481,12 +488,12 @@ def index():
                     .groupby(by='advisor')
                     .mean() * 100 / aum_df['Total'].mean())
 
-    ranke_short_df = (exposure_avg[(exposure_avg['side'] == 'S')]
+    rank_short_df = (exposure_avg[(exposure_avg['side'] == 'S')]
                       .groupby(by='advisor')
                       .mean() * 100 / aum_df['Total'].mean())
 
     rank_long_df = rank_long_df.drop(g.dropList, errors='ignore').rank(ascending=False)
-    ranke_short_df = ranke_short_df.drop(g.dropList, errors='ignore').rank(ascending=False)
+    rank_short_df = rank_short_df.drop(g.dropList, errors='ignore').rank(ascending=False)
 
     net_op = DataFrame()
 
@@ -1081,7 +1088,7 @@ def index():
                                          ].mean() * 100 / aum_df['Total'].mean()
                                         ).iloc[0]
     render_obj['rank_long'] = rank_long_df.loc[param_adviser, 0]
-    render_obj['rank_short'] = ranke_short_df.loc[param_adviser, 0]
+    render_obj['rank_short'] = rank_short_df.loc[param_adviser, 0]
     render_obj['pl_graph'] = pl_graph
     render_obj['netop_graph'] = netop_graph
     render_obj['betaop_graph'] = beta_graph

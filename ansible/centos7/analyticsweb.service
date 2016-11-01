@@ -11,6 +11,8 @@ Environment="PATH=/home/cuong/anaconda3/envs/attribution/bin"
 Environment="MAIL_USERNAME=auto@rockhampton-mgt.com"
 Environment="MAIL_PASSWORD=ROCK#E123"
 Environment="MAIL_SENDER=auto@rockhampton-mgt.com"
+Environment="FLASK_CONFIG=production"
+Environment="ANALYTICS_ADMIN=ctran@rockhampton-mgt.com"
 
 ExecStart=/home/cuong/anaconda3/envs/attribution/bin/gunicorn --workers 3 --pid /tmp/pid --bind unix:webattribution.sock -m 007 manage:app
 ExecReload=/bin/kill -s HUP $MAINPID

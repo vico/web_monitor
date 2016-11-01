@@ -15,9 +15,7 @@ from dateutil.parser import parse
 def before_request():
     con = getattr(g, 'con', None)
     if con is None:
-        g.con = pymysql.connect(host='192.168.1.147', user='uploader', passwd='fA6ZxopGrbdb')
-        #(host='localhost', user='root', passwd='root', db='hkg02p')
-        #(host='192.168.1.147', user='uploader', passwd='fA6ZxopGrbdb', db='hkg02p')
+        g.con = pymysql.connect(host='localhost', user='root', passwd='root', db='hkg02p')
     # g.start_date = datetime(datetime.now().year-2, 12, 31).strftime('%Y-%m-%d')
     g.start_date = '2012-01-01'
     g.end_date = datetime.now().strftime('%Y-%m-%d')  # not include
@@ -48,6 +46,7 @@ def get_trade_df(quick, start_date, end_date, con):
     
     return trade_df
 
+
 def make_view(df, date_list):
     '''
     turn DataFrame into HTML 
@@ -57,7 +56,6 @@ def make_view(df, date_list):
     style = 'class="table"'
     field_separator = '#'
     rows = df.to_csv(sep=field_separator).split('\n')
-    
 
     for r in rows[1:]:
         if r != '':
@@ -71,7 +69,6 @@ def make_view(df, date_list):
                              elements[4].title().decode('utf-8') +
                          '</p>'
                         )
-            
 
     return ret_html
     
@@ -164,6 +161,7 @@ def get_wiki_df(quick, con):
                 .set_index('processDate').sort_index(ascending=False).reset_index()) if len(rets) > 0 else DataFrame()
     
     return pd.concat([t, wiki2014], ignore_index=True)
+
 
 @wiki.route('/')
 def index():

@@ -16,7 +16,7 @@ import pymysql.cursors
 
 @tradehistory.before_request
 def before_request():
-    g.con = pymysql.connect(host='192.168.1.147', user='uploader', passwd='fA6ZxopGrbdb')
+    g.con = pymysql.connect(host='localhost', user='root', passwd='root', db='hkg02p')
         #(host='localhost', user='root', passwd='root', db='hkg02p')
         #(host='192.168.1.147', user='uploader', passwd='fA6ZxopGrbdb', db='hkg02p')
     # g.start_date = datetime(datetime.now().year-2, 12, 31).strftime('%Y-%m-%d')
