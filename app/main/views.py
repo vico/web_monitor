@@ -171,7 +171,7 @@ def get_turnover_df(from_date, end_date):
         LEFT JOIN t06DailyBBStaticSnapshot g ON c.instrumentID = g.instrumentID AND g.dataType = 'JAPANESE_INDUSTRY_GROUP_NAME_ENG'
         LEFT JOIN t06DailyBBStaticSnapshot i ON c.instrumentID = i.instrumentID AND i.dataType = 'SECURITY_TYP'
         WHERE processDate = '%s'
-    UNION
+    UNION ALL
         SELECT aa.tradeDate,
         aa.code,
         aa.currencyCode,
