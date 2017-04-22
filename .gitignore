@@ -9,3 +9,4 @@ build
 .*.swp
 *.sqlite
 logs/app.log
+**/.ipynb_checkpoints
