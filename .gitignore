@@ -10,3 +10,4 @@ build
 *.sqlite
 logs/app.log
 **/.ipynb_checkpoints
+**/config.json
