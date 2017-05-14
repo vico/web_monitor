@@ -466,9 +466,9 @@ def check():
     test = (test.reset_index()[['tradeDate', 'orderType', 'side']]
                 .drop_duplicates()
                 .set_index('tradeDate')
-                .assign(order = lambda df: df['orderType']+df['side'])[['order']]
+                .assign(order=lambda df: df['orderType']+df['side'])[['order']]
                 .groupby(level=0)
-                .apply(lambda df: Series(dict(orderType= df['order'].str.cat(sep=","))))
+                .apply(lambda df: Series(dict(orderType=df['order'].str.cat(sep=","))))
            )
     
     order_df = DataFrame(test, index=test.index.union(wiki_df['processDate'].drop_duplicates())).fillna(method="bfill")
@@ -559,8 +559,8 @@ def check():
                         'size':g.markerSize
                     }
                     }] if 'RH' in trade_df.index.levels[1] and 
-                           'B' in trade_df.index.levels[2] and 
-                           'L' in trade_df.index.levels[3] else [])+([{
+                          'B' in trade_df.index.levels[2] and
+                          'L' in trade_df.index.levels[3] else [])+([{
                     'x': [pd.to_datetime(str(i)).strftime('%Y-%m-%d') 
                           for i in get_ratio_df(trade_df, df2[index_name], 'S','L').index],
                     'y': get_ratio_df(trade_df, df2[index_name], 'S','L')['price'].values.tolist(),
@@ -603,8 +603,6 @@ def check():
                 }
     } 
 
-     
-
     long_position = (sql_pl_df.groupby(['processDate', 'side'])[['RHExposure']]
                               .sum()
                               .loc[pd.IndexSlice[:,'L'],:]
@@ -632,8 +630,8 @@ def check():
                         .apply(lambda df: df['text'].str.cat(sep='<BR>'))
                  ) 
 
-    wiki_g = ( (long_position.reindex(wiki_text.index)['Long Position'] if long_count > 0 else 0) + 
-                 (short_position.reindex(wiki_text.index)['Short Position'] if short_count > 0 else 0) )
+    wiki_g = ((long_position.reindex(wiki_text.index)['Long Position'] if long_count > 0 else 0) +
+              (short_position.reindex(wiki_text.index)['Short Position'] if short_count > 0 else 0))
 
     # wiki_g = ( (long_position.reindex(wiki_text.index)['Long Position'] ) + 
     #              (short_position.reindex(wiki_text.index)['Short Position'] ) )
@@ -641,16 +639,15 @@ def check():
 
     positive_pl_bound = 1.1*abs(max([max(long_position.max().values)])) if long_count > 0 else 0
     negative_pl_bound = 1.1*abs(min([min(short_position.min().values)])) if short_count > 0 else 0
-     
-    if long_count > 0 and short_count > 0:
-         positive_pl_bound = 1.1*abs(max([max(long_position.max().values), min(short_position.min().values), 0]))
-         negative_pl_bound = 1.1*abs(max([max(long_position.max().values), min(short_position.min().values), 0]))
 
-    positive_index_bound = 1.1*abs(max([df3['close'].max()]))
+    if long_count > 0 and short_count > 0:
+        positive_pl_bound = 1.1 * abs(max([max(long_position.max().values), min(short_position.min().values), 0]))
+        negative_pl_bound = 1.1 * abs(max([max(long_position.max().values), min(short_position.min().values), 0]))
+
+    positive_index_bound = 1.1 * abs(max([df3['close'].max()]))
     
     range1 = [-negative_pl_bound, positive_pl_bound]
     range2 = [-positive_index_bound, positive_index_bound]
-    
     
     if long_count > 0 and short_count == 0:
         range1 = [0, positive_pl_bound]
@@ -658,22 +655,22 @@ def check():
     elif long_count == 0 and short_count > 0:
         range1 = [-negative_pl_bound, negative_pl_bound]
         range2 = [-positive_index_bound, positive_index_bound]
-    
 
-    position_size_graph = {'data': ([{
+    position_size_graph = {
+        'data': ([{
                     'x': [pd.to_datetime(str(i)).strftime('%Y-%m-%d') for i in long_position.index],
                     'y': long_position[col].values.tolist(),
                     'name':'Long Position',
                     'hoverinfo': 'none',
-                    'type' :'bar',
+                    'type':'bar',
                     'marker': {
-                        'color':'rgb(27, 93, 225)'
+                        'color': 'rgb(27, 93, 225)'
                         }
                     #'line': {'width':g.lineWidth,
                     #         'color': 'rgb(27, 93, 225)'
                     #         }
-                } for col in long_position.columns
-                ] if long_count > 0 else []) +([{
+                  } for col in long_position.columns
+                  ] if long_count > 0 else []) + ([{
                     'x': [pd.to_datetime(str(i)).strftime('%Y-%m-%d') for i in short_position.index],
                     'y': short_position[col].values.tolist(),
                     'name':'Short Position',
@@ -685,8 +682,8 @@ def check():
                     #'line': {'width':g.lineWidth,
                     #         'color': 'rgb(214,39,40)'
                     #         }
-                } for col in short_position.columns
-                ] if short_count > 0 else []) + ([{
+                  } for col in short_position.columns
+                  ] if short_count > 0 else []) + ([{
                         'x': [pd.to_datetime(str(i)).strftime('%Y-%m-%d') for i in wiki_g.index],
                         'y': wiki_g.fillna(0).values.tolist(),
                         'mode': 'markers',
@@ -695,12 +692,12 @@ def check():
                         'hoverinfo': 'text',
                         'marker': {
                             'color': 'green',
-                            'size' : 10
+                            'size': 10
                             #'symbol': 18
                         }
                     }
                 ]
-                )+ ([{
+                ) + ([{
                     'x': [pd.to_datetime(str(i)).strftime('%Y-%m-%d') for i in df3.index],
                     'y': df3['close'].values.tolist(),
                     'name':'Stock',

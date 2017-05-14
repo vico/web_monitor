@@ -3,7 +3,7 @@
 
 <head>
     <meta charset="utf-8">
-    <title>Web Attribution</title>
+    <title>Commissions</title>
     <link rel="shortcut icon" href="{{ url_for('static', filename='favicon.ico') }}">
     <!-- Normalize or reset CSS with your favorite library -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/normalize/3.0.3/normalize.css" integrity="sha256-afz3aCt3EXZjTcVN6wxBLPnsQN+THVagSA7lG0ftFZg=" crossorigin="anonymous" />
@@ -15,7 +15,7 @@
 
     <!-- Set page size here: A5, A4 or A3 -->
     <!-- Set also "landscape" if you need -->
-    <style>@page { size: A4 }</style>
+    <style>@page { size: A4 } </style>
 
     <!-- Custom styles for this document -->
     <link href='https://fonts.googleapis.com/css?family=Tangerine:700' rel='stylesheet' type='text/css'>
@@ -26,6 +26,8 @@
     <script src="{{ url_for('static', filename='select2.js') }}"></script>
     <script src="{{ url_for('static', filename='plotly-latest.min.js') }}"></script>
     <style>
+        @page { size: A4 landscape }
+
         body { font-family: Calibri, serif }
 
         li { font-size: 11pt; line-height: 5mm }
@@ -39,7 +41,7 @@
             border: 1px;
         }
         td,th {
-            font-size: 10pt;
+            font-size: 8pt;
             vertical-align: center;
             padding: 3px 6px;
             border-color: transparent;
@@ -158,7 +160,7 @@
 
 <!-- Set "A5", "A4" or "A3" for class name -->
 <!-- Set also "landscape" if you need -->
-<body class="A4">
+<body class="A4 landscape">
 
 <!-- Each sheet element should have the class "sheet" -->
 <!-- "padding-**mm" is optional: you can set 10, 15, 20 or 25 -->

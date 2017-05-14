@@ -1,0 +1,98 @@
+{% extends "landscape_a4.html" %}
+{% block body %}
+<!-- Each sheet element should have the class "sheet" -->
+  <!-- "padding-**mm" is optional: you can set 10, 15, 20 or 25 -->
+<style>
+    .top-header {
+            position: absolute;
+            top: 18px;
+            width: 100%;
+            text-align: center;
+            font-size: 9px;
+    }
+
+    .bottom-footnote {
+        position: absolute;
+        bottom: 20px;
+        width: 100%;
+        text-align: center;
+        font-size: 9px;
+    }
+
+    .date-area, form {
+        position: absolute;
+        top: 18px;
+        left: 65px;
+        font-size: 9px;
+    }
+    .center {
+        margin: auto;
+    }
+</style>
+  <section class="sheet padding-15mm">
+      <p class="top-header"><strong><em>Strictly Private And Confidential</em></strong></p>
+      <p class="date-area"><strong><em><form id="dateform"><input type="text" value="2017-04-15"  name="date" id="datepicker1"></form></em></strong></p>
+      <p><span style="color: red;"><strong><em>Japan Commission - QTD</em></strong></span></p>
+      <div>{{ main_table | safe}}</div>
+        <div>
+            <div style="display: inline-block; vertical-align: top;">
+                <table class="dataframe borderTable">
+                    <thead>
+                        <tr><th></th><th>Clearing - MS</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><th>QTD</th><td>$ {{qtd_clearing}}</td></tr>
+                        <tr><th>YTD</th><td>$ {{ytd_clearing}}</td></tr>
+                        <tr><th>JPY FX</th><td>{{usdjpy}}</td></tr>
+                        <tr><th>HKD FX</th><td>{{hkdjpy}}</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <div style="display: inline-block; vertical-align: top;">
+                <table class="dataframe borderTable">
+                    <thead>
+                        <tr><th></th><th>Soft - Accrued</th><th>Soft - MS</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><th>{{mon1}}</th><td>$ {{soft1}}</td><td>$ {{soft_ms1}}</td></tr>
+                        <tr><th>{{mon2}}</th><td>$ {{soft2}}</td><td>$ {{soft_ms2}}</td></tr>
+                        <tr><th>{{mon3}}</th><td>$ {{soft3}}</td><td>$ {{soft_ms3}}</td></tr>
+                        <tr><th>QTD</th><td>$ {{soft_qtd}}</td><td>$ {{soft_msqtd}}</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <div style="display: inline-block; vertical-align: top;">
+                <table class="dataframe borderTable">
+                    <thead>
+                        <tr><th></th><th>Quarterly</th><th>Monthly</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><th>Japan Research</th><td>$ {{ "{:,.0f}".format(jp_quarter_commission_budget)}}</td>
+                            <td>$ {{ "{:,.0f}".format(jp_quarter_commission_budget / 3) }}</td>
+                        </tr>
+                        <tr><th>Asia Research</th><td>$ {{"{:,.0f}".format(asia_quarter_commission_budget)}}</td>
+                            <td>$ {{"{:,.0f}".format(asia_quarter_commission_budget / 3)}}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+      <p class="bottom-footnote">1</p>
+
+  </section>
+
+<script>
+    var picker1 = new Pikaday({
+            field: document.getElementById('datepicker1'),
+            format: 'YYYY-MM-DD',
+    {% if date is defined %}
+            defaultDate: new Date({{date.year}}, {{date.month-1}}, {{date.day}}),
+            setDefaultDate: true,
+    {% endif %}
+        onSelect: function() {
+            console.log(this.getMoment().format('Do MMMM YYYY'));
+            $('#dateform').submit();
+        }
+     });
+</script>
+{% endblock %}

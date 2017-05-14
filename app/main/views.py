@@ -310,7 +310,7 @@ def get_aum_df(from_date, end_date):
 
 @cache.memoize(TIMEOUT)
 def get_code_beta():
-    code_beta_df = sql.read_sql('''SELECT a.code, a.beta, a.sector
+    code_beta_df = sql.read_sql('''SELECT TRIM(a.code) AS `code`, a.beta, a.sector
           FROM t08AdvisorTag a,
             (SELECT advisorTagID, code, MAX(t08AdvisorTag.adviseDate) AS MaxOfadviseDate
             FROM t08AdvisorTag
@@ -364,7 +364,7 @@ def sum_or_first(arr):
 
 
 @main.route('/', methods=['GET', 'POST'])
-@login_required
+# @login_required
 def index():
     # TODO: change all double quotes to single quote for consistence
     # TODO: verify cache invalidate
@@ -1102,10 +1102,3 @@ def index():
 
     return render_template('main/attrib.html', params=render_obj)
 
-
-@main.route('/test')
-@login_required
-def test():
-    render_obj = dict()
-    render_obj['analyst_list'] = g.indexMapping.keys()
-    return render_template('main/test.html', params=render_obj)

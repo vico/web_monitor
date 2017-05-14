@@ -44,6 +44,9 @@ def create_app(config_name):
     from .wiki import wiki as wiki_blueprint
     app.register_blueprint(wiki_blueprint, url_prefix='/wiki')
 
+    from .commission import commissions as commission_blueprint
+    app.register_blueprint(commission_blueprint, url_prefix='/commission')
+
     from .front import front as front_blueprint
     app.register_blueprint(front_blueprint, url_prefix='/')
 
