@@ -5,8 +5,8 @@ from flask.ext.login import login_required
 import pandas as pd
 import numpy as np
 from pandas.io import sql
-import pymysql
-from datetime import datetime
+# import pymysql
+from datetime import datetime, date
 
 import pymysql
 
@@ -29,9 +29,9 @@ def get_trades(year):
               # a.commission,
               (@commInUSD := a.commission*f.rate) AS commInUSD,
               (@commrate := IF (g.commrate IS NOT NULL, ROUND(g.commrate,4), ROUND(d.brokerCommissionRate,4))) AS CommRate,
-              (@jpresearch := IF(b.currencyCode="JPY" AND c.instrumentType="EQ" AND  (@commrate=0.0015), 
+              (@jpresearch := IF(b.currencyCode IN ("JPY", "USD") AND c.instrumentType="EQ" AND  (@commrate<> 0.0004), 
                   @commInUSD*11/15,0)*1.0) AS JPResearch,
-                  IF(b.currencyCode="JPY" AND c.instrumentType="EQ" AND (@commrate=0.0004), 
+                  IF(b.currencyCode IN ("JPY", "USD") AND c.instrumentType="EQ" AND (@commrate=0.0004), 
                       @commInUSD, 
                       0)*1.0 AS JPDis,
               (@clearing:=
@@ -41,9 +41,9 @@ def get_trades(year):
                     IF(SUBSTRING(a.code, 1, 2) IN ("HC", "HI"), 30, 0) 
                 )
                ) * a.quantity *f.rate, 0  )) AS Clearing,
-              IF(b.currencyCode="JPY" AND c.instrumentType="EQ" AND (@commrate=0.0004 OR @commrate=0),
+              IF(b.currencyCode IN ("JPY", "USD")  AND c.instrumentType="EQ" AND (@commrate=0.0004 OR @commrate=0),
                   0,
-                  IF(b.currencyCode="JPY" AND c.instrumentType="EQ",
+                  IF(b.currencyCode IN ("JPY", "USD")  AND c.instrumentType="EQ",
                   @commInUSD - @jpresearch,
                   IF(b.currencyCode="JPY" AND c.instrumentType IN ("FU", "OP"), 
                   @commInUSD - @clearing,0) )) AS JPExec,
@@ -61,13 +61,13 @@ def get_trades(year):
                         ELSE 0
                         END
               ) AS tax,
-              (@asiadeal := IF (b.currencyCode <> "JPY" AND c.instrumentType="EQ" AND d.brokerCommissionRate > 0.01,
+              (@asiadeal := IF (b.currencyCode  NOT IN ("JPY", "USD")  AND c.instrumentType="EQ" AND d.brokerCommissionRate > 0.01,
                                 a.gross * f.rate * (d.brokerCommissionRate - @tax ), 0)) AS asiaDeal,
-              (@asiaResearch := IF(b.currencyCode <> "JPY" AND c.instrumentType="EQ" AND @asiadeal=0, 
+              (@asiaResearch := IF(b.currencyCode  NOT IN ("JPY", "USD")  AND c.instrumentType="EQ" AND @asiadeal=0, 
                 IF(d.brokerCommissionRate-@tax-0.0005>= 0, d.brokerCommissionRate-@tax-0.0005, 0) *f.rate*a.gross, 0)) AS asiaResearch,
-              IF (b.currencyCode <> "JPY" AND c.instrumentType="EQ" AND @asiadeal=0,
+              IF (b.currencyCode NOT  IN ("JPY", "USD")  AND c.instrumentType="EQ" AND @asiadeal=0,
                 0.0005 * f.rate * a.gross,
-                IF (b.currencyCode <> "JPY" AND c.instrumentType IN ("FU", "OP"), @commInUSD-@clearing, 0)
+                IF (b.currencyCode NOT IN ("JPY", "USD")  AND c.instrumentType IN ("FU", "OP"), @commInUSD-@clearing, 0)
               ) AS asiaExecution,
               IF (a.swap="SWAP", @asiaResearch, 0)*1.0 AS HCSwaps
             FROM t08Reconcile a
@@ -81,7 +81,7 @@ def get_trades(year):
             where a.status="A" and a.srcFlag="D" and a.tradeDate >= {}
             group by a.code, a.orderType, a.side, a.swap, a.tradeDate, a.settleDate, a.brokerCode
               ) g ON a.code=g.code and a.orderType=g.orderType and a.side=g.side and a.swap=g.swap and a.tradeDate=g.tradeDate
-                      and d.brokerCode=g.brokerCode
+                     and a.settleDate=g.settleDate  and d.brokerCode=g.brokerCode
             WHERE a.tradeDate>='{}' AND a.srcFlag="K"
             ORDER BY a.tradeDate, a.code;
         """.format(start_date, start_date), g.con, parse_dates=['tradeDate'], index_col='tradeDate')
@@ -122,9 +122,9 @@ def calculate_commission(quarter_trades, jp_ranks_df, jp_quarter_commission_budg
     table = (quarter_trades
              .groupby(['brokerName', 'currencyCode'])
              .sum()
-             .loc[(slice(None), 'JPY'), ['JPResearch', 'JPExec', 'JPDis']]
+             .loc[(slice(None), ['JPY', 'USD']), ['JPResearch', 'JPExec', 'JPDis']]
+             .groupby(level=0).sum()
              .reset_index()
-             .drop('currencyCode', axis=1)
              .set_index('brokerName')
              .merge(jp_ranks_df, how='right', left_index=True,
                     right_index=True)  # some names removed like Barclays and Softs
@@ -162,19 +162,19 @@ def before_request():
 @commissions.route('/', methods=['GET'])
 # @login_required
 def index():
-    date = request.args.get('date')
+    request_date = request.args.get('date')
 
-    if date is None:
-        date = datetime.date.today()
+    if request_date is None:
+        request_date = date.today()
     else:
         try:
-            date = datetime.strptime(date, '%Y-%m-%d')
+            request_date = datetime.strptime(request_date, '%Y-%m-%d')
         except ValueError:
-            date = datetime.date.today()
+            request_date = date.today()
 
-    quarter = (date.month-1) // 3 + 1
+    quarter = (request_date.month-1) // 3 + 1
 
-    ytd_trades = get_trades(date.year)
+    ytd_trades = get_trades(request_date.year)
 
     # Asia commission budget is 2mm  USD per year
     # Japan has gone through a few iterations but it's basically approximately 7.5 mm USD per year
@@ -202,10 +202,33 @@ def index():
                                       ])
     }
 
+    # broker rank for 2016Q2
+    data = {
+        'brokers': ['BAML', 'Mizuho Securities', 'Nomura', 'Japan Equity Research',
+                    'Citi', 'Mitsubishi UFJ', 'Tokai', 'Ichiyoshi', 'SMBC Nikko',
+                    'BNP', 'Deutsche', 'CLSA', 'Daiwa', 'Jefferies',
+                    'CS', 'UBS', 'JP Morgan', 'Goldman Sachs', 'Okasan',
+                    'MS', 'Macquarie'
+                    ],
+        'rank': [6, 2, 1, 17,
+                 4, 10, 15, 14, 5,
+                 13, 18, 21, 8, 16,
+                 9, 12, 7, 3, 19,
+                 11, 20],
+        'research': map(lambda x: x, [6.76, 10.04, 12.52, 0.97,
+                                      8.53, 5.84, 1.18, 2.29, 7.56,
+                                      2.41, 0.88, 0.25, 6.47, 1.09,
+                                      5.90, 8.91, 6.61, 8.94, 0.85,
+                                      5.32, 0.25
+                                      ])
+    }
+
     jp_ranks_df = pd.DataFrame(data).set_index('brokers')
-    usd_jpy = 112.27
+    usd_jpy = 112.27  # 2016Q1
     hkd_jpy = 7.754
-    quarter_trades = get_quarter_trades(date.year, quarter, ytd_trades)
+    usd_jpy = 102.66  # 2016Q2
+    hkd_jpy = 7.759
+    quarter_trades = get_quarter_trades(request_date.year, quarter, ytd_trades)
 
     table = calculate_commission(quarter_trades, jp_ranks_df, jp_quarter_commission_budget, usd_jpy)
     qtd_clearing = "{:,.0f}".format(quarter_trades['Clearing'].sum())
@@ -221,19 +244,21 @@ def index():
 
     if quarter == 1:
         m1, m2, m3 = [1, 2, 3]
+    elif quarter == 2:
+        m1, m2, m3 = [4, 5, 6]
 
-    mon1_trades = quarter_trades['{}-{:02d}'.format(date.year, m1)]
+    mon1_trades = quarter_trades['{}-{:02d}'.format(request_date.year, m1)]
     soft1 = "{:,.0f}".format(mon1_trades[(mon1_trades['brokerName'] == 'Soft')]['JPResearch'].sum())
     soft_ms1 = "{:,.0f}".format(mon1_trades[mon1_trades['brokerName'] == 'Soft']['JPExec'].sum())
 
-    mon2_trades = quarter_trades['{}-{:02d}'.format(date.year, m2)]
+    mon2_trades = quarter_trades['{}-{:02d}'.format(request_date.year, m2)]
     soft2 = "{:,.0f}".format(mon2_trades[(mon2_trades['brokerName'] == 'Soft')]['JPResearch'].sum())
     soft_ms2 = "{:,.0f}".format(mon2_trades[mon2_trades['brokerName'] == 'Soft']['JPExec'].sum())
 
-    mon3_trades = quarter_trades['{}-{:02d}'.format(date.year, m3)]
+    mon3_trades = quarter_trades['{}-{:02d}'.format(request_date.year, m3)]
     soft3 = "{:,.0f}".format(mon3_trades[(mon3_trades['brokerName'] == 'Soft')]['JPResearch'].sum())
     soft_ms3 = "{:,.0f}".format(mon3_trades[mon3_trades['brokerName'] == 'Soft']['JPExec'].sum())
-    
+
     soft_qtd = '{:,.0f}'.format(quarter_trades[(quarter_trades['brokerName'] == 'Soft') &
                               (quarter_trades['currencyCode'] == 'JPY')]['JPResearch'].sum())
     soft_msqtd = '{:,.0f}'.format(quarter_trades[(quarter_trades['brokerName'] == 'Soft') &
@@ -249,5 +274,5 @@ def index():
                            soft_qtd=soft_qtd, soft_msqtd=soft_msqtd,
                            jp_quarter_commission_budget=jp_quarter_commission_budget,
                            asia_quarter_commission_budget=asia_quarter_commission_budget,
-                           date=date
+                           date=request_date
                            )

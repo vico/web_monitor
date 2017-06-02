@@ -11784,6 +11784,7 @@ div#notebook {
 <span class="kn">from</span> <span class="nn">pandas.io</span> <span class="kn">import</span> <span class="n">sql</span>
 <span class="kn">from</span> <span class="nn">pandas.tseries.offsets</span> <span class="kn">import</span> <span class="o">*</span>
 <span class="kn">import</span> <span class="nn">numpy</span> <span class="kn">as</span> <span class="nn">np</span>
+<span class="kn">from</span> <span class="nn">pprint</span> <span class="kn">import</span> <span class="n">pprint</span>
 <span class="c1"># import pylab as plt</span>
 <span class="kn">import</span> <span class="nn">pymysql</span>
 <span class="c1"># import seaborn</span>
@@ -11833,67 +11834,82 @@ div#notebook {
 <div class="prompt input_prompt">In&nbsp;[4]:</div>
 <div class="inner_cell">
     <div class="input_area">
-<div class=" highlight hl-ipython2"><pre><span></span><span class="n">ytd_trades</span> <span class="o">=</span> <span class="n">sql</span><span class="o">.</span><span class="n">read_sql</span><span class="p">(</span><span class="s2">&quot;&quot;&quot;</span>
-<span class="s2">SELECT a.code, a.fundCode, a.orderType, a.side, a.swap, a.tradeDate, a.PB, g.commrate as gcomrate, d.brokerCommissionRate,</span>
-<span class="s2">  # a.commission,</span>
-<span class="s2">  (@commInUSD := a.commission*f.rate) AS commInUSD,</span>
-<span class="s2">  (@commrate := IF (g.commrate IS NOT NULL, ROUND(g.commrate,4), ROUND(d.brokerCommissionRate,4))) AS CommRate,</span>
-<span class="s2">  (@jpresearch := IF(b.currencyCode=&quot;JPY&quot; AND c.instrumentType=&quot;EQ&quot; AND  (@commrate=0.0015), </span>
-<span class="s2">      @commInUSD*11/15,0)*1.0) AS JPResearch,</span>
-<span class="s2">      IF(b.currencyCode=&quot;JPY&quot; AND c.instrumentType=&quot;EQ&quot; AND (@commrate=0.0004), </span>
-<span class="s2">          @commInUSD, </span>
-<span class="s2">          0)*1.0 AS JPDis,</span>
-<span class="s2">  (@clearing:=</span>
-<span class="s2">  IF (c.instrumentType IN (&quot;FU&quot;, &quot;OP&quot;), </span>
-<span class="s2">      IF(SUBSTRING(a.code, 1, 2) IN (&quot;TP&quot;, &quot;NK&quot;), 500, </span>
-<span class="s2">        IF(SUBSTRING(a.code, 1, 2)=&quot;JP&quot;,50, </span>
-<span class="s2">		IF(SUBSTRING(a.code, 1, 2) IN (&quot;HC&quot;, &quot;HI&quot;), 30, 0) </span>
-<span class="s2">	)</span>
-<span class="s2">   ) * a.quantity *f.rate, 0  )) AS Clearing,</span>
-<span class="s2">  IF(b.currencyCode=&quot;JPY&quot; AND c.instrumentType=&quot;EQ&quot; AND (@commrate=0.0004 OR @commrate=0),</span>
-<span class="s2">      0,</span>
-<span class="s2">      IF(b.currencyCode=&quot;JPY&quot; AND c.instrumentType=&quot;EQ&quot;,</span>
-<span class="s2">      @commInUSD - @jpresearch,</span>
-<span class="s2">      IF(b.currencyCode=&quot;JPY&quot; AND c.instrumentType IN (&quot;FU&quot;, &quot;OP&quot;), </span>
-<span class="s2">      @commInUSD - @clearing,0) )) AS JPExec,</span>
-<span class="s2">  d.brokerCode, c.instrumentType, b.currencyCode,</span>
-<span class="s2">  IF(d.brokerCode=&quot;BXS&quot;, &quot;Soft&quot;, IF(d.brokerCode=&quot;INSH&quot;, &quot;Nomura&quot;,e.name)) AS brokerName,</span>
-<span class="s2">  (@tax := CASE CONCAT(c.instrumentType, a.orderType, b.currencyCode)</span>
-<span class="s2">            WHEN &quot;EQBCNY&quot; THEN 0.000098</span>
-<span class="s2">            WHEN &quot;EQSCNY&quot; THEN 0.001098</span>
-<span class="s2">            WHEN &quot;EQBHKD&quot; THEN 0.00108</span>
-<span class="s2">            WHEN &quot;EQSHKD&quot; THEN 0.00108</span>
-<span class="s2">            WHEN &quot;EQSTWD&quot; THEN 0.003</span>
-<span class="s2">            WHEN &quot;EQSKRW&quot; THEN 0.003</span>
-<span class="s2">            WHEN &quot;EQBSGD&quot; THEN 0.0004</span>
-<span class="s2">            WHEN &quot;EQSSGD&quot; THEN 0.0004</span>
-<span class="s2">            ELSE 0</span>
-<span class="s2">            END</span>
-<span class="s2">  ) AS tax,</span>
-<span class="s2">  (@asiadeal := IF (b.currencyCode &lt;&gt; &quot;JPY&quot; AND c.instrumentType=&quot;EQ&quot; AND d.brokerCommissionRate &gt; 0.01,</span>
-<span class="s2">                    a.gross * f.rate * (d.brokerCommissionRate - @tax ), 0)) AS asiaDeal,</span>
-<span class="s2">  (@asiaResearch := IF(b.currencyCode &lt;&gt; &quot;JPY&quot; AND c.instrumentType=&quot;EQ&quot; AND @asiadeal=0, </span>
-<span class="s2">    IF(d.brokerCommissionRate-@tax-0.0005&gt;= 0, d.brokerCommissionRate-@tax-0.0005, 0) *f.rate*a.gross, 0)) AS asiaResearch,</span>
-<span class="s2">  IF (b.currencyCode &lt;&gt; &quot;JPY&quot; AND c.instrumentType=&quot;EQ&quot; AND @asiadeal=0,</span>
-<span class="s2">    0.0005 * f.rate * a.gross,</span>
-<span class="s2">    IF (b.currencyCode &lt;&gt; &quot;JPY&quot; AND c.instrumentType IN (&quot;FU&quot;, &quot;OP&quot;), @commInUSD-@clearing, 0)</span>
-<span class="s2">  ) AS asiaExecution,</span>
-<span class="s2">  IF (a.swap=&quot;SWAP&quot;, @asiaResearch, 0)*1.0 AS HCSwaps</span>
-<span class="s2">FROM t08Reconcile a</span>
-<span class="s2">  INNER JOIN t01Instrument c ON a.code = c.quick</span>
-<span class="s2">  INNER JOIN t02Currency b ON b.currencyID = c.currencyID</span>
-<span class="s2">  INNER JOIN t08Reconcile d ON a.matchDoric = d.primaryID # a.primaryID = d.matchBrokers AND d.srcFlag =&quot;D&quot;</span>
-<span class="s2">  INNER JOIN t06DailyCrossRate f ON f.priceDate=a.tradeDate AND f.base=b.currencyCode AND f.quote=&quot;USD&quot;</span>
-<span class="s2">  LEFT JOIN t02Broker e ON e.brokerCode = a.brokerCode</span>
-<span class="s2">  left join (select a.code, a.orderType, a.side, a.swap, a.tradeDate, a.settleDate, a.brokerCode, MAX(a.brokerCommissionRate) as commrate</span>
-<span class="s2">from t08Reconcile a</span>
-<span class="s2">where a.status=&quot;A&quot; and a.srcFlag=&quot;D&quot; and a.tradeDate &gt; &#39;2015-12-31&#39;</span>
-<span class="s2">group by a.code, a.orderType, a.side, a.swap, a.tradeDate, a.settleDate, a.brokerCode</span>
-<span class="s2">  ) g ON a.code=g.code and a.orderType=g.orderType and a.side=g.side and a.swap=g.swap and a.tradeDate=g.tradeDate</span>
-<span class="s2">          and d.brokerCode=g.brokerCode</span>
-<span class="s2">WHERE a.tradeDate&gt;&#39;2015-12-31&#39; AND a.srcFlag=&quot;K&quot;</span>
-<span class="s2">ORDER BY a.tradeDate, a.code;</span>
-<span class="s2">&quot;&quot;&quot;</span><span class="p">,</span> <span class="n">con</span><span class="p">,</span> <span class="n">parse_dates</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;tradeDate&#39;</span><span class="p">],</span><span class="n">index_col</span><span class="o">=</span><span class="s1">&#39;tradeDate&#39;</span> <span class="p">)</span>
+<div class=" highlight hl-ipython2"><pre><span></span><span class="k">def</span> <span class="nf">get_trades</span><span class="p">(</span><span class="n">year</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    return all trades from start of year</span>
+<span class="sd">    :param year: the year to get trades</span>
+<span class="sd">    :return: DataFrame of all trades of year</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">start_date</span> <span class="o">=</span> <span class="s1">&#39;{}-01-01&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">year</span><span class="p">)</span>
+    
+    <span class="n">query</span> <span class="o">=</span> <span class="s2">&quot;&quot;&quot;</span>
+<span class="s2">        SELECT a.code, a.fundCode, a.orderType, a.side, a.swap, a.tradeDate, a.PB, </span>
+<span class="s2">              g.commrate as gcomrate, d.brokerCommissionRate,</span>
+<span class="s2">              # a.commission,</span>
+<span class="s2">              (@commInUSD := a.commission*f.rate) AS commInUSD,</span>
+<span class="s2">              (@commrate := IF (g.commrate IS NOT NULL, ROUND(g.commrate,4), ROUND(d.brokerCommissionRate,4))) AS CommRate,</span>
+<span class="s2">              (@jpresearch := IF(b.currencyCode IN (&quot;JPY&quot;, &quot;USD&quot;) AND c.instrumentType=&quot;EQ&quot; AND  (@commrate&lt;&gt; 0.0004), </span>
+<span class="s2">                  @commInUSD*11/15,0)*1.0) AS JPResearch,</span>
+<span class="s2">                  IF(b.currencyCode IN (&quot;JPY&quot;, &quot;USD&quot;) AND c.instrumentType=&quot;EQ&quot; AND (@commrate=0.0004), </span>
+<span class="s2">                      @commInUSD, </span>
+<span class="s2">                      0)*1.0 AS JPDis,</span>
+<span class="s2">              (@clearing:=</span>
+<span class="s2">              IF (c.instrumentType IN (&quot;FU&quot;, &quot;OP&quot;), </span>
+<span class="s2">                  IF(SUBSTRING(a.code, 1, 2) IN (&quot;TP&quot;, &quot;NK&quot;), 500, </span>
+<span class="s2">                    IF(SUBSTRING(a.code, 1, 2)=&quot;JP&quot;,50, </span>
+<span class="s2">                    IF(SUBSTRING(a.code, 1, 2) IN (&quot;HC&quot;, &quot;HI&quot;), 30, 0) </span>
+<span class="s2">                )</span>
+<span class="s2">               ) * a.quantity *f.rate, 0  )) AS Clearing,</span>
+<span class="s2">              IF(b.currencyCode IN (&quot;JPY&quot;, &quot;USD&quot;)  AND c.instrumentType=&quot;EQ&quot; AND (@commrate=0.0004 OR @commrate=0),</span>
+<span class="s2">                  0,</span>
+<span class="s2">                  IF(b.currencyCode IN (&quot;JPY&quot;, &quot;USD&quot;)  AND c.instrumentType=&quot;EQ&quot;,</span>
+<span class="s2">                  @commInUSD - @jpresearch,</span>
+<span class="s2">                  IF(b.currencyCode=&quot;JPY&quot; AND c.instrumentType IN (&quot;FU&quot;, &quot;OP&quot;), </span>
+<span class="s2">                  @commInUSD - @clearing,0) )) AS JPExec,</span>
+<span class="s2">              d.brokerCode, c.instrumentType, b.currencyCode,</span>
+<span class="s2">              IF(d.brokerCode=&quot;BXS&quot;, &quot;Soft&quot;, IF(d.brokerCode=&quot;INSH&quot;, &quot;Nomura&quot;,e.name)) AS brokerName,</span>
+<span class="s2">              (@tax := CASE CONCAT(c.instrumentType, a.orderType, b.currencyCode)</span>
+<span class="s2">                        WHEN &quot;EQBCNY&quot; THEN 0.000098</span>
+<span class="s2">                        WHEN &quot;EQSCNY&quot; THEN 0.001098</span>
+<span class="s2">                        WHEN &quot;EQBHKD&quot; THEN 0.00108</span>
+<span class="s2">                        WHEN &quot;EQSHKD&quot; THEN 0.00108</span>
+<span class="s2">                        WHEN &quot;EQSTWD&quot; THEN 0.003</span>
+<span class="s2">                        WHEN &quot;EQSKRW&quot; THEN 0.003</span>
+<span class="s2">                        WHEN &quot;EQBSGD&quot; THEN 0.0004</span>
+<span class="s2">                        WHEN &quot;EQSSGD&quot; THEN 0.0004</span>
+<span class="s2">                        ELSE 0</span>
+<span class="s2">                        END</span>
+<span class="s2">              ) AS tax,</span>
+<span class="s2">              (@asiadeal := IF (b.currencyCode  NOT IN (&quot;JPY&quot;, &quot;USD&quot;)  AND c.instrumentType=&quot;EQ&quot; AND d.brokerCommissionRate &gt; 0.01,</span>
+<span class="s2">                                a.gross * f.rate * (d.brokerCommissionRate - @tax ), 0)) AS asiaDeal,</span>
+<span class="s2">              (@asiaResearch := IF(b.currencyCode  NOT IN (&quot;JPY&quot;, &quot;USD&quot;)  AND c.instrumentType=&quot;EQ&quot; AND @asiadeal=0, </span>
+<span class="s2">                IF(d.brokerCommissionRate-@tax-0.0005&gt;= 0, d.brokerCommissionRate-@tax-0.0005, 0) *f.rate*a.gross, 0)) AS asiaResearch,</span>
+<span class="s2">              IF (b.currencyCode NOT  IN (&quot;JPY&quot;, &quot;USD&quot;)  AND c.instrumentType=&quot;EQ&quot; AND @asiadeal=0,</span>
+<span class="s2">                0.0005 * f.rate * a.gross,</span>
+<span class="s2">                IF (b.currencyCode NOT IN (&quot;JPY&quot;, &quot;USD&quot;)  AND c.instrumentType IN (&quot;FU&quot;, &quot;OP&quot;), @commInUSD-@clearing, 0)</span>
+<span class="s2">              ) AS asiaExecution,</span>
+<span class="s2">              IF (a.swap=&quot;SWAP&quot;, @asiaResearch, 0)*1.0 AS HCSwaps</span>
+<span class="s2">            FROM t08Reconcile a</span>
+<span class="s2">              INNER JOIN t01Instrument c ON a.code = c.quick</span>
+<span class="s2">              INNER JOIN t02Currency b ON b.currencyID = c.currencyID</span>
+<span class="s2">              INNER JOIN t08Reconcile d ON a.matchDoric = d.primaryID # a.primaryID = d.matchBrokers AND d.srcFlag =&quot;D&quot;</span>
+<span class="s2">              INNER JOIN t06DailyCrossRate f ON f.priceDate=a.tradeDate AND f.base=b.currencyCode AND f.quote=&quot;USD&quot;</span>
+<span class="s2">              LEFT JOIN t02Broker e ON e.brokerCode = a.brokerCode</span>
+<span class="s2">              left join (select a.code, a.orderType, a.side, a.swap, a.tradeDate, a.settleDate, a.brokerCode, MAX(a.brokerCommissionRate) as commrate</span>
+<span class="s2">            from t08Reconcile a</span>
+<span class="s2">            where a.status=&quot;A&quot; and a.srcFlag=&quot;D&quot; and a.tradeDate &gt;= {}</span>
+<span class="s2">            group by a.code, a.orderType, a.side, a.swap, a.tradeDate, a.settleDate, a.brokerCode</span>
+<span class="s2">              ) g ON a.code=g.code and a.orderType=g.orderType and a.side=g.side and a.swap=g.swap and a.tradeDate=g.tradeDate</span>
+<span class="s2">                     and a.settleDate=g.settleDate  and d.brokerCode=g.brokerCode</span>
+<span class="s2">            WHERE a.tradeDate&gt;=&#39;{}&#39; AND a.srcFlag=&quot;K&quot;</span>
+<span class="s2">            ORDER BY a.tradeDate, a.code;</span>
+<span class="s2">        &quot;&quot;&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">start_date</span><span class="p">,</span> <span class="n">start_date</span><span class="p">)</span>
+    
+<span class="c1">#     print(query)</span>
+
+    <span class="n">ytd_trades</span> <span class="o">=</span> <span class="n">sql</span><span class="o">.</span><span class="n">read_sql</span><span class="p">(</span><span class="n">query</span><span class="p">,</span> <span class="n">con</span><span class="p">,</span> <span class="n">parse_dates</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;tradeDate&#39;</span><span class="p">],</span> <span class="n">index_col</span><span class="o">=</span><span class="s1">&#39;tradeDate&#39;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">ytd_trades</span>
 </pre></div>
 
 </div>
@@ -11936,9 +11952,9 @@ div#notebook {
     <div class="input_area">
 <div class=" highlight hl-ipython2"><pre><span></span><span class="k">def</span> <span class="nf">format_2f</span><span class="p">(</span><span class="n">df</span><span class="p">):</span>
     <span class="n">t</span> <span class="o">=</span> <span class="n">df</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
-    <span class="n">columns</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;JPResearch&#39;</span><span class="p">,</span> <span class="s1">&#39;JPExec&#39;</span><span class="p">,</span> <span class="s1">&#39;JPDis&#39;</span><span class="p">,</span> <span class="s1">&#39;res_target&#39;</span><span class="p">,</span> <span class="s1">&#39;balance_usd&#39;</span><span class="p">,</span> <span class="s1">&#39;balance_jpy&#39;</span><span class="p">]</span>
-    <span class="n">t</span><span class="p">[</span><span class="n">columns</span><span class="p">]</span> <span class="o">=</span> <span class="n">t</span><span class="p">[</span><span class="n">columns</span><span class="p">]</span><span class="o">.</span><span class="n">applymap</span><span class="p">(</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="s1">&#39;$ {:10,.0f}&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> <span class="k">if</span> <span class="n">x</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="k">else</span> <span class="s1">&#39;&#39;</span><span class="p">)</span> <span class="c1"># .replace(&#39; &#39;, &#39;&amp;nbsp;&#39;)</span>
-    <span class="n">t</span><span class="p">[</span><span class="s1">&#39;brokers&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">t</span><span class="p">[</span><span class="s1">&#39;brokers&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span> <span class="k">if</span> <span class="n">x</span> <span class="o">!=</span> <span class="mi">0</span> <span class="k">else</span> <span class="s1">&#39;&#39;</span><span class="p">)</span>
+    <span class="n">columns</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;JPResearch&#39;</span><span class="p">,</span> <span class="s1">&#39;JPExec&#39;</span><span class="p">,</span> <span class="s1">&#39;JPDis&#39;</span><span class="p">,</span> <span class="s1">&#39;res_target&#39;</span><span class="p">,</span> <span class="s1">&#39;balance_usd&#39;</span><span class="p">]</span>
+    <span class="n">t</span><span class="p">[</span><span class="n">columns</span><span class="p">]</span> <span class="o">=</span> <span class="n">t</span><span class="p">[</span><span class="n">columns</span><span class="p">]</span><span class="o">.</span><span class="n">applymap</span><span class="p">(</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="s1">&#39;$ {:12,.0f}&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> <span class="k">if</span> <span class="n">x</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="k">else</span> <span class="s1">&#39;&#39;</span><span class="p">)</span>
+    <span class="n">t</span><span class="p">[</span><span class="s1">&#39;balance_jpy&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">t</span><span class="p">[</span><span class="s1">&#39;balance_jpy&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="s1">&#39;¥ {:12,.0f}&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> <span class="k">if</span> <span class="n">x</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="k">else</span> <span class="s1">&#39;&#39;</span><span class="p">)</span>
     <span class="n">t</span><span class="p">[</span><span class="s1">&#39;rank&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">t</span><span class="p">[</span><span class="s1">&#39;rank&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="s1">&#39;{:.0f}&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> <span class="k">if</span> <span class="ow">not</span> <span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> <span class="k">else</span> <span class="s1">&#39;&#39;</span><span class="p">)</span>
     <span class="n">t</span><span class="p">[</span><span class="s1">&#39;research&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">t</span><span class="p">[</span><span class="s1">&#39;research&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="s1">&#39;{:5.2f}%&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> <span class="k">if</span> <span class="n">x</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="k">else</span> <span class="s1">&#39;&#39;</span><span class="p">)</span>
     <span class="n">t</span><span class="p">[</span><span class="s1">&#39;accrued&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">t</span><span class="p">[</span><span class="s1">&#39;accrued&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="s1">&#39;{:5.0f}%&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> <span class="k">if</span> <span class="ow">not</span> <span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> <span class="k">else</span> <span class="s1">&#39;&#39;</span><span class="p">)</span>
@@ -11956,14 +11972,38 @@ div#notebook {
 <div class="prompt input_prompt">In&nbsp;[7]:</div>
 <div class="inner_cell">
     <div class="input_area">
-<div class=" highlight hl-ipython2"><pre><span></span><span class="c1"># Asia commission budget is 2mm  USD per year</span>
-<span class="c1"># Japan has gone through a few iterations but it&#39;s basically approximately 7.5 mm USD per year</span>
-<span class="n">jp_annual_commission_budget</span> <span class="o">=</span> <span class="mi">7500000</span>  <span class="c1"># usd</span>
-<span class="n">asia_annual_commission_budget</span> <span class="o">=</span> <span class="mi">2000000</span> <span class="c1"># usd</span>
-<span class="n">jp_quarter_commission_budget</span> <span class="o">=</span> <span class="n">jp_annual_commission_budget</span> <span class="o">/</span> <span class="mf">4.0</span>
-<span class="n">asia_quarter_commission_budget</span> <span class="o">=</span> <span class="n">asia_annual_commission_budget</span> <span class="o">/</span> <span class="mf">4.0</span>
+<div class=" highlight hl-ipython2"><pre><span></span><span class="k">def</span> <span class="nf">calculate_commission</span><span class="p">(</span><span class="n">quarter_trades</span><span class="p">,</span> <span class="n">jp_ranks_df</span><span class="p">,</span> <span class="n">jp_quarter_commission_budget</span><span class="p">,</span> <span class="n">usd_jpy</span><span class="p">):</span>
+    <span class="n">table</span> <span class="o">=</span> <span class="p">(</span><span class="n">quarter_trades</span>
+             <span class="o">.</span><span class="n">groupby</span><span class="p">([</span><span class="s1">&#39;brokerName&#39;</span><span class="p">,</span> <span class="s1">&#39;currencyCode&#39;</span><span class="p">])</span>
+             <span class="o">.</span><span class="n">sum</span><span class="p">()</span>
+             <span class="o">.</span><span class="n">loc</span><span class="p">[(</span><span class="nb">slice</span><span class="p">(</span><span class="bp">None</span><span class="p">),</span> <span class="p">[</span><span class="s1">&#39;JPY&#39;</span><span class="p">,</span> <span class="s1">&#39;USD&#39;</span><span class="p">]),</span> <span class="p">[</span><span class="s1">&#39;JPResearch&#39;</span><span class="p">,</span> <span class="s1">&#39;JPExec&#39;</span><span class="p">,</span> <span class="s1">&#39;JPDis&#39;</span><span class="p">]]</span>
+             <span class="o">.</span><span class="n">groupby</span><span class="p">(</span><span class="n">level</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span>
+             <span class="o">.</span><span class="n">reset_index</span><span class="p">()</span>
+             <span class="o">.</span><span class="n">set_index</span><span class="p">(</span><span class="s1">&#39;brokerName&#39;</span><span class="p">)</span>
+             <span class="o">.</span><span class="n">merge</span><span class="p">(</span><span class="n">jp_ranks_df</span><span class="p">,</span> <span class="n">how</span><span class="o">=</span><span class="s1">&#39;right&#39;</span><span class="p">,</span> <span class="n">left_index</span><span class="o">=</span><span class="bp">True</span><span class="p">,</span>
+                    <span class="n">right_index</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>  <span class="c1"># some names removed like Barclays and Softs</span>
+             <span class="o">.</span><span class="n">fillna</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+             <span class="o">.</span><span class="n">sort_values</span><span class="p">(</span><span class="n">by</span><span class="o">=</span><span class="s1">&#39;rank&#39;</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+             <span class="o">.</span><span class="n">assign</span><span class="p">(</span><span class="n">res_target</span><span class="o">=</span><span class="k">lambda</span> <span class="n">df</span><span class="p">:</span> <span class="n">df</span><span class="p">[</span><span class="s1">&#39;research&#39;</span><span class="p">]</span> <span class="o">*</span> <span class="n">jp_quarter_commission_budget</span> <span class="o">/</span> <span class="mi">100</span><span class="p">)</span>
+             <span class="o">.</span><span class="n">assign</span><span class="p">(</span><span class="n">balance_usd</span><span class="o">=</span><span class="k">lambda</span> <span class="n">df</span><span class="p">:</span> <span class="n">df</span><span class="p">[</span><span class="s1">&#39;res_target&#39;</span><span class="p">]</span> <span class="o">-</span> <span class="n">df</span><span class="p">[</span><span class="s1">&#39;JPResearch&#39;</span><span class="p">])</span>
+             <span class="o">.</span><span class="n">assign</span><span class="p">(</span><span class="n">balance_jpy</span><span class="o">=</span><span class="k">lambda</span> <span class="n">df</span><span class="p">:</span> <span class="n">df</span><span class="p">[</span><span class="s1">&#39;balance_usd&#39;</span><span class="p">]</span> <span class="o">*</span> <span class="n">usd_jpy</span><span class="p">)</span>
+             <span class="o">.</span><span class="n">assign</span><span class="p">(</span><span class="n">accrued</span><span class="o">=</span><span class="k">lambda</span> <span class="n">df</span><span class="p">:</span> <span class="p">(</span><span class="n">df</span><span class="p">[</span><span class="s1">&#39;JPExec&#39;</span><span class="p">]</span> <span class="o">+</span> <span class="n">df</span><span class="p">[</span><span class="s1">&#39;JPDis&#39;</span><span class="p">])</span> <span class="o">*</span> <span class="mi">100</span> <span class="o">/</span> <span class="p">(</span><span class="n">df</span><span class="p">[</span><span class="s1">&#39;JPExec&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span> <span class="o">+</span> <span class="n">df</span><span class="p">[</span><span class="s1">&#39;JPDis&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">sum</span><span class="p">()))</span>
+             <span class="o">.</span><span class="n">reset_index</span><span class="p">()</span>
+             <span class="o">.</span><span class="n">set_index</span><span class="p">(</span><span class="s1">&#39;rank&#39;</span><span class="p">)</span>
+             <span class="p">)</span>
 
-<span class="n">jp_quarter_commission_budget</span> <span class="o">=</span> <span class="mi">1880911</span>  <span class="c1"># to make it same with old system</span>
+    <span class="n">exec_target</span> <span class="o">=</span> <span class="p">[</span><span class="mi">11</span><span class="p">,</span> <span class="mi">11</span><span class="p">,</span> <span class="mi">10</span><span class="p">,</span> <span class="mi">10</span><span class="p">,</span> <span class="mi">10</span><span class="p">,</span> <span class="mi">7</span><span class="p">,</span> <span class="mi">7</span><span class="p">,</span> <span class="mi">7</span><span class="p">,</span> <span class="mi">7</span><span class="p">,</span> <span class="mi">7</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">]</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">exec_target</span><span class="p">)</span> <span class="o">&lt;</span> <span class="nb">len</span><span class="p">(</span><span class="n">table</span><span class="o">.</span><span class="n">index</span><span class="p">):</span>
+        <span class="n">exec_target</span> <span class="o">=</span> <span class="n">exec_target</span> <span class="o">+</span> <span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">table</span><span class="o">.</span><span class="n">index</span><span class="p">)</span> <span class="o">-</span> <span class="nb">len</span><span class="p">(</span><span class="n">exec_target</span><span class="p">))</span>
+    <span class="n">table</span><span class="p">[</span><span class="s1">&#39;exec_target&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">Series</span><span class="p">(</span><span class="n">exec_target</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="n">table</span><span class="o">.</span><span class="n">index</span><span class="p">)</span>
+    <span class="k">return</span> <span class="p">(</span><span class="n">table</span>
+            <span class="o">.</span><span class="n">reset_index</span><span class="p">()</span>
+            <span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">table</span><span class="p">[[</span><span class="s1">&#39;research&#39;</span><span class="p">,</span> <span class="s1">&#39;res_target&#39;</span><span class="p">,</span> <span class="s1">&#39;JPResearch&#39;</span><span class="p">,</span> <span class="s1">&#39;JPExec&#39;</span><span class="p">,</span>
+                           <span class="s1">&#39;JPDis&#39;</span><span class="p">,</span> <span class="s1">&#39;balance_usd&#39;</span><span class="p">,</span> <span class="s1">&#39;balance_jpy&#39;</span><span class="p">,</span> <span class="s1">&#39;exec_target&#39;</span><span class="p">]]</span><span class="o">.</span><span class="n">sum</span><span class="p">(),</span> <span class="n">ignore_index</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
+            <span class="o">.</span><span class="n">pipe</span><span class="p">(</span><span class="n">format_2f</span><span class="p">)</span>
+            <span class="p">[[</span><span class="s1">&#39;rank&#39;</span><span class="p">,</span> <span class="s1">&#39;brokers&#39;</span><span class="p">,</span> <span class="s1">&#39;research&#39;</span><span class="p">,</span> <span class="s1">&#39;res_target&#39;</span><span class="p">,</span> <span class="s1">&#39;JPResearch&#39;</span><span class="p">,</span> <span class="s1">&#39;JPExec&#39;</span><span class="p">,</span>
+              <span class="s1">&#39;JPDis&#39;</span><span class="p">,</span> <span class="s1">&#39;balance_usd&#39;</span><span class="p">,</span> <span class="s1">&#39;balance_jpy&#39;</span><span class="p">,</span> <span class="s1">&#39;exec_target&#39;</span><span class="p">,</span> <span class="s1">&#39;accrued&#39;</span><span class="p">]]</span>
+            <span class="p">)</span>
 </pre></div>
 
 </div>
@@ -11976,27 +12016,293 @@ div#notebook {
 <div class="prompt input_prompt">In&nbsp;[8]:</div>
 <div class="inner_cell">
     <div class="input_area">
-<div class=" highlight hl-ipython2"><pre><span></span><span class="c1"># broker rank for each quarter 2016Q2</span>
-<span class="n">data</span> <span class="o">=</span> <span class="p">{</span>
-    <span class="s1">&#39;brokers&#39;</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;BAML&#39;</span><span class="p">,</span> <span class="s1">&#39;Mizuho Securities&#39;</span><span class="p">,</span> <span class="s1">&#39;AdvancedResearch&#39;</span><span class="p">,</span> <span class="s1">&#39;Nomura&#39;</span><span class="p">,</span> <span class="s1">&#39;Japan Equity Research&#39;</span><span class="p">,</span> 
-                <span class="s1">&#39;Citi&#39;</span><span class="p">,</span> <span class="s1">&#39;Mitsubishi UFJ&#39;</span><span class="p">,</span> <span class="s1">&#39;Tokai&#39;</span><span class="p">,</span> <span class="s1">&#39;Ichiyoshi&#39;</span><span class="p">,</span> <span class="s1">&#39;SMBC Nikko&#39;</span><span class="p">,</span> 
-                <span class="s1">&#39;BNP&#39;</span><span class="p">,</span> <span class="s1">&#39;Deutsche&#39;</span><span class="p">,</span> <span class="s1">&#39;CLSA&#39;</span><span class="p">,</span> <span class="s1">&#39;Daiwa&#39;</span><span class="p">,</span> <span class="s1">&#39;Jefferies&#39;</span><span class="p">,</span> 
-                <span class="s1">&#39;CS&#39;</span><span class="p">,</span> <span class="s1">&#39;UBS&#39;</span><span class="p">,</span> <span class="s1">&#39;JP Morgan&#39;</span><span class="p">,</span> <span class="s1">&#39;Goldman Sachs&#39;</span><span class="p">,</span> <span class="s1">&#39;Okasan&#39;</span><span class="p">,</span> 
-                <span class="s1">&#39;MS&#39;</span><span class="p">,</span> <span class="s1">&#39;Macquarie&#39;</span>
-               <span class="p">],</span>
-    <span class="s1">&#39;rank&#39;</span><span class="p">:</span> <span class="p">[</span><span class="mi">6</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">21</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">17</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="mi">7</span><span class="p">,</span> <span class="mi">16</span><span class="p">,</span> <span class="mi">15</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">20</span><span class="p">,</span> <span class="mi">19</span><span class="p">,</span> <span class="mi">22</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">14</span><span class="p">,</span> <span class="mi">9</span><span class="p">,</span> <span class="mi">12</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">9</span><span class="p">,</span> <span class="mi">17</span><span class="p">,</span> <span class="mi">9</span><span class="p">,</span> <span class="mi">13</span><span class="p">],</span>
-    <span class="s1">&#39;research&#39;</span><span class="p">:</span> <span class="nb">map</span><span class="p">(</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span><span class="o">*</span><span class="mi">100</span><span class="p">,</span> <span class="p">[</span><span class="mf">0.0716</span><span class="p">,</span> <span class="mf">0.0951</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mf">0.1014</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span>
-                 <span class="mf">0.0643</span><span class="p">,</span> <span class="mf">0.0691</span><span class="p">,</span> <span class="mf">0.0135</span><span class="p">,</span> <span class="mf">0.0143</span><span class="p">,</span> <span class="mf">0.0801</span><span class="p">,</span>
-                 <span class="mf">0.008</span><span class="p">,</span> <span class="mf">0.0096</span><span class="p">,</span> <span class="mf">0.0006</span><span class="p">,</span> <span class="mf">0.1104</span><span class="p">,</span> <span class="mf">0.0193</span><span class="p">,</span>
-                 <span class="mf">0.0565</span><span class="p">,</span> <span class="mf">0.0463</span><span class="p">,</span> <span class="mf">0.0724</span><span class="p">,</span> <span class="mf">0.0564</span><span class="p">,</span> <span class="mf">0.0116</span><span class="p">,</span>
-                 <span class="mf">0.0563</span><span class="p">,</span> <span class="mf">0.0298</span>
-                <span class="p">])</span>
-<span class="p">}</span>
+<div class=" highlight hl-ipython2"><pre><span></span><span class="n">date</span> <span class="o">=</span> <span class="s1">&#39;2016-06-30&#39;</span>
 
-<span class="n">jp_ranks_df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span><span class="n">data</span><span class="p">)</span><span class="o">.</span><span class="n">set_index</span><span class="p">(</span><span class="s1">&#39;brokers&#39;</span><span class="p">)</span>
-<span class="c1"># jp_ranks_df</span>
-<span class="c1"># jp_ranks = pd.Series(jpranks)</span>
-<span class="c1"># jp_ranks</span>
+<span class="k">if</span> <span class="n">date</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+    <span class="n">date</span> <span class="o">=</span> <span class="n">datetime</span><span class="o">.</span><span class="n">date</span><span class="o">.</span><span class="n">today</span><span class="p">()</span>
+<span class="k">else</span><span class="p">:</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">date</span> <span class="o">=</span> <span class="n">datetime</span><span class="o">.</span><span class="n">strptime</span><span class="p">(</span><span class="n">date</span><span class="p">,</span> <span class="s1">&#39;%Y-%m-</span><span class="si">%d</span><span class="s1">&#39;</span><span class="p">)</span>
+    <span class="k">except</span> <span class="ne">ValueError</span><span class="p">:</span>
+        <span class="n">date</span> <span class="o">=</span> <span class="n">datetime</span><span class="o">.</span><span class="n">date</span><span class="o">.</span><span class="n">today</span><span class="p">()</span>
+
+<span class="n">quarter</span> <span class="o">=</span> <span class="p">(</span><span class="n">date</span><span class="o">.</span><span class="n">month</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="o">//</span> <span class="mi">3</span> <span class="o">+</span> <span class="mi">1</span>
+
+<span class="n">ytd_trades</span> <span class="o">=</span> <span class="n">get_trades</span><span class="p">(</span><span class="n">date</span><span class="o">.</span><span class="n">year</span><span class="p">)</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+
+<div class="output_area">
+<div class="prompt"></div>
+
+<div class="output_subarea output_stream output_stderr output_text">
+<pre>/Users/cuong/anaconda/envs/attribution/lib/python2.7/site-packages/pymysql/cursors.py:146: Warning: Incorrect date value: &#39;2014&#39; for column &#39;tradeDate&#39; at row 1
+  result = self._query(query)
+</pre>
+</div>
+</div>
+
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[9]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython2"><pre><span></span><span class="n">date</span><span class="o">.</span><span class="n">year</span><span class="p">,</span> <span class="n">quarter</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+
+<div class="output_area">
+<div class="prompt output_prompt">Out[9]:</div>
+
+
+
+<div class="output_text output_subarea output_execute_result">
+<pre>(2016, 2)</pre>
+</div>
+
+</div>
+
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[10]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython2"><pre><span></span><span class="n">ytd_trades</span><span class="o">.</span><span class="n">head</span><span class="p">()</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+
+<div class="output_area">
+<div class="prompt output_prompt">Out[10]:</div>
+
+
+<div class="output_html rendered_html output_subarea output_execute_result">
+<div>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>code</th>
+      <th>fundCode</th>
+      <th>orderType</th>
+      <th>side</th>
+      <th>swap</th>
+      <th>PB</th>
+      <th>gcomrate</th>
+      <th>brokerCommissionRate</th>
+      <th>commInUSD</th>
+      <th>CommRate</th>
+      <th>...</th>
+      <th>JPExec</th>
+      <th>brokerCode</th>
+      <th>instrumentType</th>
+      <th>currencyCode</th>
+      <th>brokerName</th>
+      <th>tax</th>
+      <th>asiaDeal</th>
+      <th>asiaResearch</th>
+      <th>asiaExecution</th>
+      <th>HCSwaps</th>
+    </tr>
+    <tr>
+      <th>tradeDate</th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>2016-01-04</th>
+      <td>1138 HK</td>
+      <td>04F08910</td>
+      <td>S</td>
+      <td>L</td>
+      <td></td>
+      <td>MS</td>
+      <td>0.00</td>
+      <td>0.00</td>
+      <td>882.72</td>
+      <td>0.00</td>
+      <td>...</td>
+      <td>0.00</td>
+      <td>CSFH</td>
+      <td>EQ</td>
+      <td>HKD</td>
+      <td>CS</td>
+      <td>0.00</td>
+      <td>0.00</td>
+      <td>429.47</td>
+      <td>143.44</td>
+      <td>0.00</td>
+    </tr>
+    <tr>
+      <th>2016-01-04</th>
+      <td>1138 HK</td>
+      <td>PLOJ2010</td>
+      <td>S</td>
+      <td>L</td>
+      <td></td>
+      <td>MS</td>
+      <td>0.00</td>
+      <td>0.00</td>
+      <td>203.77</td>
+      <td>0.00</td>
+      <td>...</td>
+      <td>0.00</td>
+      <td>CSFH</td>
+      <td>EQ</td>
+      <td>HKD</td>
+      <td>CS</td>
+      <td>0.00</td>
+      <td>0.00</td>
+      <td>99.17</td>
+      <td>33.10</td>
+      <td>0.00</td>
+    </tr>
+    <tr>
+      <th>2016-01-04</th>
+      <td>1138 HK</td>
+      <td>04F08900</td>
+      <td>S</td>
+      <td>L</td>
+      <td></td>
+      <td>MS</td>
+      <td>0.00</td>
+      <td>0.00</td>
+      <td>5,768.18</td>
+      <td>0.00</td>
+      <td>...</td>
+      <td>0.00</td>
+      <td>CSFH</td>
+      <td>EQ</td>
+      <td>HKD</td>
+      <td>CS</td>
+      <td>0.00</td>
+      <td>0.00</td>
+      <td>2,806.24</td>
+      <td>937.29</td>
+      <td>0.00</td>
+    </tr>
+    <tr>
+      <th>2016-01-04</th>
+      <td>1338 TT</td>
+      <td>04F08910</td>
+      <td>S</td>
+      <td>L</td>
+      <td></td>
+      <td>MS</td>
+      <td>0.00</td>
+      <td>0.00</td>
+      <td>213.96</td>
+      <td>0.00</td>
+      <td>...</td>
+      <td>0.00</td>
+      <td>KGII</td>
+      <td>EQ</td>
+      <td>TWD</td>
+      <td>KGI Securities</td>
+      <td>0.00</td>
+      <td>0.00</td>
+      <td>47.55</td>
+      <td>23.77</td>
+      <td>0.00</td>
+    </tr>
+    <tr>
+      <th>2016-01-04</th>
+      <td>1338 TT</td>
+      <td>04F08900</td>
+      <td>S</td>
+      <td>L</td>
+      <td></td>
+      <td>MS</td>
+      <td>0.00</td>
+      <td>0.00</td>
+      <td>1,547.09</td>
+      <td>0.00</td>
+      <td>...</td>
+      <td>0.00</td>
+      <td>KGII</td>
+      <td>EQ</td>
+      <td>TWD</td>
+      <td>KGI Securities</td>
+      <td>0.00</td>
+      <td>0.00</td>
+      <td>343.80</td>
+      <td>171.90</td>
+      <td>0.00</td>
+    </tr>
+  </tbody>
+</table>
+<p>5 rows × 23 columns</p>
+</div>
+</div>
+
+</div>
+
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[11]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython2"><pre><span></span><span class="c1"># Asia commission budget is 2mm  USD per year</span>
+<span class="c1"># Japan has gone through a few iterations but it&#39;s basically approximately 7.5 mm USD per year</span>
+<span class="n">jp_annual_commission_budget</span> <span class="o">=</span> <span class="mi">7500000</span>  <span class="c1"># usd</span>
+<span class="n">asia_annual_commission_budget</span> <span class="o">=</span> <span class="mi">2000000</span>  <span class="c1"># usd</span>
+<span class="n">jp_quarter_commission_budget</span> <span class="o">=</span> <span class="n">jp_annual_commission_budget</span> <span class="o">/</span> <span class="mf">4.0</span>
+<span class="n">asia_quarter_commission_budget</span> <span class="o">=</span> <span class="n">asia_annual_commission_budget</span> <span class="o">/</span> <span class="mf">4.0</span>
+
+<span class="n">jp_quarter_commission_budget</span> <span class="o">=</span> <span class="mi">10031527</span><span class="o">/</span><span class="mf">4.0</span>  <span class="c1"># to make it same with old system 2016Q1</span>
 </pre></div>
 
 </div>
@@ -12006,7 +12312,450 @@ div#notebook {
 </div>
 <div class="cell border-box-sizing code_cell rendered">
 <div class="input">
-<div class="prompt input_prompt">In&nbsp;[9]:</div>
+<div class="prompt input_prompt">In&nbsp;[12]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython2"><pre><span></span><span class="c1"># broker rank for 2016Q2</span>
+<span class="n">data</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s1">&#39;brokers&#39;</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;BAML&#39;</span><span class="p">,</span> <span class="s1">&#39;Mizuho Securities&#39;</span><span class="p">,</span> <span class="s1">&#39;Nomura&#39;</span><span class="p">,</span> <span class="s1">&#39;Japan Equity Research&#39;</span><span class="p">,</span>
+                <span class="s1">&#39;Citi&#39;</span><span class="p">,</span> <span class="s1">&#39;Mitsubishi UFJ&#39;</span><span class="p">,</span> <span class="s1">&#39;Tokai&#39;</span><span class="p">,</span> <span class="s1">&#39;Ichiyoshi&#39;</span><span class="p">,</span> <span class="s1">&#39;SMBC Nikko&#39;</span><span class="p">,</span>
+                <span class="s1">&#39;BNP&#39;</span><span class="p">,</span> <span class="s1">&#39;Deutsche&#39;</span><span class="p">,</span> <span class="s1">&#39;CLSA&#39;</span><span class="p">,</span> <span class="s1">&#39;Daiwa&#39;</span><span class="p">,</span> <span class="s1">&#39;Jefferies&#39;</span><span class="p">,</span>
+                <span class="s1">&#39;CS&#39;</span><span class="p">,</span> <span class="s1">&#39;UBS&#39;</span><span class="p">,</span> <span class="s1">&#39;JP Morgan&#39;</span><span class="p">,</span> <span class="s1">&#39;Goldman Sachs&#39;</span><span class="p">,</span> <span class="s1">&#39;Okasan&#39;</span><span class="p">,</span>
+                <span class="s1">&#39;MS&#39;</span><span class="p">,</span> <span class="s1">&#39;Macquarie&#39;</span>
+                <span class="p">],</span>
+    <span class="s1">&#39;rank&#39;</span><span class="p">:</span> <span class="p">[</span><span class="mi">6</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">17</span><span class="p">,</span>
+             <span class="mi">4</span><span class="p">,</span> <span class="mi">10</span><span class="p">,</span> <span class="mi">15</span><span class="p">,</span> <span class="mi">14</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span>
+             <span class="mi">13</span><span class="p">,</span> <span class="mi">18</span><span class="p">,</span> <span class="mi">21</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="mi">16</span><span class="p">,</span>
+             <span class="mi">9</span><span class="p">,</span> <span class="mi">12</span><span class="p">,</span> <span class="mi">7</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">19</span><span class="p">,</span>
+             <span class="mi">11</span><span class="p">,</span> <span class="mi">20</span><span class="p">],</span>
+    <span class="s1">&#39;research&#39;</span><span class="p">:</span> <span class="nb">map</span><span class="p">(</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span><span class="p">,</span> <span class="p">[</span><span class="mf">6.76</span><span class="p">,</span> <span class="mf">10.04</span><span class="p">,</span> <span class="mf">12.52</span><span class="p">,</span> <span class="mf">0.97</span><span class="p">,</span>
+                                  <span class="mf">8.53</span><span class="p">,</span> <span class="mf">5.84</span><span class="p">,</span> <span class="mf">1.18</span><span class="p">,</span> <span class="mf">2.29</span><span class="p">,</span> <span class="mf">7.56</span><span class="p">,</span>
+                                  <span class="mf">2.41</span><span class="p">,</span> <span class="mf">0.88</span><span class="p">,</span> <span class="mf">0.25</span><span class="p">,</span> <span class="mf">6.47</span><span class="p">,</span> <span class="mf">1.09</span><span class="p">,</span>
+                                  <span class="mf">5.90</span><span class="p">,</span> <span class="mf">8.91</span><span class="p">,</span> <span class="mf">6.61</span><span class="p">,</span> <span class="mf">8.94</span><span class="p">,</span> <span class="mf">0.85</span><span class="p">,</span>
+                                  <span class="mf">5.32</span><span class="p">,</span> <span class="mf">0.25</span>
+                                  <span class="p">])</span>
+<span class="p">}</span>
+
+<span class="n">jp_ranks_df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span><span class="n">data</span><span class="p">)</span><span class="o">.</span><span class="n">set_index</span><span class="p">(</span><span class="s1">&#39;brokers&#39;</span><span class="p">)</span>
+<span class="n">usd_jpy</span> <span class="o">=</span> <span class="mf">112.27</span>  <span class="c1"># 2016Q1</span>
+<span class="n">hkd_jpy</span> <span class="o">=</span> <span class="mf">7.754</span>
+<span class="n">usd_jpy</span> <span class="o">=</span> <span class="mf">102.66</span>  <span class="c1"># 2016Q2</span>
+<span class="n">hkd_jpy</span> <span class="o">=</span> <span class="mf">7.759</span>
+<span class="n">quarter_trades</span> <span class="o">=</span> <span class="n">get_quarter_trades</span><span class="p">(</span><span class="n">date</span><span class="o">.</span><span class="n">year</span><span class="p">,</span> <span class="n">quarter</span><span class="p">,</span> <span class="n">ytd_trades</span><span class="p">)</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[13]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython2"><pre><span></span><span class="n">table</span> <span class="o">=</span> <span class="n">calculate_commission</span><span class="p">(</span><span class="n">quarter_trades</span><span class="p">,</span> <span class="n">jp_ranks_df</span><span class="p">,</span> <span class="n">jp_quarter_commission_budget</span><span class="p">,</span> <span class="n">usd_jpy</span><span class="p">)</span>
+<span class="n">qtd_clearing</span> <span class="o">=</span> <span class="s2">&quot;{:,.0f}&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">quarter_trades</span><span class="p">[</span><span class="s1">&#39;Clearing&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">sum</span><span class="p">())</span>
+<span class="n">ytd_clearing</span> <span class="o">=</span> <span class="s2">&quot;{:,.0f}&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">ytd_trades</span><span class="p">[</span><span class="s1">&#39;Clearing&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">sum</span><span class="p">())</span>
+
+<span class="n">months</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;Jan&#39;</span><span class="p">,</span> <span class="s1">&#39;Feb&#39;</span><span class="p">,</span> <span class="s1">&#39;Mar&#39;</span><span class="p">,</span> <span class="s1">&#39;Apr&#39;</span><span class="p">,</span> <span class="s1">&#39;May&#39;</span><span class="p">,</span> <span class="s1">&#39;Jun&#39;</span><span class="p">,</span> <span class="s1">&#39;Jul&#39;</span><span class="p">,</span> <span class="s1">&#39;Aug&#39;</span><span class="p">,</span> <span class="s1">&#39;Sep&#39;</span><span class="p">,</span> <span class="s1">&#39;Oct&#39;</span><span class="p">,</span> <span class="s1">&#39;Nov&#39;</span><span class="p">,</span> <span class="s1">&#39;Dec&#39;</span><span class="p">]</span>
+<span class="n">mon1</span><span class="p">,</span> <span class="n">mon2</span><span class="p">,</span> <span class="n">mon3</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="mi">1</span><span class="p">:</span> <span class="n">months</span><span class="p">[</span><span class="mi">0</span><span class="p">:</span><span class="mi">3</span><span class="p">],</span>
+    <span class="mi">2</span><span class="p">:</span> <span class="n">months</span><span class="p">[</span><span class="mi">3</span><span class="p">:</span><span class="mi">6</span><span class="p">],</span>
+    <span class="mi">3</span><span class="p">:</span> <span class="n">months</span><span class="p">[</span><span class="mi">6</span><span class="p">:</span><span class="mi">9</span><span class="p">],</span>
+    <span class="mi">4</span><span class="p">:</span> <span class="n">months</span><span class="p">[</span><span class="mi">9</span><span class="p">:]</span>
+<span class="p">}[</span><span class="n">quarter</span><span class="p">]</span>
+
+<span class="k">if</span> <span class="n">quarter</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+    <span class="n">m1</span><span class="p">,</span> <span class="n">m2</span><span class="p">,</span> <span class="n">m3</span> <span class="o">=</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">]</span>
+<span class="k">elif</span> <span class="n">quarter</span> <span class="o">==</span> <span class="mi">2</span><span class="p">:</span>
+    <span class="n">m1</span><span class="p">,</span> <span class="n">m2</span><span class="p">,</span> <span class="n">m3</span> <span class="o">=</span> <span class="p">[</span><span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">6</span><span class="p">]</span>
+
+<span class="n">mon1_trades</span> <span class="o">=</span> <span class="n">quarter_trades</span><span class="p">[</span><span class="s1">&#39;{}-{:02d}&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">date</span><span class="o">.</span><span class="n">year</span><span class="p">,</span> <span class="n">m1</span><span class="p">)]</span>
+<span class="n">soft1</span> <span class="o">=</span> <span class="s2">&quot;{:,.0f}&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">mon1_trades</span><span class="p">[(</span><span class="n">mon1_trades</span><span class="p">[</span><span class="s1">&#39;brokerName&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="s1">&#39;Soft&#39;</span><span class="p">)][</span><span class="s1">&#39;JPResearch&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">sum</span><span class="p">())</span>
+<span class="n">soft_ms1</span> <span class="o">=</span> <span class="s2">&quot;{:,.0f}&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">mon1_trades</span><span class="p">[</span><span class="n">mon1_trades</span><span class="p">[</span><span class="s1">&#39;brokerName&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="s1">&#39;Soft&#39;</span><span class="p">][</span><span class="s1">&#39;JPExec&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">sum</span><span class="p">())</span>
+
+<span class="n">mon2_trades</span> <span class="o">=</span> <span class="n">quarter_trades</span><span class="p">[</span><span class="s1">&#39;{}-{:02d}&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">date</span><span class="o">.</span><span class="n">year</span><span class="p">,</span> <span class="n">m2</span><span class="p">)]</span>
+<span class="n">soft2</span> <span class="o">=</span> <span class="s2">&quot;{:,.0f}&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">mon2_trades</span><span class="p">[(</span><span class="n">mon2_trades</span><span class="p">[</span><span class="s1">&#39;brokerName&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="s1">&#39;Soft&#39;</span><span class="p">)][</span><span class="s1">&#39;JPResearch&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">sum</span><span class="p">())</span>
+<span class="n">soft_ms2</span> <span class="o">=</span> <span class="s2">&quot;{:,.0f}&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">mon2_trades</span><span class="p">[</span><span class="n">mon2_trades</span><span class="p">[</span><span class="s1">&#39;brokerName&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="s1">&#39;Soft&#39;</span><span class="p">][</span><span class="s1">&#39;JPExec&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">sum</span><span class="p">())</span>
+
+<span class="n">mon3_trades</span> <span class="o">=</span> <span class="n">quarter_trades</span><span class="p">[</span><span class="s1">&#39;{}-{:02d}&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">date</span><span class="o">.</span><span class="n">year</span><span class="p">,</span> <span class="n">m3</span><span class="p">)]</span>
+<span class="n">soft3</span> <span class="o">=</span> <span class="s2">&quot;{:,.0f}&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">mon3_trades</span><span class="p">[(</span><span class="n">mon3_trades</span><span class="p">[</span><span class="s1">&#39;brokerName&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="s1">&#39;Soft&#39;</span><span class="p">)][</span><span class="s1">&#39;JPResearch&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">sum</span><span class="p">())</span>
+<span class="n">soft_ms3</span> <span class="o">=</span> <span class="s2">&quot;{:,.0f}&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">mon3_trades</span><span class="p">[</span><span class="n">mon3_trades</span><span class="p">[</span><span class="s1">&#39;brokerName&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="s1">&#39;Soft&#39;</span><span class="p">][</span><span class="s1">&#39;JPExec&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">sum</span><span class="p">())</span>
+
+<span class="n">soft_qtd</span> <span class="o">=</span> <span class="s1">&#39;{:,.0f}&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">quarter_trades</span><span class="p">[(</span><span class="n">quarter_trades</span><span class="p">[</span><span class="s1">&#39;brokerName&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="s1">&#39;Soft&#39;</span><span class="p">)</span> <span class="o">&amp;</span>
+                          <span class="p">(</span><span class="n">quarter_trades</span><span class="p">[</span><span class="s1">&#39;currencyCode&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="s1">&#39;JPY&#39;</span><span class="p">)][</span><span class="s1">&#39;JPResearch&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">sum</span><span class="p">())</span>
+<span class="n">soft_msqtd</span> <span class="o">=</span> <span class="s1">&#39;{:,.0f}&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">quarter_trades</span><span class="p">[(</span><span class="n">quarter_trades</span><span class="p">[</span><span class="s1">&#39;brokerName&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="s1">&#39;Soft&#39;</span><span class="p">)</span> <span class="o">&amp;</span>
+                          <span class="p">(</span><span class="n">quarter_trades</span><span class="p">[</span><span class="s1">&#39;currencyCode&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="s1">&#39;JPY&#39;</span><span class="p">)][</span><span class="s1">&#39;JPExec&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">sum</span><span class="p">())</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[14]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython2"><pre><span></span><span class="n">table</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+
+<div class="output_area">
+<div class="prompt output_prompt">Out[14]:</div>
+
+
+<div class="output_html rendered_html output_subarea output_execute_result">
+<div>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>rank</th>
+      <th>brokers</th>
+      <th>research</th>
+      <th>res_target</th>
+      <th>JPResearch</th>
+      <th>JPExec</th>
+      <th>JPDis</th>
+      <th>balance_usd</th>
+      <th>balance_jpy</th>
+      <th>exec_target</th>
+      <th>accrued</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>0</th>
+      <td>1</td>
+      <td>Nomura</td>
+      <td>12.52%</td>
+      <td>$      313,987</td>
+      <td>$      319,687</td>
+      <td>$      116,250</td>
+      <td>$      125,753</td>
+      <td></td>
+      <td></td>
+      <td>11%</td>
+      <td>11%</td>
+    </tr>
+    <tr>
+      <th>1</th>
+      <td>2</td>
+      <td>Mizuho Securities</td>
+      <td>10.04%</td>
+      <td>$      251,791</td>
+      <td>$      256,774</td>
+      <td>$       93,372</td>
+      <td>$      137,763</td>
+      <td></td>
+      <td></td>
+      <td>11%</td>
+      <td>11%</td>
+    </tr>
+    <tr>
+      <th>2</th>
+      <td>3</td>
+      <td>Goldman Sachs</td>
+      <td>8.94%</td>
+      <td>$      224,205</td>
+      <td>$      223,357</td>
+      <td>$       81,221</td>
+      <td>$      121,548</td>
+      <td>$          848</td>
+      <td>¥       87,055</td>
+      <td>10%</td>
+      <td>10%</td>
+    </tr>
+    <tr>
+      <th>3</th>
+      <td>4</td>
+      <td>Citi</td>
+      <td>8.53%</td>
+      <td>$      213,922</td>
+      <td>$      214,984</td>
+      <td>$       78,176</td>
+      <td>$      133,581</td>
+      <td></td>
+      <td></td>
+      <td>10%</td>
+      <td>10%</td>
+    </tr>
+    <tr>
+      <th>4</th>
+      <td>5</td>
+      <td>SMBC Nikko</td>
+      <td>7.56%</td>
+      <td>$      189,596</td>
+      <td>$      193,577</td>
+      <td>$       70,392</td>
+      <td>$      133,193</td>
+      <td></td>
+      <td></td>
+      <td>10%</td>
+      <td>10%</td>
+    </tr>
+    <tr>
+      <th>5</th>
+      <td>6</td>
+      <td>BAML</td>
+      <td>6.76%</td>
+      <td>$      169,533</td>
+      <td>$      159,546</td>
+      <td>$       58,640</td>
+      <td>$       90,844</td>
+      <td>$        9,986</td>
+      <td>¥    1,025,205</td>
+      <td>7%</td>
+      <td>7%</td>
+    </tr>
+    <tr>
+      <th>6</th>
+      <td>7</td>
+      <td>JP Morgan</td>
+      <td>6.61%</td>
+      <td>$      165,771</td>
+      <td>$      164,270</td>
+      <td>$       59,735</td>
+      <td>$       93,597</td>
+      <td>$        1,501</td>
+      <td>¥      154,061</td>
+      <td>7%</td>
+      <td>7%</td>
+    </tr>
+    <tr>
+      <th>7</th>
+      <td>8</td>
+      <td>Daiwa</td>
+      <td>6.47%</td>
+      <td>$      162,260</td>
+      <td>$      160,650</td>
+      <td>$       58,418</td>
+      <td>$       95,230</td>
+      <td>$        1,610</td>
+      <td>¥      165,260</td>
+      <td>7%</td>
+      <td>7%</td>
+    </tr>
+    <tr>
+      <th>8</th>
+      <td>9</td>
+      <td>CS</td>
+      <td>5.90%</td>
+      <td>$      147,965</td>
+      <td>$      143,477</td>
+      <td>$       52,173</td>
+      <td>$       90,329</td>
+      <td>$        4,488</td>
+      <td>¥      460,752</td>
+      <td>7%</td>
+      <td>7%</td>
+    </tr>
+    <tr>
+      <th>9</th>
+      <td>10</td>
+      <td>Mitsubishi UFJ</td>
+      <td>5.84%</td>
+      <td>$      146,460</td>
+      <td>$      147,925</td>
+      <td>$       53,791</td>
+      <td>$       85,298</td>
+      <td></td>
+      <td></td>
+      <td>7%</td>
+      <td>7%</td>
+    </tr>
+    <tr>
+      <th>10</th>
+      <td>11</td>
+      <td>MS</td>
+      <td>5.32%</td>
+      <td>$      133,419</td>
+      <td>$      104,899</td>
+      <td>$       85,594</td>
+      <td>$          643</td>
+      <td>$       28,520</td>
+      <td>¥    2,927,869</td>
+      <td>3%</td>
+      <td>4%</td>
+    </tr>
+    <tr>
+      <th>11</th>
+      <td>12</td>
+      <td>UBS</td>
+      <td>8.91%</td>
+      <td>$      223,452</td>
+      <td>$      220,371</td>
+      <td>$       80,135</td>
+      <td>$        4,049</td>
+      <td>$        3,081</td>
+      <td>¥      316,328</td>
+      <td>3%</td>
+      <td>4%</td>
+    </tr>
+    <tr>
+      <th>12</th>
+      <td>13</td>
+      <td>BNP</td>
+      <td>2.41%</td>
+      <td>$       60,440</td>
+      <td>$       61,228</td>
+      <td>$       22,265</td>
+      <td>$       30,366</td>
+      <td></td>
+      <td></td>
+      <td>3%</td>
+      <td>2%</td>
+    </tr>
+    <tr>
+      <th>13</th>
+      <td>14</td>
+      <td>Ichiyoshi</td>
+      <td>2.29%</td>
+      <td>$       57,430</td>
+      <td>$       56,470</td>
+      <td>$       20,534</td>
+      <td></td>
+      <td>$          961</td>
+      <td>¥       98,654</td>
+      <td>2%</td>
+      <td>1%</td>
+    </tr>
+    <tr>
+      <th>14</th>
+      <td>15</td>
+      <td>Tokai</td>
+      <td>1.18%</td>
+      <td>$       29,593</td>
+      <td></td>
+      <td></td>
+      <td></td>
+      <td>$       29,593</td>
+      <td>¥    3,038,018</td>
+      <td>1%</td>
+      <td>0%</td>
+    </tr>
+    <tr>
+      <th>15</th>
+      <td>16</td>
+      <td>Jefferies</td>
+      <td>1.09%</td>
+      <td>$       27,336</td>
+      <td>$       27,556</td>
+      <td>$       10,020</td>
+      <td></td>
+      <td></td>
+      <td></td>
+      <td></td>
+      <td>0%</td>
+    </tr>
+    <tr>
+      <th>16</th>
+      <td>17</td>
+      <td>Japan Equity Research</td>
+      <td>0.97%</td>
+      <td>$       24,326</td>
+      <td></td>
+      <td></td>
+      <td></td>
+      <td>$       24,326</td>
+      <td>¥    2,497,354</td>
+      <td></td>
+      <td>0%</td>
+    </tr>
+    <tr>
+      <th>17</th>
+      <td>18</td>
+      <td>Deutsche</td>
+      <td>0.88%</td>
+      <td>$       22,069</td>
+      <td>$       22,036</td>
+      <td>$        8,013</td>
+      <td></td>
+      <td>$           33</td>
+      <td>¥        3,399</td>
+      <td></td>
+      <td>0%</td>
+    </tr>
+    <tr>
+      <th>18</th>
+      <td>19</td>
+      <td>Okasan</td>
+      <td>0.85%</td>
+      <td>$       21,317</td>
+      <td>$       23,006</td>
+      <td>$        8,366</td>
+      <td></td>
+      <td></td>
+      <td></td>
+      <td></td>
+      <td>0%</td>
+    </tr>
+    <tr>
+      <th>19</th>
+      <td>20</td>
+      <td>Macquarie</td>
+      <td>0.25%</td>
+      <td>$        6,270</td>
+      <td>$       18,184</td>
+      <td>$        6,612</td>
+      <td></td>
+      <td></td>
+      <td></td>
+      <td></td>
+      <td>0%</td>
+    </tr>
+    <tr>
+      <th>20</th>
+      <td>21</td>
+      <td>CLSA</td>
+      <td>0.25%</td>
+      <td>$        6,270</td>
+      <td>$        8,875</td>
+      <td>$        3,227</td>
+      <td></td>
+      <td></td>
+      <td></td>
+      <td></td>
+      <td>0%</td>
+    </tr>
+    <tr>
+      <th>21</th>
+      <td></td>
+      <td>NaN</td>
+      <td>103.57%</td>
+      <td>$    2,597,413</td>
+      <td>$    2,526,871</td>
+      <td>$      966,935</td>
+      <td>$    1,142,193</td>
+      <td>$       70,542</td>
+      <td>¥    7,241,819</td>
+      <td>99%</td>
+      <td></td>
+    </tr>
+  </tbody>
+</table>
+</div>
+</div>
+
+</div>
+
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[15]:</div>
 <div class="inner_cell">
     <div class="input_area">
 <div class=" highlight hl-ipython2"><pre><span></span><span class="n">currency_mask</span> <span class="o">=</span> <span class="n">ytd_trades</span><span class="p">[</span><span class="s1">&#39;currencyCode&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="s1">&#39;JPY&#39;</span>
@@ -12031,7 +12780,7 @@ div#notebook {
 
 
 <div class="output_area">
-<div class="prompt output_prompt">Out[9]:</div>
+<div class="prompt output_prompt">Out[15]:</div>
 
 
 <div class="output_html rendered_html output_subarea output_execute_result">
@@ -12076,27 +12825,27 @@ div#notebook {
   <tbody>
     <tr>
       <th>BAML</th>
+      <td>4,615.56</td>
+      <td>855,423.95</td>
+      <td>1,678.38</td>
+      <td>382,597.24</td>
       <td>0.00</td>
-      <td>321,097.37</td>
-      <td>0.00</td>
-      <td>128,801.61</td>
-      <td>0.00</td>
-      <td>12,038.91</td>
-      <td>190,166.37</td>
-      <td>532,685.35</td>
-      <td>118,924.20</td>
+      <td>71,533.97</td>
+      <td>680,744.37</td>
+      <td>1,650,707.84</td>
+      <td>439,355.37</td>
       <td>0.00</td>
     </tr>
     <tr>
       <th>BNP</th>
       <td>0.00</td>
-      <td>97,447.18</td>
+      <td>263,440.88</td>
       <td>0.00</td>
-      <td>35,435.34</td>
+      <td>95,796.68</td>
       <td>0.00</td>
       <td>0.00</td>
       <td>0.00</td>
-      <td>162,716.46</td>
+      <td>438,803.84</td>
       <td>0.00</td>
       <td>0.00</td>
     </tr>
@@ -12116,27 +12865,27 @@ div#notebook {
     <tr>
       <th>CLSA</th>
       <td>0.00</td>
-      <td>3,939.37</td>
+      <td>18,277.65</td>
       <td>0.00</td>
-      <td>1,432.50</td>
+      <td>6,646.42</td>
       <td>0.00</td>
       <td>0.00</td>
       <td>97,471.50</td>
-      <td>5,371.87</td>
+      <td>24,924.07</td>
       <td>68,090.28</td>
       <td>0.00</td>
     </tr>
     <tr>
       <th>CS</th>
       <td>0.00</td>
-      <td>239,213.79</td>
+      <td>741,112.06</td>
       <td>0.00</td>
-      <td>86,986.83</td>
+      <td>269,495.29</td>
       <td>0.00</td>
       <td>0.00</td>
-      <td>184,473.86</td>
-      <td>410,732.59</td>
-      <td>120,919.02</td>
+      <td>539,157.54</td>
+      <td>1,332,120.96</td>
+      <td>368,487.99</td>
       <td>0.00</td>
     </tr>
     <tr>
@@ -12147,48 +12896,48 @@ div#notebook {
       <td>0.00</td>
       <td>0.00</td>
       <td>0.00</td>
-      <td>47,042.90</td>
+      <td>143,682.91</td>
       <td>0.00</td>
-      <td>30,531.33</td>
+      <td>93,252.06</td>
       <td>0.00</td>
     </tr>
     <tr>
       <th>Citi</th>
       <td>0.00</td>
-      <td>308,272.21</td>
+      <td>829,053.04</td>
       <td>0.00</td>
-      <td>112,098.98</td>
+      <td>305,253.45</td>
       <td>0.00</td>
-      <td>0.00</td>
-      <td>117,734.15</td>
-      <td>536,922.85</td>
-      <td>71,758.72</td>
+      <td>3,779.61</td>
+      <td>504,991.27</td>
+      <td>1,492,744.65</td>
+      <td>335,747.83</td>
       <td>0.00</td>
     </tr>
     <tr>
       <th>Daiwa</th>
       <td>0.00</td>
-      <td>307,061.70</td>
+      <td>992,860.20</td>
       <td>0.00</td>
-      <td>111,658.80</td>
+      <td>361,040.07</td>
       <td>0.00</td>
       <td>0.00</td>
-      <td>40,687.83</td>
-      <td>554,437.94</td>
-      <td>21,218.68</td>
+      <td>169,345.81</td>
+      <td>1,915,948.56</td>
+      <td>104,330.05</td>
       <td>0.00</td>
     </tr>
     <tr>
       <th>Deutsche</th>
       <td>0.00</td>
-      <td>38,446.12</td>
+      <td>139,752.17</td>
       <td>0.00</td>
-      <td>13,980.41</td>
+      <td>50,818.97</td>
       <td>0.00</td>
       <td>0.00</td>
-      <td>21,133.52</td>
-      <td>53,547.43</td>
-      <td>13,715.85</td>
+      <td>151,871.63</td>
+      <td>191,692.04</td>
+      <td>98,567.30</td>
       <td>0.00</td>
     </tr>
     <tr>
@@ -12199,61 +12948,61 @@ div#notebook {
       <td>0.00</td>
       <td>0.00</td>
       <td>0.00</td>
-      <td>91,433.09</td>
+      <td>231,301.60</td>
       <td>0.00</td>
-      <td>34,472.27</td>
+      <td>98,177.40</td>
       <td>0.00</td>
     </tr>
     <tr>
       <th>Goldman Sachs</th>
       <td>0.00</td>
-      <td>332,786.74</td>
+      <td>853,809.30</td>
       <td>0.00</td>
-      <td>121,013.36</td>
+      <td>316,605.61</td>
       <td>0.00</td>
-      <td>0.00</td>
-      <td>47,843.16</td>
-      <td>563,653.66</td>
-      <td>31,050.59</td>
+      <td>11,196.09</td>
+      <td>171,666.57</td>
+      <td>1,510,405.95</td>
+      <td>113,021.21</td>
       <td>0.00</td>
     </tr>
     <tr>
       <th>Ichiyoshi</th>
       <td>0.00</td>
-      <td>68,705.15</td>
+      <td>206,108.78</td>
       <td>0.00</td>
-      <td>24,983.69</td>
+      <td>74,948.65</td>
       <td>0.00</td>
       <td>0.00</td>
       <td>0.00</td>
-      <td>93,688.84</td>
+      <td>281,057.43</td>
       <td>0.00</td>
       <td>0.00</td>
     </tr>
     <tr>
       <th>JP Morgan</th>
       <td>0.00</td>
-      <td>237,927.89</td>
+      <td>794,311.41</td>
       <td>0.00</td>
-      <td>86,519.23</td>
+      <td>288,840.51</td>
       <td>0.00</td>
       <td>0.00</td>
-      <td>116,372.48</td>
-      <td>374,295.14</td>
-      <td>73,696.08</td>
+      <td>384,076.54</td>
+      <td>1,502,556.44</td>
+      <td>243,198.12</td>
       <td>0.00</td>
     </tr>
     <tr>
       <th>Jefferies</th>
       <td>0.00</td>
-      <td>53,110.07</td>
+      <td>214,906.44</td>
       <td>0.00</td>
-      <td>19,312.75</td>
+      <td>78,147.80</td>
       <td>0.00</td>
       <td>0.00</td>
-      <td>44,046.10</td>
-      <td>72,422.82</td>
-      <td>28,586.87</td>
+      <td>181,365.39</td>
+      <td>293,054.24</td>
+      <td>117,708.97</td>
       <td>0.00</td>
     </tr>
     <tr>
@@ -12264,86 +13013,86 @@ div#notebook {
       <td>0.00</td>
       <td>0.00</td>
       <td>0.00</td>
-      <td>62,865.46</td>
+      <td>358,835.26</td>
       <td>0.00</td>
-      <td>35,912.27</td>
+      <td>192,868.44</td>
       <td>0.00</td>
     </tr>
     <tr>
       <th>MS</th>
-      <td>0.00</td>
-      <td>270,088.08</td>
-      <td>0.00</td>
-      <td>141,005.45</td>
-      <td>4,934.43</td>
-      <td>51,282.62</td>
-      <td>144,414.66</td>
-      <td>471,094.65</td>
-      <td>91,346.45</td>
+      <td>26,404.49</td>
+      <td>685,441.91</td>
+      <td>9,601.63</td>
+      <td>374,418.76</td>
+      <td>7,115.98</td>
+      <td>137,439.40</td>
+      <td>418,829.41</td>
+      <td>1,333,259.37</td>
+      <td>238,184.85</td>
       <td>0.00</td>
     </tr>
     <tr>
       <th>Macquarie</th>
       <td>0.00</td>
-      <td>24,948.15</td>
+      <td>191,737.78</td>
       <td>0.00</td>
-      <td>9,072.06</td>
+      <td>69,722.83</td>
       <td>0.00</td>
       <td>0.00</td>
-      <td>44,740.64</td>
-      <td>34,020.21</td>
-      <td>29,055.53</td>
+      <td>160,046.41</td>
+      <td>341,112.76</td>
+      <td>103,889.31</td>
       <td>0.00</td>
     </tr>
     <tr>
       <th>Mitsubishi UFJ</th>
       <td>0.00</td>
-      <td>297,966.41</td>
+      <td>894,414.60</td>
       <td>0.00</td>
-      <td>108,351.42</td>
+      <td>325,241.67</td>
       <td>0.00</td>
       <td>0.00</td>
       <td>0.00</td>
-      <td>539,498.79</td>
+      <td>1,647,937.46</td>
       <td>0.00</td>
       <td>0.00</td>
     </tr>
     <tr>
       <th>Mizuho Securities</th>
       <td>0.00</td>
-      <td>426,204.88</td>
+      <td>1,272,644.60</td>
       <td>0.00</td>
-      <td>154,983.59</td>
+      <td>462,779.85</td>
       <td>0.00</td>
       <td>0.00</td>
-      <td>0.00</td>
-      <td>729,585.64</td>
-      <td>0.00</td>
+      <td>42,035.45</td>
+      <td>2,334,979.14</td>
+      <td>27,281.76</td>
       <td>0.00</td>
     </tr>
     <tr>
       <th>Nomura</th>
       <td>0.00</td>
-      <td>424,381.82</td>
+      <td>1,351,275.52</td>
       <td>0.00</td>
-      <td>154,320.66</td>
+      <td>491,372.92</td>
       <td>0.00</td>
       <td>0.00</td>
-      <td>80,137.36</td>
-      <td>747,504.60</td>
-      <td>49,680.24</td>
+      <td>302,376.42</td>
+      <td>2,465,861.38</td>
+      <td>186,125.04</td>
       <td>0.00</td>
     </tr>
     <tr>
       <th>Okasan</th>
       <td>0.00</td>
-      <td>46,937.70</td>
+      <td>142,266.39</td>
       <td>0.00</td>
-      <td>17,068.25</td>
+      <td>51,733.23</td>
       <td>0.00</td>
       <td>0.00</td>
       <td>0.00</td>
-      <td>64,005.95</td>
+      <td>193,999.63</td>
       <td>0.00</td>
       <td>0.00</td>
     </tr>
@@ -12355,48 +13104,48 @@ div#notebook {
       <td>0.00</td>
       <td>0.00</td>
       <td>0.00</td>
-      <td>469.94</td>
+      <td>34,653.30</td>
       <td>0.00</td>
-      <td>273.04</td>
+      <td>20,132.45</td>
       <td>0.00</td>
     </tr>
     <tr>
       <th>SMBC Nikko</th>
       <td>0.00</td>
-      <td>328,318.35</td>
+      <td>1,297,491.34</td>
       <td>0.00</td>
-      <td>119,388.49</td>
+      <td>471,815.03</td>
       <td>0.00</td>
       <td>0.00</td>
       <td>0.00</td>
-      <td>599,446.54</td>
+      <td>2,335,667.65</td>
       <td>0.00</td>
       <td>0.00</td>
     </tr>
     <tr>
       <th>Soft</th>
       <td>0.00</td>
-      <td>284,879.09</td>
+      <td>917,504.54</td>
       <td>0.00</td>
-      <td>103,592.40</td>
+      <td>333,638.02</td>
       <td>0.00</td>
       <td>0.00</td>
       <td>0.00</td>
-      <td>388,471.49</td>
+      <td>1,251,142.56</td>
       <td>0.00</td>
       <td>0.00</td>
     </tr>
     <tr>
       <th>UBS</th>
       <td>0.00</td>
-      <td>393,596.95</td>
+      <td>1,174,380.91</td>
       <td>0.00</td>
-      <td>143,126.16</td>
+      <td>427,047.61</td>
       <td>0.00</td>
       <td>0.00</td>
-      <td>113,387.98</td>
-      <td>551,909.42</td>
-      <td>68,999.16</td>
+      <td>456,643.09</td>
+      <td>1,706,199.29</td>
+      <td>288,159.56</td>
       <td>0.00</td>
     </tr>
     <tr>
@@ -12407,9 +13156,9 @@ div#notebook {
       <td>0.00</td>
       <td>0.00</td>
       <td>0.00</td>
-      <td>51,822.48</td>
+      <td>190,273.41</td>
       <td>0.00</td>
-      <td>33,281.91</td>
+      <td>90,671.02</td>
       <td>0.00</td>
     </tr>
   </tbody>
@@ -12425,7 +13174,7 @@ div#notebook {
 </div>
 <div class="cell border-box-sizing code_cell rendered">
 <div class="input">
-<div class="prompt input_prompt">In&nbsp;[10]:</div>
+<div class="prompt input_prompt">In&nbsp;[16]:</div>
 <div class="inner_cell">
     <div class="input_area">
 <div class=" highlight hl-ipython2"><pre><span></span><span class="c1"># (ytd_trades.groupby([&#39;brokerName&#39;, &#39;currencyCode&#39;])</span>
@@ -12447,7 +13196,7 @@ div#notebook {
 </div>
 <div class="cell border-box-sizing code_cell rendered">
 <div class="input">
-<div class="prompt input_prompt">In&nbsp;[11]:</div>
+<div class="prompt input_prompt">In&nbsp;[17]:</div>
 <div class="inner_cell">
     <div class="input_area">
 <div class=" highlight hl-ipython2"><pre><span></span><span class="c1"># broker rank for each quarter - 2016Q1</span>
@@ -12486,7 +13235,7 @@ div#notebook {
 
 
 <div class="output_area">
-<div class="prompt output_prompt">Out[11]:</div>
+<div class="prompt output_prompt">Out[17]:</div>
 
 
 <div class="output_html rendered_html output_subarea output_execute_result">
@@ -12652,7 +13401,7 @@ div#notebook {
 </div>
 <div class="cell border-box-sizing code_cell rendered">
 <div class="input">
-<div class="prompt input_prompt">In&nbsp;[12]:</div>
+<div class="prompt input_prompt">In&nbsp;[18]:</div>
 <div class="inner_cell">
     <div class="input_area">
 <div class=" highlight hl-ipython2"><pre><span></span><span class="n">jp_quarter_commission_budget</span> <span class="o">=</span><span class="mi">10031527</span><span class="o">/</span><span class="mf">4.0</span>
@@ -12668,7 +13417,7 @@ div#notebook {
 
 
 <div class="output_area">
-<div class="prompt output_prompt">Out[12]:</div>
+<div class="prompt output_prompt">Out[18]:</div>
 
 
 
@@ -12684,7 +13433,7 @@ div#notebook {
 </div>
 <div class="cell border-box-sizing code_cell rendered">
 <div class="input">
-<div class="prompt input_prompt">In&nbsp;[13]:</div>
+<div class="prompt input_prompt">In&nbsp;[19]:</div>
 <div class="inner_cell">
     <div class="input_area">
 <div class=" highlight hl-ipython2"><pre><span></span><span class="n">q1</span> <span class="o">=</span> <span class="n">get_quarter_trades</span><span class="p">(</span><span class="mi">2016</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">ytd_trades</span><span class="p">)</span>
@@ -12707,7 +13456,7 @@ div#notebook {
 </div>
 <div class="cell border-box-sizing code_cell rendered">
 <div class="input">
-<div class="prompt input_prompt">In&nbsp;[14]:</div>
+<div class="prompt input_prompt">In&nbsp;[20]:</div>
 <div class="inner_cell">
     <div class="input_area">
 <div class=" highlight hl-ipython2"><pre><span></span><span class="c1"># # debug duplicated trades for 2016Q1</span>
@@ -12720,12 +13469,38 @@ div#notebook {
 </div>
 </div>
 
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[21]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython2"><pre><span></span><span class="c1">## debug duplicated trades for 2016Q2</span>
+<span class="n">smbc</span> <span class="o">=</span> <span class="n">quarter_trades</span><span class="p">[</span><span class="n">quarter_trades</span><span class="p">[</span><span class="s1">&#39;brokerCode&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="s1">&#39;NIKK&#39;</span><span class="p">]</span>
+<span class="k">print</span><span class="p">(</span><span class="n">smbc</span><span class="p">[</span><span class="s1">&#39;JPResearch&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">sum</span><span class="p">())</span>
+<span class="n">smbc</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="s1">&#39;2016-05-17&#39;</span><span class="p">:</span><span class="s1">&#39;2016-05-17&#39;</span><span class="p">][</span><span class="s1">&#39;JPResearch&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span> <span class="c1">#[[&#39;code&#39;, &#39;fundCode&#39;, &#39;orderType&#39;, &#39;side&#39;, &#39;swap&#39;, &#39;JPResearch&#39;]]</span>
+<span class="n">smbc</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="s1">&#39;2016-05-17&#39;</span><span class="p">:</span><span class="s1">&#39;2016-05-17&#39;</span><span class="p">]</span><span class="c1">#[[&#39;code&#39;, &#39;fundCode&#39;, &#39;orderType&#39;, &#39;side&#39;, &#39;swap&#39;, &#39;JPResearch&#39;]]</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
 <div class="output_wrapper">
 <div class="output">
 
 
 <div class="output_area">
-<div class="prompt output_prompt">Out[14]:</div>
+<div class="prompt"></div>
+
+<div class="output_subarea output_stream output_stdout output_text">
+<pre>193576.949695
+</pre>
+</div>
+</div>
+
+<div class="output_area">
+<div class="prompt output_prompt">Out[21]:</div>
 
 
 <div class="output_html rendered_html output_subarea output_execute_result">
@@ -12783,128 +13558,8 @@ div#notebook {
   </thead>
   <tbody>
     <tr>
-      <th>2016-01-14</th>
-      <td>6305</td>
-      <td>PLOJ2010</td>
-      <td>S</td>
-      <td>L</td>
-      <td></td>
-      <td>CS</td>
-      <td>0.00</td>
-      <td>0.00</td>
-      <td>150.36</td>
-      <td>0.00</td>
-      <td>...</td>
-      <td>40.10</td>
-      <td>UBSW</td>
-      <td>EQ</td>
-      <td>JPY</td>
-      <td>UBS</td>
-      <td>0.00</td>
-      <td>0.00</td>
-      <td>0.00</td>
-      <td>0.00</td>
-      <td>0.00</td>
-    </tr>
-    <tr>
-      <th>2016-01-14</th>
-      <td>6305</td>
-      <td>PLOJ2010</td>
-      <td>S</td>
-      <td>L</td>
-      <td></td>
-      <td>MS</td>
-      <td>0.00</td>
-      <td>0.00</td>
-      <td>171.84</td>
-      <td>0.00</td>
-      <td>...</td>
-      <td>45.82</td>
-      <td>UBSW</td>
-      <td>EQ</td>
-      <td>JPY</td>
-      <td>UBS</td>
-      <td>0.00</td>
-      <td>0.00</td>
-      <td>0.00</td>
-      <td>0.00</td>
-      <td>0.00</td>
-    </tr>
-    <tr>
-      <th>2016-01-14</th>
-      <td>6305</td>
-      <td>04F08900</td>
-      <td>S</td>
-      <td>L</td>
-      <td></td>
-      <td>MS</td>
-      <td>0.00</td>
-      <td>0.00</td>
-      <td>5,045.69</td>
-      <td>0.00</td>
-      <td>...</td>
-      <td>1,345.52</td>
-      <td>UBSW</td>
-      <td>EQ</td>
-      <td>JPY</td>
-      <td>UBS</td>
-      <td>0.00</td>
-      <td>0.00</td>
-      <td>0.00</td>
-      <td>0.00</td>
-      <td>0.00</td>
-    </tr>
-    <tr>
-      <th>2016-01-14</th>
-      <td>6305</td>
-      <td>04F08900</td>
-      <td>S</td>
-      <td>L</td>
-      <td></td>
-      <td>CS</td>
-      <td>0.00</td>
-      <td>0.00</td>
-      <td>4,444.25</td>
-      <td>0.00</td>
-      <td>...</td>
-      <td>1,185.13</td>
-      <td>UBSW</td>
-      <td>EQ</td>
-      <td>JPY</td>
-      <td>UBS</td>
-      <td>0.00</td>
-      <td>0.00</td>
-      <td>0.00</td>
-      <td>0.00</td>
-      <td>0.00</td>
-    </tr>
-    <tr>
-      <th>2016-01-14</th>
-      <td>6305</td>
-      <td>04F08910</td>
-      <td>S</td>
-      <td>L</td>
-      <td></td>
-      <td>MS</td>
-      <td>0.00</td>
-      <td>0.00</td>
-      <td>710.99</td>
-      <td>0.00</td>
-      <td>...</td>
-      <td>189.60</td>
-      <td>UBSW</td>
-      <td>EQ</td>
-      <td>JPY</td>
-      <td>UBS</td>
-      <td>0.00</td>
-      <td>0.00</td>
-      <td>0.00</td>
-      <td>0.00</td>
-      <td>0.00</td>
-    </tr>
-    <tr>
-      <th>2016-01-14</th>
-      <td>6305</td>
+      <th>2016-05-17</th>
+      <td>4348</td>
       <td>04F08910</td>
       <td>S</td>
       <td>L</td>
@@ -12912,14 +13567,398 @@ div#notebook {
       <td>CS</td>
       <td>0.00</td>
       <td>0.00</td>
-      <td>625.07</td>
+      <td>326.71</td>
       <td>0.00</td>
       <td>...</td>
-      <td>166.68</td>
-      <td>UBSW</td>
+      <td>87.12</td>
+      <td>NIKK</td>
       <td>EQ</td>
       <td>JPY</td>
-      <td>UBS</td>
+      <td>SMBC Nikko</td>
+      <td>0.00</td>
+      <td>0.00</td>
+      <td>0.00</td>
+      <td>0.00</td>
+      <td>0.00</td>
+    </tr>
+    <tr>
+      <th>2016-05-17</th>
+      <td>4348</td>
+      <td>PLOJ2010</td>
+      <td>S</td>
+      <td>L</td>
+      <td></td>
+      <td>CS</td>
+      <td>0.00</td>
+      <td>0.00</td>
+      <td>49.00</td>
+      <td>0.00</td>
+      <td>...</td>
+      <td>13.07</td>
+      <td>NIKK</td>
+      <td>EQ</td>
+      <td>JPY</td>
+      <td>SMBC Nikko</td>
+      <td>0.00</td>
+      <td>0.00</td>
+      <td>0.00</td>
+      <td>0.00</td>
+      <td>0.00</td>
+    </tr>
+    <tr>
+      <th>2016-05-17</th>
+      <td>4849</td>
+      <td>04F08900</td>
+      <td>B</td>
+      <td>L</td>
+      <td></td>
+      <td>CS</td>
+      <td>0.00</td>
+      <td>0.00</td>
+      <td>138.56</td>
+      <td>0.00</td>
+      <td>...</td>
+      <td>36.95</td>
+      <td>NIKK</td>
+      <td>EQ</td>
+      <td>JPY</td>
+      <td>SMBC Nikko</td>
+      <td>0.00</td>
+      <td>0.00</td>
+      <td>0.00</td>
+      <td>0.00</td>
+      <td>0.00</td>
+    </tr>
+    <tr>
+      <th>2016-05-17</th>
+      <td>4849</td>
+      <td>PLOJ2010</td>
+      <td>B</td>
+      <td>L</td>
+      <td></td>
+      <td>CS</td>
+      <td>0.00</td>
+      <td>0.00</td>
+      <td>4.26</td>
+      <td>0.00</td>
+      <td>...</td>
+      <td>1.14</td>
+      <td>NIKK</td>
+      <td>EQ</td>
+      <td>JPY</td>
+      <td>SMBC Nikko</td>
+      <td>0.00</td>
+      <td>0.00</td>
+      <td>0.00</td>
+      <td>0.00</td>
+      <td>0.00</td>
+    </tr>
+    <tr>
+      <th>2016-05-17</th>
+      <td>4849</td>
+      <td>04F08910</td>
+      <td>B</td>
+      <td>L</td>
+      <td></td>
+      <td>CS</td>
+      <td>0.00</td>
+      <td>0.00</td>
+      <td>17.05</td>
+      <td>0.00</td>
+      <td>...</td>
+      <td>4.55</td>
+      <td>NIKK</td>
+      <td>EQ</td>
+      <td>JPY</td>
+      <td>SMBC Nikko</td>
+      <td>0.00</td>
+      <td>0.00</td>
+      <td>0.00</td>
+      <td>0.00</td>
+      <td>0.00</td>
+    </tr>
+    <tr>
+      <th>2016-05-17</th>
+      <td>5471</td>
+      <td>04F08900</td>
+      <td>S</td>
+      <td>L</td>
+      <td></td>
+      <td>MS</td>
+      <td>0.00</td>
+      <td>0.00</td>
+      <td>1,134.25</td>
+      <td>0.00</td>
+      <td>...</td>
+      <td>302.47</td>
+      <td>NIKK</td>
+      <td>EQ</td>
+      <td>JPY</td>
+      <td>SMBC Nikko</td>
+      <td>0.00</td>
+      <td>0.00</td>
+      <td>0.00</td>
+      <td>0.00</td>
+      <td>0.00</td>
+    </tr>
+    <tr>
+      <th>2016-05-17</th>
+      <td>5471</td>
+      <td>04F08910</td>
+      <td>S</td>
+      <td>L</td>
+      <td></td>
+      <td>MS</td>
+      <td>0.00</td>
+      <td>0.00</td>
+      <td>147.30</td>
+      <td>0.00</td>
+      <td>...</td>
+      <td>39.28</td>
+      <td>NIKK</td>
+      <td>EQ</td>
+      <td>JPY</td>
+      <td>SMBC Nikko</td>
+      <td>0.00</td>
+      <td>0.00</td>
+      <td>0.00</td>
+      <td>0.00</td>
+      <td>0.00</td>
+    </tr>
+    <tr>
+      <th>2016-05-17</th>
+      <td>5471</td>
+      <td>PLOJ2010</td>
+      <td>S</td>
+      <td>L</td>
+      <td></td>
+      <td>MS</td>
+      <td>0.00</td>
+      <td>0.00</td>
+      <td>39.27</td>
+      <td>0.00</td>
+      <td>...</td>
+      <td>10.47</td>
+      <td>NIKK</td>
+      <td>EQ</td>
+      <td>JPY</td>
+      <td>SMBC Nikko</td>
+      <td>0.00</td>
+      <td>0.00</td>
+      <td>0.00</td>
+      <td>0.00</td>
+      <td>0.00</td>
+    </tr>
+    <tr>
+      <th>2016-05-17</th>
+      <td>6300</td>
+      <td>04F08910</td>
+      <td>S</td>
+      <td>L</td>
+      <td></td>
+      <td>CS</td>
+      <td>0.00</td>
+      <td>0.00</td>
+      <td>36.44</td>
+      <td>0.00</td>
+      <td>...</td>
+      <td>9.72</td>
+      <td>NIKK</td>
+      <td>EQ</td>
+      <td>JPY</td>
+      <td>SMBC Nikko</td>
+      <td>0.00</td>
+      <td>0.00</td>
+      <td>0.00</td>
+      <td>0.00</td>
+      <td>0.00</td>
+    </tr>
+    <tr>
+      <th>2016-05-17</th>
+      <td>6508</td>
+      <td>PLOJ2010</td>
+      <td>S</td>
+      <td>L</td>
+      <td></td>
+      <td>MS</td>
+      <td>0.00</td>
+      <td>0.00</td>
+      <td>150.28</td>
+      <td>0.00</td>
+      <td>...</td>
+      <td>40.08</td>
+      <td>NIKK</td>
+      <td>EQ</td>
+      <td>JPY</td>
+      <td>SMBC Nikko</td>
+      <td>0.00</td>
+      <td>0.00</td>
+      <td>0.00</td>
+      <td>0.00</td>
+      <td>0.00</td>
+    </tr>
+    <tr>
+      <th>2016-05-17</th>
+      <td>6508</td>
+      <td>04F08910</td>
+      <td>S</td>
+      <td>L</td>
+      <td></td>
+      <td>MS</td>
+      <td>0.00</td>
+      <td>0.00</td>
+      <td>612.30</td>
+      <td>0.00</td>
+      <td>...</td>
+      <td>163.28</td>
+      <td>NIKK</td>
+      <td>EQ</td>
+      <td>JPY</td>
+      <td>SMBC Nikko</td>
+      <td>0.00</td>
+      <td>0.00</td>
+      <td>0.00</td>
+      <td>0.00</td>
+      <td>0.00</td>
+    </tr>
+    <tr>
+      <th>2016-05-17</th>
+      <td>8975</td>
+      <td>PLOJ2010</td>
+      <td>B</td>
+      <td>L</td>
+      <td></td>
+      <td>MERT</td>
+      <td>0.00</td>
+      <td>0.00</td>
+      <td>53.12</td>
+      <td>0.00</td>
+      <td>...</td>
+      <td>14.17</td>
+      <td>NIKK</td>
+      <td>EQ</td>
+      <td>JPY</td>
+      <td>SMBC Nikko</td>
+      <td>0.00</td>
+      <td>0.00</td>
+      <td>0.00</td>
+      <td>0.00</td>
+      <td>0.00</td>
+    </tr>
+    <tr>
+      <th>2016-05-17</th>
+      <td>8975</td>
+      <td>04F08910</td>
+      <td>B</td>
+      <td>L</td>
+      <td></td>
+      <td>MERT</td>
+      <td>0.00</td>
+      <td>0.00</td>
+      <td>211.41</td>
+      <td>0.00</td>
+      <td>...</td>
+      <td>56.38</td>
+      <td>NIKK</td>
+      <td>EQ</td>
+      <td>JPY</td>
+      <td>SMBC Nikko</td>
+      <td>0.00</td>
+      <td>0.00</td>
+      <td>0.00</td>
+      <td>0.00</td>
+      <td>0.00</td>
+    </tr>
+    <tr>
+      <th>2016-05-17</th>
+      <td>8975</td>
+      <td>04F08910</td>
+      <td>B</td>
+      <td>L</td>
+      <td></td>
+      <td>MERT</td>
+      <td>0.00</td>
+      <td>0.00</td>
+      <td>0.00</td>
+      <td>0.00</td>
+      <td>...</td>
+      <td>0.00</td>
+      <td>NIKK</td>
+      <td>EQ</td>
+      <td>JPY</td>
+      <td>SMBC Nikko</td>
+      <td>0.00</td>
+      <td>0.00</td>
+      <td>0.00</td>
+      <td>0.00</td>
+      <td>0.00</td>
+    </tr>
+    <tr>
+      <th>2016-05-17</th>
+      <td>8975</td>
+      <td>PLOJ2010</td>
+      <td>B</td>
+      <td>L</td>
+      <td></td>
+      <td>MERT</td>
+      <td>0.00</td>
+      <td>0.00</td>
+      <td>0.00</td>
+      <td>0.00</td>
+      <td>...</td>
+      <td>0.00</td>
+      <td>NIKK</td>
+      <td>EQ</td>
+      <td>JPY</td>
+      <td>SMBC Nikko</td>
+      <td>0.00</td>
+      <td>0.00</td>
+      <td>0.00</td>
+      <td>0.00</td>
+      <td>0.00</td>
+    </tr>
+    <tr>
+      <th>2016-05-17</th>
+      <td>8975</td>
+      <td>04F08900</td>
+      <td>B</td>
+      <td>L</td>
+      <td></td>
+      <td>MERT</td>
+      <td>0.00</td>
+      <td>0.00</td>
+      <td>0.00</td>
+      <td>0.00</td>
+      <td>...</td>
+      <td>0.00</td>
+      <td>NIKK</td>
+      <td>EQ</td>
+      <td>JPY</td>
+      <td>SMBC Nikko</td>
+      <td>0.00</td>
+      <td>0.00</td>
+      <td>0.00</td>
+      <td>0.00</td>
+      <td>0.00</td>
+    </tr>
+    <tr>
+      <th>2016-05-17</th>
+      <td>8975</td>
+      <td>04F08900</td>
+      <td>B</td>
+      <td>L</td>
+      <td></td>
+      <td>MERT</td>
+      <td>0.00</td>
+      <td>0.00</td>
+      <td>1,634.92</td>
+      <td>0.00</td>
+      <td>...</td>
+      <td>435.98</td>
+      <td>NIKK</td>
+      <td>EQ</td>
+      <td>JPY</td>
+      <td>SMBC Nikko</td>
       <td>0.00</td>
       <td>0.00</td>
       <td>0.00</td>
@@ -12928,7 +13967,7 @@ div#notebook {
     </tr>
   </tbody>
 </table>
-<p>6 rows × 23 columns</p>
+<p>17 rows × 23 columns</p>
 </div>
 </div>
 
@@ -12940,7 +13979,7 @@ div#notebook {
 </div>
 <div class="cell border-box-sizing code_cell rendered">
 <div class="input">
-<div class="prompt input_prompt">In&nbsp;[15]:</div>
+<div class="prompt input_prompt">In&nbsp;[22]:</div>
 <div class="inner_cell">
     <div class="input_area">
 <div class=" highlight hl-ipython2"><pre><span></span><span class="c1"># q1[q1[&#39;brokerCode&#39;]==&#39;MSUS&#39;]</span>
@@ -12970,7 +14009,7 @@ div#notebook {
 </div>
 <div class="cell border-box-sizing code_cell rendered">
 <div class="input">
-<div class="prompt input_prompt">In&nbsp;[16]:</div>
+<div class="prompt input_prompt">In&nbsp;[23]:</div>
 <div class="inner_cell">
     <div class="input_area">
 <div class=" highlight hl-ipython2"><pre><span></span><span class="k">print</span><span class="p">(</span><span class="s2">&quot;YTD Clearing : {:,.0f}&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">ytd_trades</span><span class="p">[</span><span class="s1">&#39;Clearing&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">sum</span><span class="p">()))</span>
@@ -12988,7 +14027,7 @@ div#notebook {
 <div class="prompt"></div>
 
 <div class="output_subarea output_stream output_stdout output_text">
-<pre>YTD Clearing : 68,256
+<pre>YTD Clearing : 231,065
 </pre>
 </div>
 </div>
@@ -12999,7 +14038,7 @@ div#notebook {
 </div>
 <div class="cell border-box-sizing code_cell rendered">
 <div class="input">
-<div class="prompt input_prompt">In&nbsp;[30]:</div>
+<div class="prompt input_prompt">In&nbsp;[24]:</div>
 <div class="inner_cell">
     <div class="input_area">
 <div class=" highlight hl-ipython2"><pre><span></span><span class="k">print</span><span class="p">(</span><span class="s2">&quot;Soft YTD: {:,.0f}&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">q1</span><span class="p">[(</span><span class="n">q1</span><span class="p">[</span><span class="s1">&#39;brokerName&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="s1">&#39;Soft&#39;</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">q1</span><span class="p">[</span><span class="s1">&#39;currencyCode&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="s1">&#39;JPY&#39;</span><span class="p">)][</span><span class="s1">&#39;JPResearch&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">sum</span><span class="p">()))</span>
@@ -13028,7 +14067,7 @@ div#notebook {
 </div>
 <div class="cell border-box-sizing code_cell rendered">
 <div class="input">
-<div class="prompt input_prompt">In&nbsp;[18]:</div>
+<div class="prompt input_prompt">In&nbsp;[25]:</div>
 <div class="inner_cell">
     <div class="input_area">
 <div class=" highlight hl-ipython2"><pre><span></span><span class="n">jan</span> <span class="o">=</span> <span class="n">q1</span><span class="p">[</span><span class="s1">&#39;2016-01&#39;</span><span class="p">]</span>
@@ -13058,7 +14097,7 @@ div#notebook {
 </div>
 <div class="cell border-box-sizing code_cell rendered">
 <div class="input">
-<div class="prompt input_prompt">In&nbsp;[32]:</div>
+<div class="prompt input_prompt">In&nbsp;[26]:</div>
 <div class="inner_cell">
     <div class="input_area">
 <div class=" highlight hl-ipython2"><pre><span></span><span class="n">jan_ms</span> <span class="o">=</span> <span class="n">jan</span><span class="p">[(</span><span class="n">jan</span><span class="p">[</span><span class="s1">&#39;brokerName&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="s1">&#39;Soft&#39;</span><span class="p">)</span> <span class="p">][</span><span class="s1">&#39;JPExec&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span>
@@ -13089,398 +14128,7 @@ div#notebook {
 </div>
 <div class="cell border-box-sizing code_cell rendered">
 <div class="input">
-<div class="prompt input_prompt">In&nbsp;[28]:</div>
-<div class="inner_cell">
-    <div class="input_area">
-<div class=" highlight hl-ipython2"><pre><span></span><span class="k">def</span> <span class="nf">calculate_commission</span><span class="p">(</span><span class="n">year</span><span class="p">,</span> <span class="n">quarter</span><span class="p">,</span> <span class="n">ytd_trades</span><span class="p">,</span> <span class="n">jp_ranks_df</span><span class="p">,</span> <span class="n">jp_quarter_commission_budget</span><span class="p">,</span> <span class="n">usd_jpy</span><span class="p">):</span>
-    <span class="n">q</span> <span class="o">=</span> <span class="n">get_quarter_trades</span><span class="p">(</span><span class="n">year</span><span class="p">,</span> <span class="n">quarter</span><span class="p">,</span> <span class="n">ytd_trades</span><span class="p">)</span>
-    <span class="n">table</span> <span class="o">=</span> <span class="p">(</span><span class="n">q</span>
-       <span class="o">.</span><span class="n">groupby</span><span class="p">([</span><span class="s1">&#39;brokerName&#39;</span><span class="p">,</span> <span class="s1">&#39;currencyCode&#39;</span><span class="p">])</span>
-       <span class="o">.</span><span class="n">sum</span><span class="p">()</span>
-       <span class="o">.</span><span class="n">loc</span><span class="p">[(</span><span class="nb">slice</span><span class="p">(</span><span class="bp">None</span><span class="p">),</span> <span class="s1">&#39;JPY&#39;</span><span class="p">),[</span><span class="s1">&#39;JPResearch&#39;</span><span class="p">,</span> <span class="s1">&#39;JPExec&#39;</span><span class="p">,</span> <span class="s1">&#39;JPDis&#39;</span><span class="p">]]</span>
-       <span class="o">.</span><span class="n">reset_index</span><span class="p">()</span>
-       <span class="o">.</span><span class="n">drop</span><span class="p">(</span><span class="s1">&#39;currencyCode&#39;</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
-       <span class="o">.</span><span class="n">set_index</span><span class="p">(</span><span class="s1">&#39;brokerName&#39;</span><span class="p">)</span>
-       <span class="o">.</span><span class="n">merge</span><span class="p">(</span><span class="n">jp_ranks_df</span><span class="p">,</span> <span class="n">how</span><span class="o">=</span><span class="s1">&#39;right&#39;</span><span class="p">,</span> <span class="n">left_index</span><span class="o">=</span><span class="bp">True</span><span class="p">,</span> <span class="n">right_index</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>  <span class="c1"># some names removed like Barclays and Softs</span>
-       <span class="o">.</span><span class="n">fillna</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
-       <span class="o">.</span><span class="n">sort_values</span><span class="p">(</span><span class="n">by</span><span class="o">=</span><span class="s1">&#39;rank&#39;</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
-      <span class="o">.</span><span class="n">assign</span><span class="p">(</span> <span class="n">res_target</span> <span class="o">=</span> <span class="k">lambda</span> <span class="n">df</span><span class="p">:</span> <span class="n">df</span><span class="p">[</span><span class="s1">&#39;research&#39;</span><span class="p">]</span> <span class="o">*</span> <span class="n">jp_quarter_commission_budget</span> <span class="o">/</span> <span class="mi">100</span> <span class="o">+</span> <span class="n">df</span><span class="p">[</span><span class="s1">&#39;balance&#39;</span><span class="p">])</span>
-      <span class="o">.</span><span class="n">assign</span><span class="p">(</span> <span class="n">balance_usd</span> <span class="o">=</span> <span class="k">lambda</span> <span class="n">df</span><span class="p">:</span> <span class="n">df</span><span class="p">[</span><span class="s1">&#39;res_target&#39;</span><span class="p">]</span> <span class="o">-</span> <span class="n">df</span><span class="p">[</span><span class="s1">&#39;JPResearch&#39;</span><span class="p">])</span>
-      <span class="o">.</span><span class="n">assign</span><span class="p">(</span><span class="n">balance_jpy</span> <span class="o">=</span> <span class="k">lambda</span> <span class="n">df</span><span class="p">:</span> <span class="n">df</span><span class="p">[</span><span class="s1">&#39;balance_usd&#39;</span><span class="p">]</span> <span class="o">*</span> <span class="n">usd_jpy</span><span class="p">)</span>
-      <span class="o">.</span><span class="n">assign</span><span class="p">(</span> <span class="n">accrued</span> <span class="o">=</span> <span class="k">lambda</span> <span class="n">df</span><span class="p">:</span> <span class="p">(</span><span class="n">df</span><span class="p">[</span><span class="s1">&#39;JPExec&#39;</span><span class="p">]</span> <span class="o">+</span> <span class="n">df</span><span class="p">[</span><span class="s1">&#39;JPDis&#39;</span><span class="p">])</span><span class="o">*</span><span class="mi">100</span><span class="o">/</span><span class="p">(</span><span class="n">df</span><span class="p">[</span><span class="s1">&#39;JPExec&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span> <span class="o">+</span> <span class="n">df</span><span class="p">[</span><span class="s1">&#39;JPDis&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">sum</span><span class="p">()))</span>
-        <span class="o">.</span><span class="n">reset_index</span><span class="p">()</span>
-             <span class="o">.</span><span class="n">set_index</span><span class="p">(</span><span class="s1">&#39;rank&#39;</span><span class="p">)</span>
-<span class="p">)</span>
-    <span class="n">exec_target</span> <span class="o">=</span> <span class="p">[</span><span class="mi">11</span><span class="p">,</span> <span class="mi">11</span><span class="p">,</span> <span class="mi">10</span><span class="p">,</span> <span class="mi">10</span><span class="p">,</span> <span class="mi">10</span><span class="p">,</span> <span class="mi">7</span><span class="p">,</span> <span class="mi">7</span><span class="p">,</span> <span class="mi">7</span><span class="p">,</span> <span class="mi">7</span><span class="p">,</span> <span class="mi">7</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">]</span>
-    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">exec_target</span><span class="p">)</span>  <span class="o">&lt;</span> <span class="nb">len</span><span class="p">(</span><span class="n">table</span><span class="o">.</span><span class="n">index</span><span class="p">):</span>
-        <span class="n">exec_target</span> <span class="o">=</span> <span class="n">exec_target</span> <span class="o">+</span> <span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">*</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">table</span><span class="o">.</span><span class="n">index</span><span class="p">)</span> <span class="o">-</span> <span class="nb">len</span><span class="p">(</span><span class="n">exec_target</span><span class="p">))</span>
-    <span class="n">table</span><span class="p">[</span><span class="s1">&#39;exec_target&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">Series</span><span class="p">(</span><span class="n">exec_target</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="n">table</span><span class="o">.</span><span class="n">index</span><span class="p">)</span>
-    <span class="k">return</span> <span class="p">(</span><span class="n">table</span>
-                <span class="o">.</span><span class="n">reset_index</span><span class="p">()</span>
-                <span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">table</span><span class="p">[[</span><span class="s1">&#39;research&#39;</span><span class="p">,</span> <span class="s1">&#39;res_target&#39;</span><span class="p">,</span> <span class="s1">&#39;JPResearch&#39;</span><span class="p">,</span> <span class="s1">&#39;JPExec&#39;</span><span class="p">,</span> 
-                                            <span class="s1">&#39;JPDis&#39;</span><span class="p">,</span> <span class="s1">&#39;balance_usd&#39;</span><span class="p">,</span> <span class="s1">&#39;balance_jpy&#39;</span><span class="p">,</span> <span class="s1">&#39;exec_target&#39;</span><span class="p">]]</span><span class="o">.</span><span class="n">sum</span><span class="p">(),</span> <span class="n">ignore_index</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
-                <span class="o">.</span><span class="n">pipe</span><span class="p">(</span><span class="n">format_2f</span><span class="p">)</span>
-                <span class="p">[[</span><span class="s1">&#39;rank&#39;</span><span class="p">,</span> <span class="s1">&#39;brokers&#39;</span><span class="p">,</span> <span class="s1">&#39;research&#39;</span><span class="p">,</span> <span class="s1">&#39;res_target&#39;</span><span class="p">,</span> <span class="s1">&#39;JPResearch&#39;</span><span class="p">,</span> <span class="s1">&#39;JPExec&#39;</span><span class="p">,</span> 
-                                            <span class="s1">&#39;JPDis&#39;</span><span class="p">,</span> <span class="s1">&#39;balance_usd&#39;</span><span class="p">,</span> <span class="s1">&#39;balance_jpy&#39;</span><span class="p">,</span> <span class="s1">&#39;exec_target&#39;</span><span class="p">,</span> <span class="s1">&#39;accrued&#39;</span><span class="p">]]</span>
-           <span class="p">)</span>
-</pre></div>
-
-</div>
-</div>
-</div>
-
-</div>
-<div class="cell border-box-sizing code_cell rendered">
-<div class="input">
-<div class="prompt input_prompt">In&nbsp;[29]:</div>
-<div class="inner_cell">
-    <div class="input_area">
-<div class=" highlight hl-ipython2"><pre><span></span><span class="n">HTML</span><span class="p">(</span><span class="n">calculate_commission</span><span class="p">(</span><span class="mi">2016</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">ytd_trades</span><span class="p">,</span> <span class="n">jp_ranks_df</span><span class="p">,</span> <span class="n">jp_quarter_commission_budget</span><span class="p">,</span> <span class="n">usd_jpy</span><span class="p">)</span><span class="o">.</span><span class="n">to_html</span><span class="p">(</span><span class="n">index</span><span class="o">=</span><span class="bp">False</span><span class="p">,</span> <span class="n">na_rep</span><span class="o">=</span><span class="s1">&#39;&#39;</span><span class="p">,</span> <span class="n">escape</span><span class="o">=</span><span class="bp">False</span><span class="p">))</span>
-<span class="c1"># np.isnan(calculate_commission(2016, 1, ytd_trades, jp_ranks_df, jp_quarter_commission_budget, usd_jpy)[[&#39;rank&#39;]].tail(1).values[0][0] )</span>
-</pre></div>
-
-</div>
-</div>
-</div>
-
-<div class="output_wrapper">
-<div class="output">
-
-
-<div class="output_area">
-<div class="prompt output_prompt">Out[29]:</div>
-
-
-<div class="output_html rendered_html output_subarea output_execute_result">
-<table border="1" class="dataframe">
-  <thead>
-    <tr style="text-align: right;">
-      <th>rank</th>
-      <th>brokers</th>
-      <th>research</th>
-      <th>res_target</th>
-      <th>JPResearch</th>
-      <th>JPExec</th>
-      <th>JPDis</th>
-      <th>balance_usd</th>
-      <th>balance_jpy</th>
-      <th>exec_target</th>
-      <th>accrued</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-      <td>1</td>
-      <td>Mizuho Securities</td>
-      <td>10.26%</td>
-      <td>$    256,522</td>
-      <td>$    252,391</td>
-      <td>$     91,779</td>
-      <td>$     84,015</td>
-      <td>$      4,131</td>
-      <td>$    463,764</td>
-      <td>11%</td>
-      <td>11%</td>
-    </tr>
-    <tr>
-      <td>2</td>
-      <td>Nomura</td>
-      <td>8.69%</td>
-      <td>$    217,127</td>
-      <td>$    213,371</td>
-      <td>$     77,589</td>
-      <td>$    104,973</td>
-      <td>$      3,756</td>
-      <td>$    421,665</td>
-      <td>11%</td>
-      <td>11%</td>
-    </tr>
-    <tr>
-      <td>3</td>
-      <td>SMBC Nikko</td>
-      <td>8.10%</td>
-      <td>$    203,829</td>
-      <td>$    201,258</td>
-      <td>$     73,185</td>
-      <td>$     84,691</td>
-      <td>$      2,572</td>
-      <td>$    288,744</td>
-      <td>10%</td>
-      <td>10%</td>
-    </tr>
-    <tr>
-      <td>4</td>
-      <td>Mitsubishi UFJ</td>
-      <td>7.95%</td>
-      <td>$    200,258</td>
-      <td>$    197,827</td>
-      <td>$     71,937</td>
-      <td>$     90,654</td>
-      <td>$      2,431</td>
-      <td>$    272,929</td>
-      <td>10%</td>
-      <td>10%</td>
-    </tr>
-    <tr>
-      <td>5</td>
-      <td>Daiwa</td>
-      <td>7.94%</td>
-      <td>$    200,845</td>
-      <td>$    198,833</td>
-      <td>$     72,303</td>
-      <td>$     95,555</td>
-      <td>$      2,012</td>
-      <td>$    225,869</td>
-      <td>10%</td>
-      <td>10%</td>
-    </tr>
-    <tr>
-      <td>6</td>
-      <td>BAML</td>
-      <td>7.55%</td>
-      <td>$    191,585</td>
-      <td>$    200,724</td>
-      <td>$     84,406</td>
-      <td>$     41,559</td>
-      <td></td>
-      <td></td>
-      <td>7%</td>
-      <td>8%</td>
-    </tr>
-    <tr>
-      <td>7</td>
-      <td>Goldman Sachs</td>
-      <td>6.99%</td>
-      <td>$    178,155</td>
-      <td>$    180,103</td>
-      <td>$     65,492</td>
-      <td>$     53,879</td>
-      <td></td>
-      <td></td>
-      <td>7%</td>
-      <td>7%</td>
-    </tr>
-    <tr>
-      <td>8</td>
-      <td>MS</td>
-      <td>6.86%</td>
-      <td>$    169,464</td>
-      <td>$    218,012</td>
-      <td>$    100,281</td>
-      <td>$      8,718</td>
-      <td></td>
-      <td></td>
-      <td>7%</td>
-      <td>7%</td>
-    </tr>
-    <tr>
-      <td>9</td>
-      <td>Citi</td>
-      <td>6.47%</td>
-      <td>$    162,318</td>
-      <td>$    158,874</td>
-      <td>$     57,773</td>
-      <td>$     57,899</td>
-      <td>$      3,444</td>
-      <td>$    386,605</td>
-      <td>7%</td>
-      <td>7%</td>
-    </tr>
-    <tr>
-      <td>10</td>
-      <td>UBS</td>
-      <td>8.18%</td>
-      <td>$    204,728</td>
-      <td>$    245,225</td>
-      <td>$     89,173</td>
-      <td>$     15,186</td>
-      <td></td>
-      <td></td>
-      <td>7%</td>
-      <td>6%</td>
-    </tr>
-    <tr>
-      <td>11</td>
-      <td>CS</td>
-      <td>5.72%</td>
-      <td>$    135,032</td>
-      <td>$    135,788</td>
-      <td>$     49,377</td>
-      <td>$     41,050</td>
-      <td></td>
-      <td></td>
-      <td>3%</td>
-      <td>5%</td>
-    </tr>
-    <tr>
-      <td>12</td>
-      <td>JP Morgan</td>
-      <td>4.98%</td>
-      <td>$    128,637</td>
-      <td>$    127,244</td>
-      <td>$     46,271</td>
-      <td>$     12,244</td>
-      <td>$      1,392</td>
-      <td>$    156,325</td>
-      <td>3%</td>
-      <td>4%</td>
-    </tr>
-    <tr>
-      <td>13</td>
-      <td>Barclays</td>
-      <td>2.35%</td>
-      <td>$     61,283</td>
-      <td>$      5,992</td>
-      <td>$      2,179</td>
-      <td></td>
-      <td>$     55,291</td>
-      <td>$  6,207,554</td>
-      <td>3%</td>
-      <td>0%</td>
-    </tr>
-    <tr>
-      <td>14</td>
-      <td>BNP</td>
-      <td>2.19%</td>
-      <td>$     56,738</td>
-      <td>$     55,094</td>
-      <td>$     20,034</td>
-      <td>$     15,513</td>
-      <td>$      1,643</td>
-      <td>$    184,502</td>
-      <td>2%</td>
-      <td>2%</td>
-    </tr>
-    <tr>
-      <td>15</td>
-      <td>Jefferies</td>
-      <td>1.46%</td>
-      <td>$     39,065</td>
-      <td>$     38,016</td>
-      <td>$     13,824</td>
-      <td></td>
-      <td>$      1,049</td>
-      <td>$    117,808</td>
-      <td>1%</td>
-      <td>1%</td>
-    </tr>
-    <tr>
-      <td>16</td>
-      <td>Ichiyoshi</td>
-      <td>1.36%</td>
-      <td>$     34,701</td>
-      <td>$     32,722</td>
-      <td>$     11,899</td>
-      <td></td>
-      <td>$      1,979</td>
-      <td>$    222,192</td>
-      <td></td>
-      <td>1%</td>
-    </tr>
-    <tr>
-      <td>17</td>
-      <td>Okasan</td>
-      <td>1.20%</td>
-      <td>$     30,713</td>
-      <td>$     25,391</td>
-      <td>$      9,233</td>
-      <td></td>
-      <td>$      5,322</td>
-      <td>$    597,450</td>
-      <td></td>
-      <td>1%</td>
-    </tr>
-    <tr>
-      <td>18</td>
-      <td>Tokai</td>
-      <td>1.16%</td>
-      <td>$     29,091</td>
-      <td></td>
-      <td></td>
-      <td></td>
-      <td>$     29,091</td>
-      <td>$  3,266,095</td>
-      <td></td>
-      <td>0%</td>
-    </tr>
-    <tr>
-      <td>19</td>
-      <td>Deutsche</td>
-      <td>0.99%</td>
-      <td>$     25,956</td>
-      <td>$     24,874</td>
-      <td>$      9,045</td>
-      <td>$      1,121</td>
-      <td>$      1,082</td>
-      <td>$    121,461</td>
-      <td></td>
-      <td>1%</td>
-    </tr>
-    <tr>
-      <td>20</td>
-      <td>Japan Equity Research</td>
-      <td>0.81%</td>
-      <td>$     20,314</td>
-      <td></td>
-      <td></td>
-      <td></td>
-      <td>$     20,314</td>
-      <td>$  2,280,635</td>
-      <td></td>
-      <td>0%</td>
-    </tr>
-    <tr>
-      <td>21</td>
-      <td>Macquarie</td>
-      <td>0.63%</td>
-      <td>$     16,728</td>
-      <td>$     14,594</td>
-      <td>$      5,307</td>
-      <td></td>
-      <td>$      2,134</td>
-      <td>$    239,541</td>
-      <td></td>
-      <td>0%</td>
-    </tr>
-    <tr>
-      <td>22</td>
-      <td>CLSA</td>
-      <td>0.13%</td>
-      <td>$      5,096</td>
-      <td>$        302</td>
-      <td>$        110</td>
-      <td></td>
-      <td>$      4,795</td>
-      <td>$    538,301</td>
-      <td></td>
-      <td>0%</td>
-    </tr>
-    <tr>
-      <td></td>
-      <td></td>
-      <td>101.97%</td>
-      <td>$  2,568,183</td>
-      <td>$  2,526,635</td>
-      <td>$    951,196</td>
-      <td>$    707,059</td>
-      <td>$     41,549</td>
-      <td>$  4,664,703</td>
-      <td>99%</td>
-      <td></td>
-    </tr>
-  </tbody>
-</table>
-</div>
-
-</div>
-
-</div>
-</div>
-
-</div>
-<div class="cell border-box-sizing code_cell rendered">
-<div class="input">
-<div class="prompt input_prompt">In&nbsp;[24]:</div>
+<div class="prompt input_prompt">In&nbsp;[27]:</div>
 <div class="inner_cell">
     <div class="input_area">
 <div class=" highlight hl-ipython2"><pre><span></span><span class="p">(</span><span class="n">q1</span><span class="p">[</span><span class="n">q1</span><span class="p">[</span><span class="s1">&#39;currencyCode&#39;</span><span class="p">]</span> <span class="o">!=</span> <span class="s2">&quot;JPY&quot;</span><span class="p">]</span>
@@ -13500,7 +14148,7 @@ div#notebook {
 
 
 <div class="output_area">
-<div class="prompt output_prompt">Out[24]:</div>
+<div class="prompt output_prompt">Out[27]:</div>
 
 
 <div class="output_html rendered_html output_subarea output_execute_result">
@@ -13662,7 +14310,7 @@ div#notebook {
 </div>
 <div class="cell border-box-sizing code_cell rendered">
 <div class="input">
-<div class="prompt input_prompt">In&nbsp;[25]:</div>
+<div class="prompt input_prompt">In&nbsp;[28]:</div>
 <div class="inner_cell">
     <div class="input_area">
 <div class=" highlight hl-ipython2"><pre><span></span><span class="p">(</span><span class="n">q1</span><span class="p">[</span><span class="n">q1</span><span class="p">[</span><span class="s1">&#39;currencyCode&#39;</span><span class="p">]</span> <span class="o">!=</span> <span class="s2">&quot;JPY&quot;</span><span class="p">]</span>
@@ -13682,7 +14330,7 @@ div#notebook {
 
 
 <div class="output_area">
-<div class="prompt output_prompt">Out[25]:</div>
+<div class="prompt output_prompt">Out[28]:</div>
 
 
 <div class="output_html rendered_html output_subarea output_execute_result">
@@ -13868,7 +14516,7 @@ div#notebook {
 </div>
 <div class="cell border-box-sizing code_cell rendered">
 <div class="input">
-<div class="prompt input_prompt">In&nbsp;[26]:</div>
+<div class="prompt input_prompt">In&nbsp;[29]:</div>
 <div class="inner_cell">
     <div class="input_area">
 <div class=" highlight hl-ipython2"><pre><span></span><span class="c1"># q2jpm = ytd_trades #.loc[&#39;2017-04-03&#39;:]  #,ytd_trades[&#39;brokerCode&#39;] == &#39;JPMF&#39;]</span>
@@ -13882,7 +14530,7 @@ div#notebook {
 </div>
 <div class="cell border-box-sizing code_cell rendered">
 <div class="input">
-<div class="prompt input_prompt">In&nbsp;[27]:</div>
+<div class="prompt input_prompt">In&nbsp;[30]:</div>
 <div class="inner_cell">
     <div class="input_area">
 <div class=" highlight hl-ipython2"><pre><span></span><span class="c1"># from IPython.display import display, HTML</span>
