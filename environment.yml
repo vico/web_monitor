@@ -22,3 +22,4 @@ dependencies:
     - Flask-Login
     - Flask-Bootstrap
     - Flask-Moment
+    - japandas
