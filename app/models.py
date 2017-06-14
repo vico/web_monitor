@@ -67,3 +67,15 @@ class User(UserMixin, db.Model):
 
     def __repr__(self):
         return '<User %r>' % self.username
+
+
+class BrokerRank(db.Model):
+    __tablename__ = 'broker_ranks'
+
+    id = db.Column(db.Integer, primary_key=True)
+    broker_id = db.Column(db.Integer, nullable=False)  # brokerID
+    rank = db.Column(db.SmallInteger, nullable=False)
+    budget_target = db.Column(db.Numeric)  # percentage
+    balance_usd = db.Column(db.Numeric)
+    year = db.Column(db.Integer, nullable=False)
+    quarter = db.Column(db.Enum('Q1', 'Q2', 'Q3', 'Q4'), nullable=False)

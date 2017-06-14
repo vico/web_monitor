@@ -6,6 +6,7 @@
 {{ super() }}
 <link rel="shortcut icon" href="{{ url_for('static', filename='favicon.ico') }}" type="image/x-icon">
 <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}" type="image/x-icon">
+<link rel="stylesheet" href="{{ url_for('static', filename='bootstrap-datetimepicker.min.css') }}" type="text/css">
 {% endblock %}
 
 {% block navbar %}
@@ -60,6 +61,6 @@
 {% block scripts %}
 {{ super() }}
 <script src="{{ url_for('static', filename='plotly-latest.min.js') }}"></script>
-{# moment.include_moment() #}
-
+{{ moment.include_moment() }}
+<script src="{{ url_for('static', filename='bootstrap-datetimepicker.min.js') }}"></script>
 {% endblock %}

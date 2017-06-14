@@ -5,6 +5,7 @@ basedir = os.path.abspath(os.path.dirname(__file__))
 import logging
 from logging.handlers import RotatingFileHandler, SMTPHandler
 
+
 class Config:
     def __init__(self):
         pass
@@ -29,7 +30,8 @@ class Config:
 class DevelopmentConfig(Config):
     DEBUG = True
     MAIL_DEBUG = True
-    SQLALCHEMY_DATABASE_URI = 'sqlite:///' + os.path.join(basedir, 'data.sqlite')
+    # SQLALCHEMY_DATABASE_URI = 'sqlite:///' + os.path.join(basedir, 'data.sqlite')
+    SQLALCHEMY_DATABASE_URI = 'mysql+pymysql://root:root@localhost/hkg02p?charset=utf8'
     SQLALCHEMY_COMMIT_ON_TEARDOWN = True
 
 
@@ -74,7 +76,6 @@ class TLSSMTPHandler(SMTPHandler):
             raise
         except:
             self.handleError(record)
-        
 
 
 class ProductionConfig(Config):
