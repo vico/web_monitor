@@ -8,7 +8,7 @@
     <h1>Broker Rank</h1>
 </div>
 
-<form class="form-inline" method="GET" action="check">
+<form class="form-inline" method="GET" action="{{url_for('commissions.rank')}}">
     <div class="form-group">
         <label for="year" >Year</label>
         <div class="input-group date" id="datetimepicker">
@@ -21,14 +21,22 @@
     <div class="form-group">
         <label for="quarter">Quarter</label>
         <select name="quarter" id="quarter" class="form-control">
-            <option value="Q1">Q1</option>
-            <option value="Q2">Q2</option>
-            <option value="Q3">Q3</option>
-            <option value="Q4">Q4</option>
+            {% for q in range(1,5) %}
+                {% if q == quarter %}
+                    <option value="{{ q }}" selected>Q{{ q }}</option>
+                {% else %}
+                    <option value="{{ q }}">Q{{ q }}</option>
+                {% endif %}
+            {% endfor %}
         </select>
     </div>
     <button type="submit" class="btn btn-default">Go</button>
 </form>
+
+    <div>
+    {{ table | safe }}
+    </div>
+
 
 {% endblock %}
 
@@ -39,8 +47,12 @@
        var today = new Date();
        $('#datetimepicker').datetimepicker({
            format: 'YYYY',
-           defaultDate: today
-       })
+        {% if year is defined %}
+            defaultDate: today.setYear({{ year }})
+        {% else %}
+            defaultDate: today
+        {% endif %}
+       });
     });
 </script>
 {% endblock %}

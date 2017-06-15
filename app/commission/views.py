@@ -11,22 +11,24 @@ import pymysql
 from . import commissions
 
 
-def get_trades(year):
+def get_ytd_trades(request_date):
     """
-    return all trades from start of year
-    :param year: the year to get trades
+    return all trades from start of year upto date
+    :param request_date: the year to get trades
     :return: DataFrame of all trades of year
     """
 
-    start_date = '{}-01-01'.format(year)
-    end_date = '{}-12-31'.format(year)
+    start_date = '{}-01-01'.format(request_date.year)
+    end_date = datetime.strftime(request_date, '%Y-%m-%d')
 
     ytd_trades = sql.read_sql("""
         SELECT a.code, a.fundCode, a.orderType, a.side, a.swap, a.tradeDate, a.PB, 
               g.commrate as gcomrate, d.brokerCommissionRate,
               # a.commission,
               (@commInUSD := a.commission*f.rate) AS commInUSD,
-              (@commrate := IF (g.commrate IS NOT NULL, ROUND(g.commrate,4), ROUND(d.brokerCommissionRate,4))) AS CommRate,
+              (@commrate := IF (g.commrate IS NOT NULL, 
+                                ROUND(g.commrate,4), 
+                                ROUND(d.brokerCommissionRate,4))) AS CommRate,
               (@jpresearch := IF(b.currencyCode IN ("JPY", "USD") AND c.instrumentType="EQ" AND  (@commrate<> 0.0004), 
                   @commInUSD*11/15,0)*1.0) AS JPResearch,
                   IF(b.currencyCode IN ("JPY", "USD") AND c.instrumentType="EQ" AND (@commrate=0.0004), 
@@ -59,10 +61,14 @@ def get_trades(year):
                         ELSE 0
                         END
               ) AS tax,
-              (@asiadeal := IF (b.currencyCode  NOT IN ("JPY", "USD")  AND c.instrumentType="EQ" AND d.brokerCommissionRate > 0.01,
-                                a.gross * f.rate * (d.brokerCommissionRate - @tax ), 0)) AS asiaDeal,
+              (@asiadeal := IF (b.currencyCode  NOT IN ("JPY", "USD")  AND c.instrumentType="EQ" 
+                                      AND d.brokerCommissionRate > 0.01,
+                                a.gross * f.rate * (d.brokerCommissionRate - @tax ), 
+                                0)) AS asiaDeal,
               (@asiaResearch := IF(b.currencyCode  NOT IN ("JPY", "USD")  AND c.instrumentType="EQ" AND @asiadeal=0, 
-                IF(d.brokerCommissionRate-@tax-0.0005>= 0, d.brokerCommissionRate-@tax-0.0005, 0) *f.rate*a.gross, 0)) AS asiaResearch,
+                IF(d.brokerCommissionRate-@tax-0.0005>= 0, 
+                    d.brokerCommissionRate-@tax-0.0005, 
+                    0) *f.rate*a.gross, 0)) AS asiaResearch,
               IF (b.currencyCode NOT  IN ("JPY", "USD")  AND c.instrumentType="EQ" AND @asiadeal=0,
                 0.0005 * f.rate * a.gross,
                 IF (b.currencyCode NOT IN ("JPY", "USD")  AND c.instrumentType IN ("FU", "OP"), @commInUSD-@clearing, 0)
@@ -74,12 +80,13 @@ def get_trades(year):
               INNER JOIN t08Reconcile d ON a.matchDoric = d.primaryID # a.primaryID = d.matchBrokers AND d.srcFlag ="D"
               INNER JOIN t06DailyCrossRate f ON f.priceDate=a.tradeDate AND f.base=b.currencyCode AND f.quote="USD"
               LEFT JOIN t02Broker e ON e.brokerCode = a.brokerCode
-              left join (select a.code, a.orderType, a.side, a.swap, a.tradeDate, a.settleDate, a.brokerCode, MAX(a.brokerCommissionRate) as commrate
-            from t08Reconcile a
-            where a.status="A" and a.srcFlag="D" and a.tradeDate >= '{}' and a.tradeDate <= '{}'
-            group by a.code, a.orderType, a.side, a.swap, a.tradeDate, a.settleDate, a.brokerCode
-              ) g ON a.code=g.code and a.orderType=g.orderType and a.side=g.side and a.swap=g.swap and a.tradeDate=g.tradeDate
-                     and a.settleDate=g.settleDate  and d.brokerCode=g.brokerCode
+              left join (select a.code, a.orderType, a.side, a.swap, a.tradeDate, a.settleDate, a.brokerCode, 
+                          MAX(a.brokerCommissionRate) as commrate
+                        from t08Reconcile a
+                        where a.status="A" and a.srcFlag="D" and a.tradeDate >= '{}' and a.tradeDate <= '{}'
+                        group by a.code, a.orderType, a.side, a.swap, a.tradeDate, a.settleDate, a.brokerCode
+                ) g ON a.code=g.code and a.orderType=g.orderType and a.side=g.side and a.swap=g.swap 
+                      and a.tradeDate=g.tradeDate and a.settleDate=g.settleDate  and d.brokerCode=g.brokerCode
             WHERE a.tradeDate>='{}' AND a.tradeDate <= '{}' AND a.srcFlag="K"
             ORDER BY a.tradeDate, a.code;
         """.format(start_date, end_date, start_date, end_date), g.con, parse_dates=['tradeDate'], index_col='tradeDate')
@@ -116,6 +123,10 @@ def format_2f(df):
     return t
 
 
+def calculate_quarter(from_month):
+    return (from_month - 1) // 3 + 1
+
+
 def calculate_columns(quarter_trades, jp_ranks_df, jp_quarter_commission_budget, usd_jpy,
                       request_date, ubs_include_list=[], clsa_asia_target=0):
 
@@ -128,7 +139,7 @@ def calculate_columns(quarter_trades, jp_ranks_df, jp_quarter_commission_budget,
 
         return t
 
-    quarter = (request_date.month - 1) // 3 + 1
+    quarter = calculate_quarter(request_date.month)
     budget_ratio = (request_date.month - (quarter - 1) * 3) / 3.0
 
     rank_df = jp_ranks_df.copy()
@@ -198,10 +209,14 @@ def calculate_commission(quarter_trades, jp_ranks_df, jp_quarter_commission_budg
 
 
 def calculate_soft(quarter_trades, year, month):
-    mon_trades = quarter_trades['{}-{:02d}'.format(year, month)]
-    soft = "{:,.0f}".format(mon_trades[(mon_trades['brokerName'] == 'Soft')]['JPResearch'].sum())
-    soft_ms = "{:,.0f}".format(mon_trades[mon_trades['brokerName'] == 'Soft']['JPExec'].sum())
-    return soft, soft_ms
+    month_key = '{}-{:02d}'.format(year, month)
+    if month_key in quarter_trades.index:
+        mon_trades = quarter_trades[month_key]
+        soft = "{:,.0f}".format(mon_trades[(mon_trades['brokerName'] == 'Soft')]['JPResearch'].sum())
+        soft_ms = "{:,.0f}".format(mon_trades[mon_trades['brokerName'] == 'Soft']['JPExec'].sum())
+        return soft, soft_ms
+    else:
+        return 0, 0
 
 
 def get_fx_rate(price_date):
@@ -212,12 +227,37 @@ def get_fx_rate(price_date):
                 WHERE a.priceDate="{}" AND a.quote IN ("JPY", "HKD") AND a.base="USD"
     """
 
-    t = pd.read_sql(query.format(price_date), g.con, index_col="quote")
+    t = pd.read_sql(query.format(price_date.strftime('%Y-%m-%d')), g.con, index_col="quote")
+    if t.empty:
+        return None, None
     return t.loc['JPY', 'rate'], t.loc['HKD', 'rate']
+
+
+def get_annual_budget(for_year):
+    query = """SELECT a.region, a.amount
+                        FROM commission_budget a
+                        WHERE a.year={}
+    """.format(for_year)
+
+    budget_df = pd.read_sql(query, g.con, index_col='region')
+    if budget_df.empty:
+        return None, None
+    return budget_df.loc['Japan', 'amount'], budget_df.loc['NonJapan', 'amount']
+
+
+def get_ranks(year, quarter):
+    return pd.read_sql('''
+                SELECT b.name AS brokers, a.rank, a.balance_usd AS balance, 
+                        a.budget_target AS research
+                FROM broker_ranks a
+                INNER JOIN brokers b ON a.broker_id=b.id
+                WHERE a.year={} AND a.quarter='Q{}'
+        '''.format(year, quarter), g.con, index_col='brokers')
 
 
 @commissions.before_request
 def before_request():
+    # TODO: get username and password from environment file
     g.con = pymysql.connect(host='localhost', user='root', passwd='root', db='hkg02p')
     g.startDate = datetime(datetime.now().year-1, 12, 31).strftime('%Y-%m-%d')
     g.endDate = datetime.now().strftime('%Y-%m-%d')
@@ -241,29 +281,43 @@ def index():
     prev_quarter = 4 if quarter == 1 else quarter - 1
     prev_year = request_date.year - 1 if quarter == 1 else request_date.year
 
-    ytd_trades = get_trades(request_date.year)
+    ytd_trades = get_ytd_trades(request_date)
+
+    error_message = []
+
+    if ytd_trades.empty:
+        error_message.append("There is no trade data for year {}!".format(request_date.year))
 
     # Asia commission budget is 2mm  USD per year
     # Japan has gone through a few iterations but it's basically approximately 7.5 mm USD per year
-    jp_annual_commission_budget = 7500000  # usd
-    asia_annual_commission_budget = 2000000  # usd
+    # jp_annual_commission_budget = 7500000  # usd
+    # asia_annual_commission_budget = 2000000  # usd
+    jp_annual_commission_budget, asia_annual_commission_budget = get_annual_budget(request_date.year)
+    if jp_annual_commission_budget is None:
+        error_message.append('No budget input for {}'.format(request_date.year))
+
+    jp_ranks_df = get_ranks(prev_year, prev_quarter)  # ranking of last quarter
+
+    if jp_ranks_df.empty:
+        error_message.append('No ranking data for {}Q{}'.format(prev_year, prev_quarter))
+
+    # jp_quarter_commission_budget = 10031527/4.0  # to make it same with old system 2016Q1
+
+    usd_jpy, hkd_jpy = get_fx_rate(request_date)
+    if usd_jpy is None or hkd_jpy is None:
+        error_message.append('FX rate are not available for {}'.format(request_date.strftime('%Y-%m-%d')))
+
+    if len(error_message) > 0:
+        return render_template('commission/index.html',
+                               error_message=error_message, date=request_date
+                               )
+
     jp_quarter_commission_budget = jp_annual_commission_budget / 4.0
     asia_quarter_commission_budget = asia_annual_commission_budget / 4.0
 
-    jp_quarter_commission_budget = 10031527/4.0  # to make it same with old system 2016Q1
-
-    jp_ranks_df = pd.read_sql('''
-            SELECT b.name AS brokers, a.rank, a.balance_usd AS balance, 
-                    a.budget_target AS research
-            FROM broker_ranks a
-            INNER JOIN brokers b ON a.broker_id=b.id
-            WHERE a.year={} AND a.quarter='Q{}'
-    '''.format(prev_year, prev_quarter), g.con, index_col='brokers')
-
-    usd_jpy, hkd_jpy = get_fx_rate(request_date)
-    # TODO: get trades until request_date
     quarter_trades = get_quarter_trades(request_date.year, quarter, ytd_trades)
 
+    # TODO: get ubs included names from DB
     table = calculate_commission(quarter_trades, jp_ranks_df, jp_quarter_commission_budget, usd_jpy, request_date,
                                  ubs_include_list=['Tokai', 'Japan Equity Research'], clsa_asia_target=0)
 
@@ -299,8 +353,26 @@ def index():
 
 @commissions.route('/rank', methods=['GET'])
 def rank():
+    today = date.today()
+    year = request.args.get('year', today.year)
+    quarter = request.args.get('quarter', calculate_quarter(today.month))
+
+    ranks = get_ranks(year, quarter)
+    if not ranks.empty:
+        table = (ranks.reset_index()
+                 .sort_values(by='rank')
+                 .to_html(classes='table table-stripe', index=False)
+                 .replace('border="1"', '')
+                 )
+    else:
+        table = 'No ranking for selected quarter'
+
     # rank_form = RankSearchForm()
-    return render_template('commission/broker_rank.html')
+    return render_template('commission/broker_rank.html',
+                           table=table,
+                           year=year,
+                           quarter=int(quarter),
+                           )
 
 
 @commissions.route('/check', methods=['GET'])
