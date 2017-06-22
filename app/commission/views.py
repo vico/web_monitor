@@ -7,6 +7,7 @@ import numpy as np
 from pandas.io import sql
 # import pymysql
 from datetime import datetime, date
+import japandas as jpd
 import pymysql
 from . import commissions
 
@@ -123,6 +124,19 @@ def format_2f(df):
     return t
 
 
+def format_asia_2f(df):
+    t = df.copy()
+    columns = ['asiaResearch', 'asiaExecution', 'asiaDeal', 'res_target', 'balance_usd']
+    t[columns] = t[columns].applymap(lambda x: '$ {:12,.0f}'.format(x) if x != 0 else '')
+    t['balance_hkd'] = t['balance_hkd'].apply(lambda x: '$ {:12,.0f}'.format(x) if x != 0 else '')
+    t['HCSwaps'] = t['HCSwaps'].apply(lambda x: '$ {:12,.0f}'.format(x) if x != 0 else '')
+    t['rank'] = t['rank'].apply(lambda x: '{:.0f}'.format(x) if not np.isnan(x) else '')
+    t['research'] = t['research'].apply(lambda x: '{:5.2f}%'.format(x) if x > 0 else '')
+    t['accrued'] = t['accrued'].apply(lambda x: '{:5.0f}%'.format(x) if not np.isnan(x) else '')
+    t['execution'] = t['execution'].apply(lambda x: '{:5.0f}%'.format(x) if x > 0 else '')
+    return t
+
+
 def calculate_quarter(from_month):
     return (from_month - 1) // 3 + 1
 
@@ -130,11 +144,11 @@ def calculate_quarter(from_month):
 def calculate_columns(quarter_trades, jp_ranks_df, jp_quarter_commission_budget, usd_jpy,
                       request_date, ubs_include_list=[], clsa_asia_target=0):
 
-    def zero_out_ubs_include(df, ubs_include_list):
+    def zero_out_ubs_include(df, ubs_list):
         """ assume index is brokerName, and balance_usd column is already created
         """
         t = df.copy()
-        for broker in ubs_include_list:
+        for broker in ubs_list:
             t.loc[broker, 'balance_usd'] = 0
 
         return t
@@ -176,21 +190,21 @@ def calculate_columns(quarter_trades, jp_ranks_df, jp_quarter_commission_budget,
     return table
 
 
-def calculate_commission(quarter_trades, jp_ranks_df, jp_quarter_commission_budget, usd_jpy, request_date,
-                        ubs_include_list=[], clsa_asia_target=0):
+def calculate_commission(quarter_trades, ranks_df, quarter_commission_budget, usd_hkd, request_date,
+                         ubs_include_list=[], clsa_asia_target=0):
     """
     calculate final table of commissions
     :param quarter_trades: DataFrame contains all trades in the quarter
-    :param jp_ranks_df: DataFrame contains ranking of broker and their target percentage
-    :param jp_quarter_commission_budget: quarterly budget for commission
-    :param usd_jpy: fx rate
+    :param ranks_df: DataFrame contains ranking of broker and their target percentage
+    :param quarter_commission_budget: quarterly budget for commission
+    :param usd_hkd: fx rate
     :param request_date: date user request for commission page
     :param ubs_include_list: a list of csa broker included in UBS reasearch target
     :param clsa asia target which is included in UBS research target
     :return: a DataFrame to convert to HTML for display
     """
 
-    table = calculate_columns(quarter_trades, jp_ranks_df, jp_quarter_commission_budget, usd_jpy,
+    table = calculate_columns(quarter_trades, ranks_df, quarter_commission_budget, usd_hkd,
                               request_date, ubs_include_list, clsa_asia_target)
 
     exec_target = [11, 11, 10, 10, 10, 7, 7, 7, 7, 7, 3, 3, 3, 2, 1]
@@ -205,6 +219,71 @@ def calculate_commission(quarter_trades, jp_ranks_df, jp_quarter_commission_budg
             .pipe(format_2f)
             [['rank', 'brokers', 'research', 'res_target', 'JPResearch', 'JPExec',
               'JPDis', 'balance_usd', 'balance_jpy', 'exec_target', 'accrued']]
+            )
+
+
+def calculate_columns_asia(quarter_trades, ranks_df, asia_quarter_commission_budget, usd_hkd,
+                      request_date, ubs_include_list=[]):
+
+    def zero_out_ubs_include(df, ubs_list):
+        """ assume index is brokerName, and balance_usd column is already created
+        """
+        t = df.copy()
+        for broker in ubs_list:
+            t.loc[broker, 'balance_usd'] = 0
+
+        return t
+
+    # quarter = calculate_quarter(request_date.month)
+    # budget_ratio = (request_date.month - (quarter - 1) * 3) / 3.0
+
+    rank_df = ranks_df.copy()
+    balance = rank_df['balance']
+    for broker in ubs_include_list:
+        rank_df.loc['UBS', 'research'] += rank_df.loc[broker, 'research']
+        rank_df.loc[broker, 'research'] = 0
+
+    ranked_df = (quarter_trades[(quarter_trades['currencyCode'] != "JPY") & (quarter_trades['currencyCode'] != "USD")]
+                 .groupby(['brokerName'])
+                 .sum()[['asiaResearch', 'asiaExecution', 'asiaDeal', 'HCSwaps']]
+                 .assign(asiaYTD=lambda x: x.asiaResearch + x.asiaExecution)
+                 .merge(rank_df, how='right', left_index=True, right_index=True)
+                 .fillna(0)
+                 .sort_values(by='rank')
+                 )
+    bal = balance.reindex(ranked_df.index)
+    table = (ranked_df.assign(res_target=lambda df: df['research'] * asia_quarter_commission_budget / 100 +
+                                                    (bal if bal is not None else 0))
+             .assign(balance_usd=lambda df: df['res_target'] - df['asiaResearch'])
+             .pipe(zero_out_ubs_include, ubs_include_list)
+             .assign(balance_hkd=lambda df: df['balance_usd'] * usd_hkd)
+             .assign(accrued=lambda df: df['asiaExecution'] * 100 / df['asiaExecution'].sum())
+             .reset_index()
+             .set_index('rank')
+             )
+
+    return table
+
+
+def calculate_commission_asia(quarter_trades, ranks_df, asia_quarter_commission_budget, usd_hkd, request_date,
+                              ubs_include_list=[]):
+    table = calculate_columns_asia(quarter_trades, ranks_df, asia_quarter_commission_budget, usd_hkd, request_date,
+                                   ubs_include_list)
+
+    exec_target = [15, 15, 15, 15, 15, 5, 5, 5, 5, 5]
+    if len(exec_target) < len(table.index):
+        exec_target = exec_target + [0] * (len(table.index) - len(exec_target))
+
+    table['execution'] = pd.Series(exec_target, index=table.index)
+
+    return (table
+            .reset_index()
+            .append(table[['research', 'res_target', 'asiaResearch', 'asiaExecution',
+                           'balance_usd', 'balance_hkd', 'execution', 'accrued', 'asiaDeal', 'HCSwaps']].sum(), ignore_index=True)
+            # .fillna(0)
+            .pipe(format_asia_2f)
+            [['rank', 'brokers', 'research', 'res_target', 'asiaResearch', 'balance_usd', 'balance_hkd',
+              'execution', 'accrued', 'asiaExecution', 'asiaDeal', 'HCSwaps']]
             )
 
 
@@ -245,14 +324,14 @@ def get_annual_budget(for_year):
     return budget_df.loc['Japan', 'amount'], budget_df.loc['NonJapan', 'amount']
 
 
-def get_ranks(year, quarter):
+def get_ranks(year, quarter, region='Japan'):
     return pd.read_sql('''
                 SELECT b.name AS brokers, a.rank, a.balance_usd AS balance, 
                         a.budget_target AS research
                 FROM broker_ranks a
                 INNER JOIN brokers b ON a.broker_id=b.id
-                WHERE a.year={} AND a.quarter='Q{}'
-        '''.format(year, quarter), g.con, index_col='brokers')
+                WHERE a.year={} AND a.quarter='Q{}' AND b.region='{}'
+        '''.format(year, quarter, region), g.con, index_col='brokers')
 
 
 @commissions.before_request
@@ -276,7 +355,7 @@ def index():
         except ValueError:
             request_date = date.today()
 
-    quarter = (request_date.month-1) // 3 + 1
+    quarter = calculate_quarter(request_date.month)
 
     prev_quarter = 4 if quarter == 1 else quarter - 1
     prev_year = request_date.year - 1 if quarter == 1 else request_date.year
@@ -288,6 +367,14 @@ def index():
     if ytd_trades.empty:
         error_message.append("There is no trade data for year {}!".format(request_date.year))
 
+    # get business calendar for JP
+    cal = jpd.JapaneseHolidayCalendar()
+    cday = pd.offsets.CDay(calendar=cal)
+    indexer = pd.date_range('{}-01-01'.format(request_date.year), request_date, freq=cday)
+
+    if request_date in indexer and request_date not in ytd_trades.index:
+        error_message.append('There is no trades for requested date!')
+
     # Asia commission budget is 2mm  USD per year
     # Japan has gone through a few iterations but it's basically approximately 7.5 mm USD per year
     # jp_annual_commission_budget = 7500000  # usd
@@ -297,14 +384,15 @@ def index():
         error_message.append('No budget input for {}'.format(request_date.year))
 
     jp_ranks_df = get_ranks(prev_year, prev_quarter)  # ranking of last quarter
+    nonjp_ranks_df = get_ranks(prev_year, prev_quarter, 'NonJapan')
 
     if jp_ranks_df.empty:
         error_message.append('No ranking data for {}Q{}'.format(prev_year, prev_quarter))
 
     # jp_quarter_commission_budget = 10031527/4.0  # to make it same with old system 2016Q1
 
-    usd_jpy, hkd_jpy = get_fx_rate(request_date)
-    if usd_jpy is None or hkd_jpy is None:
+    usd_jpy, usd_hkd = get_fx_rate(request_date)
+    if usd_jpy is None or usd_hkd is None:
         error_message.append('FX rate are not available for {}'.format(request_date.strftime('%Y-%m-%d')))
 
     if len(error_message) > 0:
@@ -320,6 +408,9 @@ def index():
     # TODO: get ubs included names from DB
     table = calculate_commission(quarter_trades, jp_ranks_df, jp_quarter_commission_budget, usd_jpy, request_date,
                                  ubs_include_list=['Tokai', 'Japan Equity Research'], clsa_asia_target=0)
+
+    asia_table = calculate_commission_asia(quarter_trades, nonjp_ranks_df, asia_quarter_commission_budget, usd_hkd,
+                                        request_date, ubs_include_list=['Kim Eng', 'Samsung', 'CIMB'])
 
     qtd_clearing = "{:,.0f}".format(quarter_trades['Clearing'].sum())
     ytd_clearing = "{:,.0f}".format(ytd_trades['Clearing'].sum())
@@ -339,8 +430,9 @@ def index():
 
     return render_template('commission/index.html',
                            main_table=table.to_html(index=False, classes=['borderTable', 'center'], na_rep=''),
+                           asia_table=asia_table.to_html(index=False, classes=['borderTable', 'center'], na_rep=''),
                            qtd_clearing=qtd_clearing, ytd_clearing=ytd_clearing,
-                           usdjpy=usd_jpy, hkdjpy=hkd_jpy,
+                           usdjpy=usd_jpy, usdhkd=usd_hkd,
                            mon1=mon1, mon2=mon2, mon3=mon3,
                            soft1=soft1, soft2=soft2, soft3=soft3,
                            soft_ms1=soft_ms1, soft_ms2=soft_ms2, soft_ms3=soft_ms3,
@@ -375,6 +467,3 @@ def rank():
                            )
 
 
-@commissions.route('/check', methods=['GET'])
-def check():
-    return render_template('commission/rank.html')
