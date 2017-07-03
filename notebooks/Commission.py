@@ -28,7 +28,7 @@ from sqlalchemy import create_engine
 ubs_include_list = ['Tokai', 'Japan Equity Research']
 
 
-# In[12]:
+# In[3]:
 
 date = '2016-06-30'
 # date = '2016-03-31'
@@ -48,25 +48,25 @@ prev_quarter = 4 if quarter == 1 else quarter - 1
 prev_year = date.year - 1 if quarter == 1 else date.year
 
 
-# In[3]:
+# In[4]:
 
 with open('config.json') as f:
     conf = json.load(f)
 
 
-# In[99]:
+# In[5]:
 
 con = pymysql.connect(host=conf['host'], user=conf['user'], passwd=conf['password'], db=conf['database'])
 engine = create_engine('mysql+pymysql://root:root@localhost:3306/hkg02p', echo=False)
 
 
-# In[34]:
+# In[6]:
 
 def calculate_quarter(from_month):
     return (from_month - 1) // 3 + 1
 
 
-# In[5]:
+# In[7]:
 
 def get_ytd_trades(date):
     """
@@ -143,7 +143,7 @@ def get_ytd_trades(date):
     return ytd_trades
 
 
-# In[6]:
+# In[8]:
 
 def get_quarter_trades(year, quarter, ytd_trades):
     if quarter == 1:
@@ -163,7 +163,7 @@ def get_quarter_trades(year, quarter, ytd_trades):
     return ytd_trades[start:end]
 
 
-# In[7]:
+# In[9]:
 
 def format_2f(df):
     t = df.copy()
@@ -177,7 +177,7 @@ def format_2f(df):
     return t
 
 
-# In[38]:
+# In[10]:
 
 def format_asia_2f(df):
     t = df.copy()
@@ -192,29 +192,30 @@ def format_asia_2f(df):
     return t
 
 
-# In[122]:
+# In[11]:
 
-def get_csa_brokers(date):
+def get_csa_brokers(date, region='Japan'):
     quarter = calculate_quarter(date.month)
     prev_quarter = 4 if quarter == 1 else quarter - 1
     date_str = date.strftime('%Y-%m-%d')
     
     return pd.read_sql("""
-    SELECT d.name AS brokers, c.balance_usd AS balance,
-      c.budget_target AS research, d.region
+    SELECT a.name AS master_brokers, d.name AS brokers, 
+    #c.balance_usd AS balance,c.budget_target AS research,
+    d.region
     FROM brokers a
     INNER JOIN broker_csa b ON a.id=b.master_broker_id
       INNER JOIN broker_ranks c ON b.sub_broker_id=c.broker_id
       INNER JOIN brokers d ON b.sub_broker_id=d.id
-    WHERE a.region="Japan" AND b.start_date <= "{}"
+    WHERE a.region="{}" AND b.start_date <= "{}"
       AND (b.end_date IS NULL OR b.end_date >= "{}")
       AND c.year={}
       AND c.quarter={}
-    """.format(date_str, date_str, date.year, prev_quarter), con)
+    """.format(region, date_str, date_str, date.year, prev_quarter), con)
     
 
 
-# In[10]:
+# In[12]:
 
 def calculate_soft(quarter_trades, year, month):
     month_key = '{}-{:02d}'.format(year, month)
@@ -227,7 +228,7 @@ def calculate_soft(quarter_trades, year, month):
         return 0, 0
 
 
-# In[11]:
+# In[13]:
 
 def get_fx_rate(price_date):
     """ return tuple of fx rate for USDJPY and USDHKD
@@ -253,7 +254,7 @@ def get_ranks(year, quarter, region='Japan'):
         '''.format(year, quarter, region), con, index_col='brokers')
 
 
-# In[13]:
+# In[15]:
 
 def get_annual_budget(for_year):
     query = """SELECT a.region, a.amount
@@ -265,7 +266,7 @@ def get_annual_budget(for_year):
     return budget_df.loc['Japan', 'amount'], budget_df.loc['NonJapan', 'amount']
 
 
-# In[8]:
+# In[16]:
 
 def calculate_columns(quarter_trades, jp_ranks_df, jp_quarter_commission_budget, usd_jpy, 
                       ubs_include_list=[], clsa_asia_target=0):
@@ -312,7 +313,7 @@ def calculate_columns(quarter_trades, jp_ranks_df, jp_quarter_commission_budget,
     return table
 
 
-# In[9]:
+# In[17]:
 
 def calculate_commission(quarter_trades, jp_ranks_df, jp_quarter_commission_budget, usd_jpy,
                         ubs_include_list=[], clsa_asia_target=0):
@@ -334,7 +335,7 @@ def calculate_commission(quarter_trades, jp_ranks_df, jp_quarter_commission_budg
             )
 
 
-# In[35]:
+# In[18]:
 
 def calculate_columns_asia(quarter_trades, ranks_df, asia_quarter_commission_budget, usd_hkd,
                       request_date, ubs_include_list=[]):
@@ -379,7 +380,7 @@ def calculate_columns_asia(quarter_trades, ranks_df, asia_quarter_commission_bud
     return table
 
 
-# In[39]:
+# In[19]:
 
 def calculate_commission_asia(quarter_trades, ranks_df, asia_quarter_commission_budget, usd_hkd, request_date,
                               ubs_include_list=[]):
@@ -406,6 +407,33 @@ def calculate_commission_asia(quarter_trades, ranks_df, asia_quarter_commission_
 
 # In[20]:
 
+def calculate_commission_asia_table(table_param):
+    table = table_param.copy()
+    exec_target = [15, 15, 15, 15, 15, 5, 5, 5, 5, 5]
+    if len(exec_target) < len(table.index):
+        exec_target = exec_target + [0] * (len(table.index) - len(exec_target))
+
+    table['execution'] = pd.Series(exec_target, index=table.index)
+
+    return (table
+            .reset_index()
+            .append(table[['research', 'res_target', 'asiaResearch', 'asiaExecution',
+                           'balance_usd', 'balance_hkd', 'execution', 'accrued', 'asiaDeal', 'HCSwaps']].sum(), 
+                    ignore_index=True)
+            # .fillna(0)
+            .pipe(format_asia_2f)
+            [['rank', 'brokers', 'research', 'res_target', 'asiaResearch', 'balance_usd', 'balance_hkd',
+              'execution', 'accrued', 'asiaExecution', 'asiaDeal', 'HCSwaps']]
+            )
+
+
+# In[21]:
+
+get_ipython().magic(u'time ytd_trades = get_ytd_trades(date)')
+
+
+# In[22]:
+
 # Asia commission budget is 2mm  USD per year
 # Japan has gone through a few iterations but it's basically approximately 7.5 mm USD per year
 # jp_annual_commission_budget = 7500000  # usd
@@ -420,28 +448,31 @@ asia_quarter_commission_budget = asia_annual_commission_budget / 4.0
 
 
 
-# In[123]:
-
-get_csa_brokers(date)
-
-
-# In[124]:
+# In[23]:
 
 csa_brokers = get_csa_brokers(date)
-
-
-# In[125]:
-
-nonjapan_indexer = csa_brokers[csa_brokers['region'] == 'NonJapan']['research'].index
-csa_brokers.loc[nonjapan_indexer, 'research'] = csa_brokers.loc[nonjapan_indexer, 'research'] * asia_quarter_commission_budget/jp_quarter_commission_budget
-
-
-# In[128]:
-
+# nonjapan_indexer = csa_brokers[csa_brokers['region'] == 'NonJapan']['research'].index
+# csa_brokers.loc[nonjapan_indexer, 'research'] = csa_brokers.loc[nonjapan_indexer, 'research'] * asia_quarter_commission_budget/jp_quarter_commission_budget
 csa_brokers
 
 
-# In[112]:
+# In[24]:
+
+nonjp_csa_brokers = get_csa_brokers(date, 'NonJapan')
+nonjp_csa_brokers
+
+
+# In[25]:
+
+csa_brokers[csa_brokers['region'] == 'NonJapan']['brokers'].tolist()
+
+
+# In[26]:
+
+nonjp_csa_brokers['brokers'].tolist()
+
+
+# In[27]:
 
 jp_ranks_df = get_ranks(prev_year,prev_quarter)
 
@@ -452,105 +483,143 @@ print(usd_jpy, usd_hkd)
 quarter_trades = get_quarter_trades(date.year, quarter, ytd_trades)
 
 
-# In[115]:
+# In[28]:
 
-csa_brokers[csa_brokers['region'] == 'Japan']['brokers'].tolist()
-
-
-# In[127]:
+nonjp_ranks_df = get_ranks(prev_year,prev_quarter, 'NonJapan')
 
 
+# In[29]:
+
+def adjust_research(df, jp_quarter_commission_budget):
+    t = df.copy()
+    t['research'] = df['balance_usd'] *100/jp_quarter_commission_budget
+    return t
+
+pair_list = csa_brokers[csa_brokers['region'] == 'NonJapan'][['master_brokers', 'brokers']].values.tolist()
+nonjp_paid_on_jp_broker_list = [ b[1] for b in pair_list]
+asia_columns = calculate_columns_asia(quarter_trades, nonjp_ranks_df, asia_quarter_commission_budget, usd_hkd, 
+                                      date, nonjp_csa_brokers['brokers'].tolist())
+# calculate_columns(quarter_trades, jp_ranks_df, jp_quarter_commission_budget, usd_jpy, ubs_include_list, clsa_asia_target = 1.950146).pipe(check)
+# nonjp_paid_on_jp = (asia_columns
+#  .reset_index()
+#  .set_index('brokers').loc[nonjp_paid_on_jp_broker_list]
+#  .pipe(adjust_research)[['balance_usd', 'research']]
+#  .rename(columns={'balance_usd': 'res_target'}, index={'CLSA': 'CLSA Asia'})
+# )
+# nonjp_paid_on_jp['research'].sum()
+# nonjp_paid_on_jp
+
+# need to get asia columns calculated to get balance to append to JP table.
+nonjp_paid_on_jp = (asia_columns
+ .merge(csa_brokers, how='inner', left_on='brokers', right_on='brokers')
+ .pipe(adjust_research, jp_quarter_commission_budget)[['master_brokers', 'brokers', 'balance_usd', 'research']]
+)
+
+# nonjp_paid_on_jp[['master_brokers', 'brokers']].values.tolist()
+# nonjp_paid_on_jp.groupby('master_brokers').sum().index.tolist()
+# nonjp_paid_on_jp.drop('master_brokers', axis=1).set_index('brokers').rename(index={'CLSA': 'CLSA Asia'})
+# asia_columns.drop(asia_columns['brokers'] == pd.Series(nonjp_paid_on_jp['brokers'].values.tolist()))
+
+
+# In[30]:
+
+# calculate_columns(quarter_trades, jp_ranks_df, jp_quarter_commission_budget, usd_jpy, ubs_include_list, clsa_asia_target = 1.950146)
+
+
+# In[31]:
+
+#csa_brokers[csa_brokers['region'] == 'Japan']['brokers'].tolist()
+# csa_brokers['brokers'].tolist()
+# csa_brokers[csa_brokers['region'] == 'Japan'][['master_brokers', 'brokers']].values.tolist()
+
+
+# In[32]:
+
+def zero_out_ubs_include(df, ubs_list):
+        """ assume index is brokerName, and balance_usd column is already created
+        """
+        t = df.copy()
+        for broker in ubs_list:
+            t.loc[broker, 'balance_usd'] = 0
+
+        return t
+    
 rank_df = jp_ranks_df.copy()
 balance = rank_df['balance']
-for broker in csa_brokers['brokers'].tolist():
-    rank_df.loc['UBS', 'research'] += rank_df.loc[broker, 'research']
 
-rank_df
-# rank_df.loc['UBS', 'research'] += clsa_asia_target
+ranked_df = (quarter_trades
+         .groupby(['brokerName', 'currencyCode'])
+         .sum()
+         .loc[(slice(None), ['JPY', 'USD']), ['JPResearch', 'JPExec', 'JPDis']]
+         .groupby(level=0).sum()
+         .reset_index()
+         .set_index('brokerName')
+         .merge(rank_df, how='right', left_index=True,
+                right_index=True)  # some names removed like Barclays and Softs
+         .fillna(0)
+         .sort_values(by='research', ascending=False)
+            )
 
-# ranked_df = (quarter_trades
-#          .groupby(['brokerName', 'currencyCode'])
-#          .sum()
-#          .loc[(slice(None), ['JPY', 'USD']), ['JPResearch', 'JPExec', 'JPDis']]
-#          .groupby(level=0).sum()
-#          .reset_index()
-#          .set_index('brokerName')
-#          .merge(rank_df, how='right', left_index=True,
-#                 right_index=True)  # some names removed like Barclays and Softs
-#          .fillna(0)
-#          .sort_values(by='rank', axis=0)
-#             )
+for (master, broker) in csa_brokers[csa_brokers['region'] == 'Japan'][['master_brokers', 'brokers']].values.tolist():
+    ranked_df.loc[master, 'research'] += rank_df.loc[broker, 'research']
+    ranked_df.loc[broker, 'research'] = 0
+
+temp = nonjp_paid_on_jp.groupby('master_brokers').sum()
+for master in temp.index.tolist():
+    ranked_df.loc[master, 'research'] += temp.loc[master]['research']
+
+bal = balance.reindex(ranked_df.index)
+table = (ranked_df
+         .assign(res_target=lambda df: df['research'] * jp_quarter_commission_budget / 100 + (bal if bal is not None else 0) )
+         .assign(balance_usd=lambda df: df['res_target'] - df['JPResearch'] )
+         .assign(balance_jpy=lambda df: df['balance_usd'] * usd_jpy)
+         .assign(accrued=lambda df: (df['JPExec'] + df['JPDis']) * 100 / (df['JPExec'].sum() + df['JPDis'].sum()))
+         .reset_index()
+         .set_index('rank')
+         )
+# table
 
 
-# In[94]:
 
-(quarter_trades
-             .groupby(['brokerName', 'currencyCode'])
-             .sum()
-             .loc[(slice(None), ['JPY', 'USD']), ['JPResearch', 'JPExec', 'JPDis']]
-             .groupby(level=0).sum()
-             .reset_index()
-             .set_index('brokerName')
-)
+# In[33]:
+
+exec_target = [11, 11, 10, 10, 10, 7, 7, 7, 7, 7, 3, 3, 3, 2, 1]
+if len(exec_target) < len(table.index):
+    exec_target = exec_target + [0] * (len(table.index) - len(exec_target))
+table['exec_target'] = pd.Series(exec_target, index=table.index)
+
+(table
+        .reset_index()
+         .set_index('brokers')
+         .append(nonjp_paid_on_jp
+                 .drop('master_brokers', axis=1)
+                 .set_index('brokers')
+                 .rename(index={'CLSA': 'CLSA Asia'}))
+             .fillna(0)
+         .reset_index()
+        .append(table[['research', 'res_target', 'JPResearch', 'JPExec',
+                       'JPDis', 'balance_usd', 'balance_jpy', 'exec_target']].sum(), ignore_index=True)
+        .pipe(format_2f)
+        [['rank', 'brokers', 'research', 'res_target', 'JPResearch', 'JPExec',
+          'JPDis', 'balance_usd', 'balance_jpy', 'exec_target', 'accrued']]
+        )
 
 
 # ### new requirement
 # need to restart balance_usd for specific broker from some month. for ex: MS from 2017 Jun
 
-# In[16]:
-
-get_ipython().magic(u'time ytd_trades = get_ytd_trades(date)')
-
-
-# In[21]:
+# In[34]:
 
 # calculate_commission(quarter1_trades, jp_ranks_df, jp_quarter_commission_budget, 
 #                      usd_jpy, ubs_include_list=['Tokai', 'Japan Equity Research'], clsa_asia_target=0)
 
 
-# In[22]:
+# In[35]:
 
-# broker rank for 2016Q2
-# data = {
-#     'brokers': ['BAML', 'Mizuho Securities', 'Nomura', 'Japan Equity Research',
-#                 'Citi', 'Mitsubishi UFJ', 'Tokai', 'Ichiyoshi', 'SMBC Nikko',
-#                 'BNP', 'Deutsche', 'CLSA', 'Daiwa', 'Jefferies',
-#                 'CS', 'UBS', 'JP Morgan', 'Goldman Sachs', 'Okasan',
-#                 'MS', 'Macquarie'
-#                 ],
-#     'rank': [6, 2, 1, 17,
-#              4, 10, 15, 14, 5,
-#              13, 18, 21, 8, 16,
-#              9, 12, 7, 3, 19,
-#              11, 20],
-#     'research': map(lambda x: x, [6.762165, 10.039098, 12.522392, 0.965961,
-#                                   8.526189, 5.841530, 1.182470, 2.287421, 7.562959,
-#                                   2.414071, 0.878525, 0.249817, 6.466847, 1.094201,
-#                                   5.895336, 4.8135476, 6.608858, 8.940196, 0.846049,
-#                                   5.319596, 0.741125
-#                                   ])
-# }
-
-# jp_ranks_df = pd.DataFrame(data).set_index('brokers')
+calculate_commission_asia_table(asia_columns[~asia_columns['brokers'].isin(nonjp_paid_on_jp['brokers'].values.tolist())])
 
 
-
-jp_ranks_df = get_ranks(prev_year,prev_quarter)
-
-# usd_jpy = 102.66  # 2016Q2
-# hkd_jpy = 7.759
-usd_jpy, usd_hkd = get_fx_rate(date)
-print(usd_jpy, usd_hkd)
-quarter_trades = get_quarter_trades(date.year, quarter, ytd_trades)
-
-
-# In[132]:
-
-asia_columns = calculate_columns_asia(quarter_trades, nonjp_ranks_df, asia_quarter_commission_budget, usd_hkd, date, ['Kim Eng', 'Samsung', 'CIMB'])
-# calculate_columns(quarter_trades, jp_ranks_df, jp_quarter_commission_budget, usd_jpy, ubs_include_list, clsa_asia_target = 1.950146).pipe(check)
-
-
-# In[24]:
+# In[36]:
 
 # out_df = (jp_ranks_df.merge(t, how='inner', left_index=True, right_on='brokers')
 #           .rename(columns={'research': 'budget_target', 'id': 'broker_id'})
@@ -562,7 +631,7 @@ asia_columns = calculate_columns_asia(quarter_trades, nonjp_ranks_df, asia_quart
 ## #out_df
 
 
-# In[25]:
+# In[37]:
 
 table = calculate_commission(quarter_trades, jp_ranks_df, jp_quarter_commission_budget, 
                              usd_jpy, ubs_include_list = ['Tokai', 'Japan Equity Research'], clsa_asia_target = 1.950146)
@@ -583,30 +652,25 @@ soft_msqtd = '{:,.0f}'.format(quarter_trades[(quarter_trades['brokerName'] == 'S
                           (quarter_trades['currencyCode'] == 'JPY')]['JPExec'].sum())
 
 
-# In[26]:
+# In[38]:
 
 table
 
 
-# In[29]:
+# In[39]:
 
 jp_quarter_commission_budget =10031527/4.0
 jp_quarter_commission_budget
 
 
-# In[30]:
-
-nonjp_ranks_df = get_ranks(prev_year,prev_quarter, 'NonJapan')
-
-
-# In[31]:
+# In[40]:
 
 # q1 = get_quarter_trades(2016, 1, ytd_trades)
 
 
 # For monthly balance need to divided res_target by 3 to find balance, but for quarter calculation, do not need to divide by 3.
 
-# In[32]:
+# In[41]:
 
 # # debug duplicated trades for 2016Q1
 # ubsw = q1[q1['brokerCode'] == 'UBSW']
@@ -614,7 +678,7 @@ nonjp_ranks_df = get_ranks(prev_year,prev_quarter, 'NonJapan')
 # jan14[jan14['code'] == '6305']
 
 
-# In[33]:
+# In[42]:
 
 ## debug duplicated trades for 2016Q2
 # smbc = quarter_trades[quarter_trades['brokerCode'] == 'NIKK']
@@ -623,7 +687,7 @@ nonjp_ranks_df = get_ranks(prev_year,prev_quarter, 'NonJapan')
 # smbc.loc['2016-05-17':'2016-05-17']#[['code', 'fundCode', 'orderType', 'side', 'swap', 'JPResearch']]
 
 
-# In[87]:
+# In[43]:
 
 def check(df):
     t = df.copy()
@@ -633,29 +697,12 @@ def check(df):
     return t
 
 
-# In[88]:
+# In[44]:
 
 calculate_columns_asia(quarter_trades, nonjp_ranks_df, asia_quarter_commission_budget, usd_hkd, date, ['Kim Eng', 'Samsung', 'CIMB']).pipe(check)
 
 
-# In[40]:
-
-calculate_commission_asia(quarter_trades, nonjp_ranks_df, asia_quarter_commission_budget, usd_hkd, date, ['Kim Eng', 'Samsung', 'CIMB'] )
-
-
-# In[41]:
-
-qtd_sum = (quarter_trades
- .groupby(['brokerName'])
- .sum()[['JPResearch', 'JPDis', 'JPExec', 'asiaDeal', 'asiaResearch', 'asiaExecution', 'HCSwaps']]
- .assign(japan_qtd=lambda df: df['JPResearch'] + df['JPExec'] + df['JPDis'])
- .assign(asia_qtd = lambda df: df['asiaDeal'] + df['asiaResearch'] + df['asiaExecution'])
-           [['japan_qtd', 'asia_qtd']]
-)
-qtd_sum
-
-
-# In[42]:
+# In[45]:
 
 def format_all_2f(df):
     t = df.copy()
@@ -663,7 +710,7 @@ def format_all_2f(df):
     return t
 
 
-# In[72]:
+# In[46]:
 
 def get_csa_payment(year, quarter):
     csa_cum_payment = pd.read_sql("""
@@ -685,22 +732,22 @@ def get_csa_payment(year, quarter):
     return csa_cum_payment
 
 
-# In[74]:
+# In[47]:
 
 csa_cum_payment = get_csa_payment(date.year, prev_quarter)
 
 
-# In[54]:
+# In[48]:
 
 date.year, prev_quarter
 
 
-# In[75]:
+# In[49]:
 
 csa_cum_payment
 
 
-# In[70]:
+# In[50]:
 
 (ytd_trades
  .groupby('brokerName')
@@ -710,7 +757,19 @@ csa_cum_payment
 )
 
 
-# In[77]:
+# In[51]:
+
+qtd_sum = (quarter_trades
+ .groupby(['brokerName'])
+ .sum()[['JPResearch', 'JPDis', 'JPExec', 'asiaDeal', 'asiaResearch', 'asiaExecution', 'HCSwaps']]
+ .assign(japan_qtd=lambda df: df['JPResearch'] + df['JPExec'] + df['JPDis'])
+ .assign(asia_qtd = lambda df: df['asiaDeal'] + df['asiaResearch'] + df['asiaExecution'])
+           [['japan_qtd', 'asia_qtd']]
+)
+qtd_sum
+
+
+# In[52]:
 
 (ytd_trades
  .groupby('brokerName')
@@ -732,24 +791,13 @@ csa_cum_payment
 )
 
 
-# In[46]:
-
-type("str") == str
-# (q1[q1['currencyCode'] != "JPY"]
-#  .groupby(['brokerName', 'currencyCode'])
-#  .sum()[['asiaResearch']]
-#  .unstack()
-#  .fillna(0)
-#  )
-
-
-# In[47]:
+# In[53]:
 
 # q2jpm = ytd_trades #.loc['2017-04-03':]  #,ytd_trades['brokerCode'] == 'JPMF']
 # q2jpm[(q2jpm['brokerCode'] == 'RHBO') & (q2jpm['currencyCode'] != 'JPY')]
 
 
-# In[48]:
+# In[54]:
 
 # from IPython.display import display, HTML
 #HTML(q1[(q1['currencyCode'] == 'HKD') & (q1['brokerCode'] == 'MERT')].to_html())
@@ -757,7 +805,7 @@ type("str") == str
 # q1[(q1['currencyCode'] != 'JPY') & (q1['brokerName'] == 'UBS')].count()
 
 
-# In[49]:
+# In[55]:
 
 # con.close()
 
