@@ -27,12 +27,10 @@ def get_ytd_trades(request_date):
               g.commrate as gcomrate, d.brokerCommissionRate,
               # a.commission,
               (@commInUSD := a.commission*f.rate) AS commInUSD,
-              (@commrate := IF (g.commrate IS NOT NULL, 
-                                ROUND(g.commrate,4), 
-                                ROUND(d.brokerCommissionRate,4))) AS CommRate,
-              (@jpresearch := IF(b.currencyCode IN ("JPY", "USD") AND c.instrumentType="EQ" AND  (@commrate<> 0.0004), 
+              (@commrate := IF (g.commrate IS NOT NULL, ROUND(g.commrate,4), ROUND(d.brokerCommissionRate,4))) AS CommRate,
+              (@jpresearch := IF(b.currencyCode IN ("JPY", "USD") AND c.instrumentType IN ("EQ", "CB") AND  (@commrate<> 0.0004), 
                   @commInUSD*11/15,0)*1.0) AS JPResearch,
-                  IF(b.currencyCode IN ("JPY", "USD") AND c.instrumentType="EQ" AND (@commrate=0.0004), 
+                  IF(b.currencyCode IN ("JPY", "USD") AND c.instrumentType IN ("EQ", "CB") AND (@commrate=0.0004), 
                       @commInUSD, 
                       0)*1.0 AS JPDis,
               (@clearing:=
@@ -42,9 +40,9 @@ def get_ytd_trades(request_date):
                     IF(SUBSTRING(a.code, 1, 2) IN ("HC", "HI"), 30, 0) 
                 )
                ) * a.quantity *f.rate, 0  )) AS Clearing,
-              IF(b.currencyCode IN ("JPY", "USD")  AND c.instrumentType="EQ" AND (@commrate=0.0004 OR @commrate=0),
+              IF(b.currencyCode IN ("JPY", "USD")  AND c.instrumentType IN ("EQ", "CB") AND (@commrate=0.0004 OR @commrate=0),
                   0,
-                  IF(b.currencyCode IN ("JPY", "USD")  AND c.instrumentType="EQ",
+                  IF(b.currencyCode IN ("JPY", "USD")  AND c.instrumentType IN ("EQ", "CB"),
                   @commInUSD - @jpresearch,
                   IF(b.currencyCode="JPY" AND c.instrumentType IN ("FU", "OP"), 
                   @commInUSD - @clearing,0) )) AS JPExec,
@@ -62,15 +60,11 @@ def get_ytd_trades(request_date):
                         ELSE 0
                         END
               ) AS tax,
-              (@asiadeal := IF (b.currencyCode  NOT IN ("JPY", "USD")  AND c.instrumentType="EQ" 
-                                      AND d.brokerCommissionRate > 0.01,
-                                a.gross * f.rate * (d.brokerCommissionRate - @tax ), 
-                                0)) AS asiaDeal,
-              (@asiaResearch := IF(b.currencyCode  NOT IN ("JPY", "USD")  AND c.instrumentType="EQ" AND @asiadeal=0, 
-                IF(d.brokerCommissionRate-@tax-0.0005>= 0, 
-                    d.brokerCommissionRate-@tax-0.0005, 
-                    0) *f.rate*a.gross, 0)) AS asiaResearch,
-              IF (b.currencyCode NOT  IN ("JPY", "USD")  AND c.instrumentType="EQ" AND @asiadeal=0,
+              (@asiadeal := IF (b.currencyCode  NOT IN ("JPY", "USD")  AND c.instrumentType IN ("EQ", "CB") AND d.brokerCommissionRate > 0.01,
+                                a.gross * f.rate * (d.brokerCommissionRate - @tax ), 0)) AS asiaDeal,
+              (@asiaResearch := IF(b.currencyCode  NOT IN ("JPY", "USD")  AND c.instrumentType IN ("EQ", "CB") AND @asiadeal=0, 
+              IF(a.commissionRate-@tax-0.0005 >= 0, a.commissionRate-@tax-0.0005, 0) *f.rate*a.gross, 0)) AS asiaResearch,
+              IF (b.currencyCode NOT  IN ("JPY", "USD")  AND c.instrumentType IN ("EQ", "CB") AND @asiadeal=0,
                 0.0005 * f.rate * a.gross,
                 IF (b.currencyCode NOT IN ("JPY", "USD")  AND c.instrumentType IN ("FU", "OP"), @commInUSD-@clearing, 0)
               ) AS asiaExecution,
@@ -81,13 +75,12 @@ def get_ytd_trades(request_date):
               INNER JOIN t08Reconcile d ON a.matchDoric = d.primaryID # a.primaryID = d.matchBrokers AND d.srcFlag ="D"
               INNER JOIN t06DailyCrossRate f ON f.priceDate=a.tradeDate AND f.base=b.currencyCode AND f.quote="USD"
               LEFT JOIN t02Broker e ON e.brokerCode = a.brokerCode
-              left join (select a.code, a.orderType, a.side, a.swap, a.tradeDate, a.settleDate, a.brokerCode, 
-                          MAX(a.brokerCommissionRate) as commrate
-                        from t08Reconcile a
-                        where a.status="A" and a.srcFlag="D" and a.tradeDate >= '{}' and a.tradeDate <= '{}'
-                        group by a.code, a.orderType, a.side, a.swap, a.tradeDate, a.settleDate, a.brokerCode
-                ) g ON a.code=g.code and a.orderType=g.orderType and a.side=g.side and a.swap=g.swap 
-                      and a.tradeDate=g.tradeDate and a.settleDate=g.settleDate  and d.brokerCode=g.brokerCode
+              left join (select a.code, a.orderType, a.side, a.swap, a.tradeDate, a.settleDate, a.brokerCode, MAX(a.brokerCommissionRate) as commrate
+            from t08Reconcile a
+            where a.status="A" and a.srcFlag="D" and a.tradeDate >= '{}' and a.tradeDate <= '{}'
+            group by a.code, a.orderType, a.side, a.swap, a.tradeDate, a.settleDate, a.brokerCode
+              ) g ON a.code=g.code and a.orderType=g.orderType and a.side=g.side and a.swap=g.swap and a.tradeDate=g.tradeDate
+                     and a.settleDate=g.settleDate  and d.brokerCode=g.brokerCode
             WHERE a.tradeDate>='{}' AND a.tradeDate <= '{}' AND a.srcFlag="K"
             ORDER BY a.tradeDate, a.code;
         """.format(start_date, end_date, start_date, end_date), g.con, parse_dates=['tradeDate'], index_col='tradeDate')
@@ -117,7 +110,7 @@ def format_2f(df):
     columns = ['JPResearch', 'JPExec', 'JPDis', 'res_target', 'balance_usd']
     t[columns] = t[columns].applymap(lambda x: '$ {:12,.0f}'.format(x) if x != 0 else '')
     t['balance_jpy'] = t['balance_jpy'].apply(lambda x: '¥ {:12,.0f}'.format(x) if x != 0 else '')
-    t['rank'] = t['rank'].apply(lambda x: '{:.0f}'.format(x) if not np.isnan(x) else '')
+    t['rank'] = t['rank'].apply(lambda x: '{:.0f}'.format(x) if not np.isnan(x) and x != 0 else '')
     t['research'] = t['research'].apply(lambda x: '{:5.2f}%'.format(x) if x > 0 else '')
     t['accrued'] = t['accrued'].apply(lambda x: '{:5.0f}%'.format(x) if not np.isnan(x) else '')
     t['exec_target'] = t['exec_target'].apply(lambda x: '{:5.0f}%'.format(x) if x > 0 else '')
@@ -143,17 +136,45 @@ def format_all_2f(df):
     return t
 
 
+def apply_csa_sum(df, csa_cum_payment):
+    # for each broker belong to a master broker which pay CSA
+    for broker in csa_cum_payment.index:
+        if broker in df.index:
+            if csa_cum_payment.loc[broker, 'asiaResearch'] > 0:
+                df.loc[broker, 'asiaResearch'] += csa_cum_payment.loc[broker, 'asiaResearch']
+            if csa_cum_payment.loc[broker, 'JPResearch'] > 0:
+                df.loc[broker, 'JPResearch'] += csa_cum_payment.loc[broker, 'JPResearch']
+        else:
+            df = df.append(csa_cum_payment.loc[broker])
+    return df
+
+
+def remove_csa_sum(df, csa_cum_payment, nonjp_paid_on_jp):
+    # for each broker belong to a master broker which pay CSA
+    for broker in csa_cum_payment.index:
+        master_broker = csa_cum_payment.loc[broker, 'master_broker']
+        if csa_cum_payment.loc[broker, 'asiaResearch'] > 0 and broker not in nonjp_paid_on_jp['brokers'].tolist():
+            df.loc[master_broker, 'asia_ytd'] -= csa_cum_payment.loc[broker, 'asiaResearch']
+        elif csa_cum_payment.loc[broker, 'asiaResearch'] > 0 and broker in nonjp_paid_on_jp['brokers'].tolist():
+            df.loc[master_broker, 'japan_ytd'] -= csa_cum_payment.loc[broker, 'asiaResearch']
+        if csa_cum_payment.loc[broker, 'JPResearch'] > 0:
+            df.loc[master_broker, 'japan_ytd'] -= csa_cum_payment.loc[broker, 'JPResearch']
+    return df
+
+
 def calculate_quarter(from_month):
     return (from_month - 1) // 3 + 1
 
 
 def get_csa_payment(year, quarter):
     csa_cum_payment = pd.read_sql("""
-        SELECT a.name AS brokerName,
+        SELECT a.name AS brokerName, e.name AS master_broker,
             IF(a.region="Japan", IF(b.currency_code="JPY", SUM(b.amount) / c.finalFXRate, SUM(b.amount)), 0) AS JPResearch,
             IF(a.region="NonJapan", IF(b.currency_code="JPY", SUM(b.amount) / c.finalFXRate, SUM(b.amount)), 0) AS asiaResearch
         FROM brokers a
         INNER JOIN csa_payment b ON a.id=b.broker_id
+          LEFT JOIN broker_csa d ON a.id=d.sub_broker_id
+          LEFT JOIN brokers e ON d.master_broker_id=e.id
           LEFT JOIN (
             SELECT DISTINCT (TRUNCATE((MONTH(a.processDate) - 1) / 3, 0) + 1) AS quarter, a.finalFXRate
         FROM t05PortfolioReportEvent a
@@ -280,13 +301,15 @@ def adjust_research(df, jp_quarter_commission_budget):
     return t
 
 
-def calculate_commission_asia_table(table_param):
+def calculate_commission_asia_table(table_param, nonjp_paid_on_jp):
     table = table_param.copy()
     exec_target = [15, 15, 15, 15, 15, 5, 5, 5, 5, 5]
     if len(exec_target) < len(table.index):
         exec_target = exec_target + [0] * (len(table.index) - len(exec_target))
 
     table['execution'] = pd.Series(exec_target, index=table.index)
+
+    table = table[~table['brokers'].isin(nonjp_paid_on_jp['brokers'].values.tolist())]
 
     return (table
             .reset_index()
@@ -440,8 +463,7 @@ def index():
                      'JPDis', 'balance_usd', 'balance_jpy', 'exec_target', 'accrued']]
                    )
 
-    asia_table = calculate_commission_asia_table(asia_columns[~asia_columns['brokers'].isin(nonjp_paid_on_jp['brokers']
-                                                                                            .values.tolist())])
+    asia_table = calculate_commission_asia_table(asia_columns, nonjp_paid_on_jp)
 
     qtd_clearing = "{:,.0f}".format(quarter_trades['Clearing'].sum())
     ytd_clearing = "{:,.0f}".format(ytd_trades['Clearing'].sum())
@@ -466,15 +488,25 @@ def index():
                .assign(asia_qtd=lambda df: df['asiaDeal'] + df['asiaResearch'] + df['asiaExecution'])
                [['japan_qtd', 'asia_qtd']]
                )
-    csa_cum_payment = get_csa_payment(request_date.year, prev_quarter)
+
+    indexer = pd.date_range('{}-{}-{}'.format(request_date.year, 1, 1),
+                            '{}-{}-{}'.format(request_date.year, 12, 31),
+                            freq=cday)
+
+    if indexer[-1].to_pydatetime() == request_date:
+        csa_cum_payment = get_csa_payment(request_date.year, quarter)
+    else:
+        csa_cum_payment = get_csa_payment(request_date.year, prev_quarter)
+
     all_commission = (ytd_trades
                       .groupby('brokerName')
                       .sum()[['JPResearch', 'JPDis', 'JPExec', 'asiaDeal', 'asiaResearch', 'asiaExecution', 'HCSwaps']]
-                      .append(csa_cum_payment)
-                      .fillna(0)
                       .assign(japan_exe_ytd=lambda df: df['JPExec'] + df['JPDis'])
+                      .pipe(apply_csa_sum, csa_cum_payment)
+                      .fillna(0)
                       .assign(japan_ytd=lambda df: df['JPResearch'] + df['JPExec'] + df['JPDis'])
                       .assign(asia_ytd=lambda df: df['asiaResearch'] + df['asiaExecution'] + df['asiaDeal'])
+                      .pipe(remove_csa_sum, csa_cum_payment, nonjp_paid_on_jp)
                       .assign(total_ytd=lambda df: df['japan_ytd'] + df['asia_ytd'])
                       .merge(qtd_sum, how='left', left_index=True, right_index=True)
                       .assign(total_qtd=lambda df: df['japan_qtd'] + df['asia_qtd'])
@@ -483,8 +515,8 @@ def index():
                       .sort_values('total_ytd', ascending=False)
                       .reset_index()
                       .pipe(format_all_2f)
-                      [['brokerName', 'japan_qtd', 'JPResearch', 'japan_exe_ytd', 'japan_ytd', 'asia_qtd', 'asia_ytd', 'total_qtd',
-                        'total_ytd']]
+                      [['brokerName', 'japan_qtd', 'JPResearch', 'japan_exe_ytd', 'japan_ytd', 'asia_qtd', 'asia_ytd',
+                        'total_qtd', 'total_ytd']]
                       )
 
     return render_template('commission/index.html',
