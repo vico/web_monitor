@@ -1,0 +1,124 @@
+{% extends "earninglayout.html" %}
+{% block body %}
+<section class="sheet padding-10mm">
+
+     <form class="form-inline" style="display:inline-block;float:right;" method="GET" action="analyse">
+         <table>
+             <tr>
+                 <th>Fund</th>
+                 <td><strong><select name="fund" class="analyst-select">
+                     {% for f in funds %}
+                        {% if f == fund %}
+                            <option value="{{f}}" selected>{{f}}</option>
+                        {% else %}
+                            <option value="{{f}}">{{f}}</option>
+                        {% endif %}
+                    {% endfor %}
+                 </select></strong></td>
+                 <th>Season</th>
+                 <td><strong>
+                     <select name="season" id="season-select">
+                         {% for s in seasons %}
+                            {% if s.value == selected_season %}
+                                <option value="{{s.value}}" selected>{{s.str}}</option>
+                            {% else %}
+                                <option value="{{s.value}}">{{s.str}}</option>
+                            {% endif %}
+                         {% endfor %}
+                     </select>
+                     </strong>
+                 </td>
+                 <!--<th>Start</th>-->
+                 <!--<td><strong><input type="text" class="form-control" size="7" value="{{start_date}}"  name="start" id="datepicker1"></strong></td>-->
+                 <!--<th>End</th>-->
+                 <!--<td><strong><input type="text" class="form-control" size="7" value="{{end_date}}" name="end" id="datepicker2"></strong></td>-->
+                 <td><input type="submit" value="Go" id="goButton"/></td>
+             </tr>
+         </table>
+    </form>
+    <table class="dataframe borderTable">
+        <tbody>
+        <tr><th></th></td><th>Earnings</th><th>Winners</th><th>%age</th><th>PL</th><th>Alpha Win</th><th>%age</th><th>Alpha</th>
+            </tr>
+            <tr>
+                <th>On Date</th>
+                <td>{{summary.OnDate.Earnings}}</td>
+                <td>{{summary.OnDate.Winners}}</td>
+                <td>{{'{:.1%}'.format(summary.OnDate.win_pct)}}</td>
+                <td>{{'{:.2%}'.format(summary.OnDate.PnL)}}</td>
+                <td>{{summary.OnDate.alpha_win}}</td>
+                <td>{{'{:.1%}'.format(summary.OnDate.alpha_pct)}}</td>
+                <td>{{'{:.2%}'.format(summary.OnDate.alpha)}}</td>
+            </tr>
+            <tr>
+                <th>Since</th>
+                <td></td>
+                <td></td><td></td><td>{{'{:.2%}'.format(summary.Since.PnL)}}</td>
+                <td></td><td></td><td>{{'{:.2%}'.format(summary.Since.alpha)}}</td>
+            </tr>
+            <tr>
+                <th>Total</th>
+                <td></td>
+                <td>{{summary.Total.Winners}}</td>
+                <td>{{'{:.1%}'.format(summary.Total.win_pct)}}</td>
+                <td>{{'{:.2%}'.format(summary.Total.PnL)}}</td>
+                <td>{{summary.Total.alpha_win}}</td>
+                <td>{{'{:.1%}'.format(summary.Total.alpha_pct)}}</td>
+                <td>{{'{:.2%}'.format(summary.Total.alpha)}}</td>
+            </tr>
+        </tbody>
+    </table>
+    <br>
+    <table>
+        <tbody>
+        <tr>
+            <th>Best</th>
+            <td>{{'{:.2%}'.format(top2.first.attr)}}</td>
+            <td>{{top2.first.name.title()}}</td>
+            <td>{{'{:.2%}'.format(top2.second.attr)}}</td>
+            <td>{{top2.second.name.title()}}</td>
+        </tr>
+        <tr>
+            <th>Worse</th>
+            <td>{{'{:.2%}'.format(worse2.first.attr)}}</td>
+            <td>{{worse2.first.name.title()}}</td>
+            <td>{{'{:.2%}'.format(worse2.second.attr)}}</td>
+            <td>{{worse2.second.name.title()}}</td>
+        </tr>
+        </tbody>
+    </table>
+
+   {{ tables_html1 | safe }}
+
+
+   {{ tables_html2 | safe }}
+
+<!--<script src="{{ url_for('static', filename='jquery-2.2.0.min.js') }}"></script>-->
+
+
+<script>
+    init_func = function() {
+        // var picker1 = new Pikaday({
+        //         field: document.getElementById('datepicker1'),
+        //         format: 'YYYY-MM-DD'
+        //  });
+        // var picker2 = new Pikaday({
+        //         field: document.getElementById('datepicker2'),
+        //         format: 'YYYY-MM-DD'
+        //  });
+    };
+    if (document.readyState === 'complete' || document.readyState !== 'loading') {
+        init_func();
+     } else {
+        document.addEventListener('DOMContentLoaded', init_func);
+      }
+
+      $(document).ready(function() {
+          $(".analyst-select").select2();
+          $('#season-select').select2();
+        });
+
+</script>
+
+
+{% endblock %}

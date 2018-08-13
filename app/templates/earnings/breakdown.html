@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% import "bootstrap/wtf.html" as wtf %}
+
+{% block title %}Breakdown - Index{% endblock %}
+
+{% block page_content %}
+<div class="page-header">
+    Break down of {{ type }} with {{ value }}
+</div>
+<div class="col-md-12">
+    {{ table | safe }}
+</div>
+
+
+<script>
+    init_func = function() {
+        // var picker1 = new Pikaday({
+        //         field: document.getElementById('datepicker1'),
+        //         format: 'YYYY-MM-DD'
+        //  });
+        // var picker2 = new Pikaday({
+        //         field: document.getElementById('datepicker2'),
+        //         format: 'YYYY-MM-DD'
+        //  });
+    };
+    if (document.readyState === 'complete' || document.readyState !== 'loading') {
+        init_func();
+     } else {
+        document.addEventListener('DOMContentLoaded', init_func);
+      }
+
+</script>
+
+
+{% endblock %}

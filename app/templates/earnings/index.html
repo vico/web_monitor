@@ -1,18 +1,15 @@
 {% extends "base.html" %}
 {% import "bootstrap/wtf.html" as wtf %}
 
-{% block title %}Trade history - Index{% endblock %}
+{% block title %}Earnings - Index{% endblock %}
 
 {% block page_content %}
 <div class="page-header">
-    <h1>Trade history</h1>
+    <h1>Earnings Analysis</h1>
 </div>
 <div class="col-md-8">
-    <form class="form-inline" method="GET" action="check">
-        <div class="form-group">
-            <label for="quick">Quick</label>
-            <input type="text" class="form-control" size="10" id="quick" name="quick" placeholder="7200 or 711 HK or HACK US" autofocus required>
-        </div>
+    <form class="form-inline" method="GET" action="analyse">
+        <label>Earnings Season:</label>
         <div class="form-group"> 
             <label for="datepicker1">Start</label>
             <input type="text" class="form-control" size="7" value=""  name="start" id="datepicker1">

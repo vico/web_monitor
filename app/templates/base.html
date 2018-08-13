@@ -6,7 +6,7 @@
 {{ super() }}
 <link rel="shortcut icon" href="{{ url_for('static', filename='favicon.ico') }}" type="image/x-icon">
 <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}" type="image/x-icon">
-<link rel="stylesheet" href="{{ url_for('static', filename='bootstrap-datetimepicker.min.css') }}" type="text/css">
+<link rel="stylesheet" href="{{ url_for('static', filename='pikaday.css') }}">
 {% endblock %}
 
 {% block navbar %}
@@ -44,7 +44,8 @@
 {% endblock %}
 
 {% block content %}
-<!--script src="{{ url_for('static', filename='jquery-2.2.0.min.js') }}"></script-->
+<script src="{{ url_for('static', filename='moment.min.js') }}"></script>
+<script src="{{ url_for('static', filename='pikaday.js') }}"></script>
 
 <div class="container">
     {% for message in get_flashed_messages() %}
@@ -61,6 +62,6 @@
 {% block scripts %}
 {{ super() }}
 <script src="{{ url_for('static', filename='plotly-latest.min.js') }}"></script>
-{{ moment.include_moment() }}
-<script src="{{ url_for('static', filename='bootstrap-datetimepicker.min.js') }}"></script>
+{# moment.include_moment() #}
+
 {% endblock %}

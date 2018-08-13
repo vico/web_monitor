@@ -4,6 +4,6 @@ from . import front
 
 
 @front.route('/', methods=['GET'])
-@login_required
+# @login_required
 def index():
     return render_template('front/index.html')

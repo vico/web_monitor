@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 from flask import request, g, render_template
 
 import pymysql
@@ -15,7 +16,11 @@ from dateutil.parser import parse
 def before_request():
     con = getattr(g, 'con', None)
     if con is None:
-        g.con = pymysql.connect(host='localhost', user='root', passwd='root', db='hkg02p')
+        g.con = pymysql.connect(host='192.168.1.147', user='uploader', passwd='fA6ZxopGrbdb',
+                                use_unicode=False
+                                )
+        # (host='localhost', user='root', passwd='root', db='hkg02p')
+        # (host='192.168.1.147', user='uploader', passwd='fA6ZxopGrbdb', db='hkg02p')
     # g.start_date = datetime(datetime.now().year-2, 12, 31).strftime('%Y-%m-%d')
     g.start_date = '2012-01-01'
     g.end_date = datetime.now().strftime('%Y-%m-%d')  # not include
@@ -38,19 +43,20 @@ def get_trade_df(quick, start_date, end_date, con):
                       AND a.processDate >= '%s'
                       AND a.processDate <= '%s'
                       GROUP BY a.tradeDate
-                      ORDER BY reconcileID
+                      ORDER BY reconcileID ASC
                     ;
         ;''' % (quick, start_date, end_date), con, coerce_float=True, parse_dates=['tradeDate'])
                 .set_index(['tradeDate'])
                 )
+    trade_df['order'] = trade_df['order'].str.decode('utf8')
     
     return trade_df
 
 
 def make_view(df, date_list):
-    '''
-    turn DataFrame into HTML 
-    '''
+    """
+    turn DataFrame into HTML
+    """
     count = 0
     ret_html = ''
     style = 'class="table"'
@@ -60,16 +66,19 @@ def make_view(df, date_list):
     for r in rows[1:]:
         if r != '':
             elements = r.split(field_separator)
-            color = ('blue' if elements[1].title() in date_list and elements[5]=='BL' 
+            color = ('blue' if elements[1].title() in date_list and elements[5]=='BL'
                             else ('red' if elements[1].title() in date_list and elements[5] == 'SS' else ''))
 
-            ret_html += ('<p id=%s>' % (elements[1].title()) + '<strong><span style="color:%s;">' % color +  elements[1].title()+'</span></strong> (' + 
+            ret_html += ('<p id=%s>' % (elements[1].title()) +
+                         '<strong><span style="color:%s;">' % color +
+                            elements[1].title()+'</span></strong> (' +
                              elements[2]+') (' + elements[5] + ') ' +
                              '<strong>' + elements[3].title() + '</strong><BR>' +
-                             elements[4].title().decode('utf-8') +
+                             elements[4] +
                          '</p>'
                         )
 
+    ret_html += '<a id="last"></a>'
     return ret_html
     
 
@@ -77,9 +86,7 @@ def parse_text(text):
     """
     parse text into a dict of catalyst for each instrument
     """
-
     date_list = re.split("^\s*\n", text, flags=re.MULTILINE)
-        
     return date_list
 
 
@@ -97,17 +104,17 @@ def parse_catalyst(entry, date):
     ret['code'] = l[1].split(']')[0][2:]
     ret['commentText'] = ''
 
-    if (len(l) > 3):
+    if len(l) > 3:
         ret['catalystText'] = l[3]
-        #ret['recommendation'] = l[2]
+        # ret['recommendation'] = l[2]
     elif l[1].find(')') > -1 and len(l[1].split(')')[1]) > 0 and len(l)>2:
         ret['catalystText'] = l[2]
-        #ret['recommendation'] = l[1].split(')')[1].strip()
+        # ret['recommendation'] = l[1].split(')')[1].strip()
     elif len(l) > 2 and len(l[2]) >= 24:
         ret['catalystText'] = l[2][24:]
     else:
         ret['catalystText'] = ''
-        #ret['recommendation'] = '' 
+        # ret['recommendation'] = ''
 
     return ret
 
@@ -119,8 +126,12 @@ def get_wiki_df(quick, con):
                 REPLACE(commentText, '\n', '<br>') AS commentText
                 FROM hkg02p.t01Person a, noteDB.Note N
                 WHERE a.personID = N.personID AND N.code='%s'
-                ORDER BY processDate DESC
-    ;''' % (quick), con , parse_dates=['processDate']) 
+                ORDER BY processDate ASC 
+    ;''' % quick, con, parse_dates=['processDate'])
+
+    t['commentText'] = t['commentText'].str.decode('utf8')
+    t['catalystText'] = t['catalystText'].str.decode('utf8')
+    t['personCode'] = t['personCode'].str.decode('utf8')
 
     with g.con.cursor() as cursor:
         # Read a single record
@@ -129,44 +140,42 @@ def get_wiki_df(quick, con):
                 INNER JOIN wikidbTKY.revision r ON p.page_id=r.rev_page 
                     AND r.rev_id = (SELECT MAX(rev_id) FROM wikidbTKY.revision WHERE rev_page=p.page_id)
                 INNER JOIN wikidbTKY.text t ON t.old_id = r.rev_text_id
-                #WHERE p.page_id IN (20,5701, 4616, 2831, 2826, 1756, 1751) 
-                WHERE p.page_id IN (20,5701, 4616, 2831, 2826)
+                WHERE p.page_id IN (2826,2831,4616,5701,20)
         """
 
         cursor.execute(sqlstr)
         sql_result = cursor.fetchall()
 
-    result = "".join([row[1] for row in sql_result])
+    result = "".join([row[1].decode('utf8') for row in sql_result])
 
     rets = []
 
     for e in parse_text(result):
         wikis = [wiki for wiki in e.split('\n') if wiki.strip() != '' and wiki.find('Recommendation') == -1]
-        
+
         if len(wikis) > 2 and wikis[0].find('[[') == -1:
             date = parse(wikis[0].strip())
             for wiki in wikis[1:]:
                 w = parse_catalyst(wiki, date)
-                if w != None and w['code'] == quick:
+                if w is not None and w['code'] == quick:
                     rets.append(w)
         elif len(wikis) <= 1 and wikis[0].find('[[') == -1:
             date = parse(wikis[0].strip())
         elif len(wikis) >= 1 and wikis[0].find('[[') > -1:
             for wiki in wikis:
                 w = parse_catalyst(wiki, date)
-                if w != None and w['code'] == quick:
-                    rets.append(w) 
+                if w is not None and w['code'] == quick:
+                    rets.append(w)
 
     wiki2014 = (DataFrame(rets)[['processDate', 'personCode', 'catalystText', 'commentText']]
-                .set_index('processDate').sort_index(ascending=False).reset_index()) if len(rets) > 0 else DataFrame()
+                .set_index('processDate').sort_index().reset_index()) if len(rets) > 0 else DataFrame()
     
-    return pd.concat([t, wiki2014], ignore_index=True)
+    return pd.concat([wiki2014, t], ignore_index=True)
 
 
 @wiki.route('/')
 def index():
-    
-    quick = request.args.get('quick','notavailable')
+    quick = request.args.get('quick', 'notavailable')
     start_date = request.args.get('start', g.start_date)
     end_date = request.args.get('end', g.end_date)
 
@@ -186,7 +195,7 @@ def index():
 
     wiki = wiki.merge(order_df, left_on='processDate', right_index=True, how='left')
 
-    date_list = [x[0].strftime('%Y-%m-%d') for x in trade_date_df.values.tolist()] 
+    date_list = [x[0].strftime('%Y-%m-%d') for x in trade_date_df.values.tolist() if x[0] is not None]
     
     rent_html = make_view(wiki, date_list)
     return render_template('wiki/list.html', content=rent_html) 

@@ -7,7 +7,7 @@
             <th>Analyst</th>
             <td><strong><select name="analyst" class="analyst-select">
                 {% for analyst in params['analyst_list'] %}
-                    {% if analyst is equalto params['analyst'] %}
+                    {% if analyst == params['analyst'] %}
                         <option value="{{analyst}}" selected>{{analyst}}</option>
                     {% else %}
                         <option value="{{analyst}}">{{analyst}}</option>

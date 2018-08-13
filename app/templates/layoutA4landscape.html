@@ -16,7 +16,7 @@
 
     <!-- Set page size here: A5, A4 or A3 -->
     <!-- Set also "landscape" if you need -->
-    <style>@page { size: A4 }</style>
+    <style>@page { size: A4 landscape }</style>
 
     <!-- Custom styles for this document -->
     <link href='https://fonts.googleapis.com/css?family=Tangerine:700' rel='stylesheet' type='text/css'>
@@ -26,6 +26,7 @@
     <script src="{{ url_for('static', filename='pikaday.js') }}"></script>
     <script src="{{ url_for('static', filename='select2.js') }}"></script>
     <script src="{{ url_for('static', filename='plotly-latest.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='copytoclipboard.js') }}"></script>
     <style>
         body { font-family: Calibri, serif }
 
@@ -58,8 +59,7 @@
         caption {
         text-align: left
         }
-        .underlineTh { border-bottom: 2px solid black}
-        .overlineTfoot { border-top: 2px solid black}
+
         .inlineTable { display: inline-block}
         .borderTable td { border: 1px solid black }
         .rightTable { float: right }
@@ -112,7 +112,7 @@
             background: #d5e9f7;
         }
 
-        #goButton {
+        #goButton, #copytocb {
             background: transparent;
             border: 0;
             border-style: none;
@@ -128,7 +128,7 @@
             color: transparent;
         }
 
-        #goButton:hover, #goButton:focus, #goButton:active {
+        #goButton:hover, #goButton:focus, #goButton:active, #copytocb:hover {
             background: #d5e9f7;
             color: black;
         }
@@ -159,7 +159,7 @@
 
 <!-- Set "A5", "A4" or "A3" for class name -->
 <!-- Set also "landscape" if you need -->
-<body class="A4">
+<body class="A4 landscape">
 
 <!-- Each sheet element should have the class "sheet" -->
 <!-- "padding-**mm" is optional: you can set 10, 15, 20 or 25 -->

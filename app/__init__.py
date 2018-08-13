@@ -1,11 +1,11 @@
 from flask import Flask
 from config import config
 from cache import cache
-from flask.ext.bootstrap import Bootstrap
-from flask.ext.sqlalchemy import SQLAlchemy
-from flask.ext.login import LoginManager
-from flask.ext.mail import Mail
-from flask.ext.moment import Moment
+from flask_bootstrap import Bootstrap
+from flask_sqlalchemy import SQLAlchemy
+from flask_login import LoginManager
+from flask_mail import Mail
+from flask_moment import Moment
 
 db = SQLAlchemy()
 login_manager = LoginManager()
@@ -43,6 +43,9 @@ def create_app(config_name):
 
     from .wiki import wiki as wiki_blueprint
     app.register_blueprint(wiki_blueprint, url_prefix='/wiki')
+
+    from .earnings import earnings as earnings_blueprint
+    app.register_blueprint(earnings_blueprint, url_prefix='/earnings')
 
     from .commission import commissions as commission_blueprint
     app.register_blueprint(commission_blueprint, url_prefix='/commission')

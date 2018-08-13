@@ -25,7 +25,6 @@
     <script src="{{ url_for('static', filename='moment.min.js') }}"></script>
     <script src="{{ url_for('static', filename='pikaday.js') }}"></script>
     <script src="{{ url_for('static', filename='select2.js') }}"></script>
-    <script src="{{ url_for('static', filename='plotly-latest.min.js') }}"></script>
     <style>
         body { font-family: Calibri, serif }
 
@@ -40,7 +39,7 @@
             border: 1px;
         }
         td,th {
-            font-size: 10pt;
+            font-size: 9pt;
             vertical-align: center;
             padding: 3px 6px;
             border-color: transparent;
@@ -154,12 +153,17 @@
             color: black;
         }
 
+        a {
+            color: inherit;
+            text-decoration: inherit;
+        }
+
     </style>
 </head>
 
 <!-- Set "A5", "A4" or "A3" for class name -->
 <!-- Set also "landscape" if you need -->
-<body class="A4">
+<body class="A4" style="-webkit-print-color-adjust:exact;">
 
 <!-- Each sheet element should have the class "sheet" -->
 <!-- "padding-**mm" is optional: you can set 10, 15, 20 or 25 -->
