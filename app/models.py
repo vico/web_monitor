@@ -1,7 +1,11 @@
-from werkzeug.security import generate_password_hash, check_password_hash
-from flask.ext.login import UserMixin
-from itsdangerous import TimedJSONWebSignatureSerializer as Serializer
+# -*- coding: utf8 -*-
+from datetime import datetime
+
 from flask import current_app
+from flask_login import UserMixin
+from itsdangerous import TimedJSONWebSignatureSerializer as Serializer
+from werkzeug.security import check_password_hash, generate_password_hash
+
 from . import db
 from . import login_manager
 
@@ -9,6 +13,33 @@ from . import login_manager
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id))
+
+
+class Page(db.Model):
+    __tablename__ = 'pages'
+    id = db.Column(db.Integer, primary_key=True)
+    url = db.Column(db.String(250), unique=True)
+    cron = db.Column(db.String(250))
+    timestamp = db.Column(db.DateTime, index=True, default=datetime.utcnow)
+
+    @staticmethod
+    def generate_fake(count=100):
+        from sqlalchemy.exc import IntegrityError
+        from random import seed
+        from faker import Faker
+
+        seed()
+        fake = Faker()
+        for i in range(count):
+            p = Page(url=fake.uri(), timestamp=fake.date_time())
+            db.session.add(p)
+            try:
+                db.session.commit()
+            except IntegrityError:
+                db.session.rollback()
+
+    def __repr__(self):
+        return '<WebPage %r %r>' % (self.id, self.url)
 
 
 class User(UserMixin, db.Model):
@@ -67,3 +98,4 @@ class User(UserMixin, db.Model):
 
     def __repr__(self):
         return '<User %r>' % self.username
+

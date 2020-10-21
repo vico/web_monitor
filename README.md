@@ -6,6 +6,6 @@
 
 #### Creating schema
 ```python
-from flaskr import init_db`
-init_db()
+(web_monitor) $./manage.py shell
+>>> db.create_all()
 ```

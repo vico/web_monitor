@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+
+{% block page_content %}
+    <hr/>
+    <div class="container">
+        {% if status==200 %}
+            <h1>完了</h1>
+            <p>スマレジの管理画面でご確認ください</p>
+        {% else %}
+            <h1>API エラー</h1>
+            <p>WebAPIからエラーが応答されました。エラーメールから詳細をご確認ください。</p>
+            <p>エラーコード：{{ content.error_code }}</p>
+            <p>エラー：{{ content.error }}</p>
+            <p>エラー内容：{{ content.error_description }}</p>
+        {% endif %}
+    </div>
+{% endblock %}

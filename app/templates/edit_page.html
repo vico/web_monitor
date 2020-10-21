@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% import "bootstrap/wtf.html" as wtf %}
+
+{% block page_content %}
+    <hr/>
+    <h2>URL Edit</h2>
+    <div class="container">
+        <div class="row">
+            {{ wtf.quick_form(form, form_type="inline") }}
+        </div>
+        <div class="row">
+            <a href="{{ url_for('.index') }}" class="btn">Index</a>
+        </div>
+    </div>
+{% endblock %}
