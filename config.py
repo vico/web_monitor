@@ -1,6 +1,6 @@
 import logging
 import os
-from logging.handlers import RotatingFileHandler
+from logging.handlers import RotatingFileHandler, SMTPHandler
 
 from apscheduler.executors.pool import ThreadPoolExecutor, ProcessPoolExecutor
 from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
@@ -15,6 +15,45 @@ if os.path.exists(env_file_name):
         var = line.strip().split('=')
         if len(var) == 2:
             os.environ[var[0]] = var[1]
+
+
+class TLSSMTPHandler(SMTPHandler):
+    def emit(self, record):
+        """
+        Emit a record
+        Format the record and send it to specified addresses.
+        http://mynthon.net/howto/-/python/python%20-%20logging.SMTPHandler-how-to-use-gmail-smtp-server.txt
+        http://stackoverflow.com/questions/36937461/how-can-i-send-an-email-using-python-loggings-smtphandler-and-ssl
+        """
+        try:
+            import smtplib
+            import string
+            try:
+                from email.utils import formatdate
+            except ImportError:
+                formatdate = self.date_time
+            port = self.mailport
+            if not port:
+                port = smtplib.SMTP_PORT
+            smtp = smtplib.SMTP(self.mailhost, port)
+            msg = self.format(record)
+            msg = "From: %s\r\nTo: %s\r\nSubject: %s\r\nDate: %s\r\n\r\n%s" % (
+                    self.fromaddr,
+                    string.join(self.toaddrs, ","),
+                    self.getSubject(record),
+                    formatdate(), msg)
+
+            if self.username:
+                smtp.ehlo() # for tls add this line
+                smtp.starttls() # for tls
+                smtp.ehlo() # for tls
+                smtp.login(self.username, self.password)
+            smtp.sendmail(self.fromaddr, self.toaddrs, msg)
+            smtp.quit()
+        except (KeyboardInterrupt, SystemExit):
+            raise
+        except:
+            self.handleError(record)
 
 
 class Config:
@@ -34,11 +73,14 @@ class Config:
     # SQLALCHEMY_COMMIT_ON_TEARDOWN = False  # when there is Integrity error the server stop
     # SQLALCHEMY_RECORD_QUERIES = True
     # SQLALCHEMY_TRACK_MODIFICATIONS = True
-    # MAIL_SERVER = os.environ.get('MAIL_SERVER')
-    # MAIL_PORT = 587
-    # MAIL_USE_TLS = True
-    # MAIL_USERNAME = os.environ.get('MAIL_USERNAME')
-    # MAIL_PASSWORD = os.environ.get('MAIL_PASSWORD')
+    MAIL_SERVER = os.environ.get('MAIL_SERVER')
+    MAIL_PORT = 587
+    MAIL_USE_TLS = True
+    MAIL_USERNAME = os.environ.get('MAIL_USERNAME')
+    MAIL_SENDER = os.environ.get('MAIL_SENDER')
+    MAIL_PASSWORD = os.environ.get('MAIL_PASSWORD')
+    MAIL_SUBJECT_PREFIX = '[Web Monitor]'
+    MAIL_DEBUG = False  # default set to app.debug
 
     SCHEDULER_JOBSTORES = {
         'default': SQLAlchemyJobStore(url='sqlite:///' + os.path.join(basedir, 'data.sqlite'))

@@ -5,7 +5,10 @@
     <hr/>
     <div class="container">
         <div class="row">
-            URL: {{ page.url }}
+            <div class="col-md-6">URL: {{ page.url }}</div>
+            <div class="col-md-3">Cron: {{ page.cron }}</div>
+            <div class="col-md-6">XPath: {{ page.xpath }}</div>
+            <div class="col-md-3">更新時刻: {{ page.updated_time }}</div>
         </div>
         <div class="row">
             <a href="{{ url_for('.index') }}">Index</a>

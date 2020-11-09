@@ -18,9 +18,14 @@ def load_user(user_id):
 class Page(db.Model):
     __tablename__ = 'pages'
     id = db.Column(db.Integer, primary_key=True)
-    url = db.Column(db.String(250), unique=True)
+    url = db.Column(db.String(250))
+    xpath = db.Column(db.String(500))
     cron = db.Column(db.String(250))
-    timestamp = db.Column(db.DateTime, index=True, default=datetime.utcnow)
+    text = db.Column(db.String(20000))
+    diff = db.Column(db.String(5000))
+    md5sum = db.Column(db.String(32))
+    updated_time = db.Column(db.DateTime, default=datetime.utcnow)
+    created_time = db.Column(db.DateTime, default=datetime.utcnow)
 
     @staticmethod
     def generate_fake(count=100):
@@ -31,7 +36,7 @@ class Page(db.Model):
         seed()
         fake = Faker()
         for i in range(count):
-            p = Page(url=fake.uri(), timestamp=fake.date_time())
+            p = Page(url=fake.uri(), created_time=fake.date_time())
             db.session.add(p)
             try:
                 db.session.commit()
@@ -39,7 +44,7 @@ class Page(db.Model):
                 db.session.rollback()
 
     def __repr__(self):
-        return '<WebPage %r %r>' % (self.id, self.url)
+        return '<WebPage id=%r url=%r cron=%r xpath=%r>' % (self.id, self.url, self.cron, self.xpath)
 
 
 class User(UserMixin, db.Model):

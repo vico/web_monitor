@@ -2,28 +2,19 @@
 # -*- coding: utf-8 -*-
 import os
 
-from flask_apscheduler import APScheduler
-from flask_bootstrap import Bootstrap
-from flask_moment import Moment
 from flask_script import Shell, Manager
 
-from app import create_app, decorate_app, db
+from app import create_app, decorate_app, db, scheduler
 from app.models import Page
 
 app = create_app(os.getenv('FLASK_ENV') or 'default')
 app = decorate_app(app)
-Bootstrap(app)
-Moment(app)
-
-scheduler = APScheduler()
-scheduler.init_app(app)
-scheduler.start()
-
 manager = Manager(app)
 
 COV = None
 if os.environ.get('FLASK_COVERAGE'):
     import coverage
+
     COV = coverage.coverage(branch=True, include='app/*')
     COV.start()
 
@@ -58,4 +49,3 @@ manager.add_command("shell", Shell(make_context=make_shell_context))
 
 if __name__ == '__main__':
     manager.run()
-
