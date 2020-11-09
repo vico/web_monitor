@@ -1,5 +1,6 @@
 # -*- encoding: utf8 -*-
-import time
+import hashlib
+from datetime import datetime
 from pprint import pprint
 
 import polling2
@@ -10,8 +11,7 @@ from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 # from selenium.webdriver.remote.webelement import WebElement
 from sqlalchemy.exc import IntegrityError
-import hashlib
-from datetime import datetime
+
 from app import scheduler
 from . import main
 from .forms import PageForm
@@ -76,12 +76,28 @@ def fetch(id):
     driver.quit()
 
 
+def add_job(page, scheduler):
+    job = scheduler.add_job(func=fetch, trigger=CronTrigger.from_crontab(page.cron),
+                            args=[page.id], id=str(page.id))
+    g.jobs[job.id] = job
+    return job
+
+
 @main.route('/stop_job', methods=['GET'])
 def stop_job():
     jid = request.args.get('id')
     job = g.jobs[jid]
     job.remove()
     flash('Job {} is removed.'.format(jid))
+    return redirect(url_for('.index'))
+
+
+@main.route('/start_job', methods=['GET'])
+def start_job():
+    page_id = request.args.get('id')
+    page = Page.query.get_or_404(page_id)
+    job = add_job(page, scheduler)
+    flash('Job {} is started.'.format(job.id))
     return redirect(url_for('.index'))
 
 
@@ -103,9 +119,7 @@ def index():
 
         pprint(page)
         print('id = {}'.format(page.id))
-        job = current_app.apscheduler.add_job(func=fetch, trigger=CronTrigger.from_crontab(page.cron),
-                                              args=[page.id], id=str(page.id))
-        g.jobs[job.id] = job
+        add_job(page, scheduler)
         flash('The page has been created.')
         return redirect(url_for('.index'))
 
@@ -136,9 +150,7 @@ def edit(id):
             job = g.jobs[str(page.id)]
             job.reschedule(trigger=CronTrigger.from_crontab(page.cron))
         else:
-            job = current_app.apscheduler.add_job(func=fetch, trigger=CronTrigger.from_crontab(page.cron),
-                                                  args=[page.id], id=str(page.id))
-            g.jobs[job.id] = job
+            add_job(page, scheduler)
         flash('The page has been updated.')
         return redirect(url_for('.page', id=page.id))
     form.url.data = page.url

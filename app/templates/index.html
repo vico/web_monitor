@@ -38,7 +38,7 @@
                             {% if url.id|string in jobs %}
                                 <a href="{{ url_for('.stop_job', id=url.id) }}"><span class="label label-primary">Stop</span></a>
                             {%  else %}
-                                Start
+                                <a href="{{ url_for('.start_job', id=url.id) }}"><span class="label label-primary">Start</span></a>
                             {% endif %}
                         </td>
                     </tr>
