@@ -1,0 +1,19 @@
+[Unit]
+Description=WebMonitor
+After=network.socket
+
+[Service]
+PIDFile=/tmp/pid
+User=www-data
+Group=www-data
+WorkingDirectory=/home/pi/webmonitor
+Environment="PATH=/home/pi/webmonitor/venv/bin"
+Environment="FLASK_ENV=production"
+
+ExecStart=/home/pi/webmonitor/venv/bin/gunicorn --workers 3 --pid /tmp/pid -t 90 --bind unix:webmonitor.sock -m 007 manage:app
+ExecReload=/bin/kill -s HUP $MAINPID
+ExecStop=/bin/kill -s TERM $MAINPID
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
