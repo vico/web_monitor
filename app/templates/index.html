@@ -19,7 +19,7 @@
                     <th>URL</th>
                     <th>Cron</th>
                     <th>更新時刻</th>
-                    <th>作成時刻</th>
+                    <th>最後確認時刻</th>
                     <th></th>
                     <th></th>
                 </tr>
@@ -30,7 +30,7 @@
                         <td>{{ url.url }}</td>
                         <td>{{ url.cron }}</td>
                         <td>{{ moment(url.updated_time).format('YYYY-MM-DD HH:mm:ss') }}</td>
-                        <td>{{ moment(url.created_time).format('YYYY-MM-DD HH:mm:ss') }}</td>
+                        <td>{{ moment(url.last_check_time).format('YYYY-MM-DD HH:mm:ss') }}</td>
                         <td>
                             <a href="{{ url_for('.edit', id=url.id) }}"><span class="label label-primary">Edit</span></a>
                         </td>

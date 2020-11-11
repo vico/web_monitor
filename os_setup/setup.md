@@ -5,6 +5,7 @@ Install nginx
 sudo apt install nginx
 sudo systemctl enable nginx
 sudo systemctl start nginx
+sudo apt install chromium-chromedriver curl vim 
 ```
 
 Assume the web app directory reside at /home/pi/webmonitor

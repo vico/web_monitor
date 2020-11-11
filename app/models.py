@@ -21,9 +21,10 @@ class Page(db.Model):
     url = db.Column(db.String(250))
     xpath = db.Column(db.String(500))
     cron = db.Column(db.String(250))
-    text = db.Column(db.String(20000))
-    diff = db.Column(db.String(5000))
+    text = db.Column(db.UnicodeText())
+    diff = db.Column(db.UnicodeText())
     md5sum = db.Column(db.String(32))
+    last_check_time = db.Column(db.DateTime)
     updated_time = db.Column(db.DateTime, default=datetime.utcnow)
     created_time = db.Column(db.DateTime, default=datetime.utcnow)
 

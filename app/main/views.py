@@ -29,21 +29,17 @@ def before_request():
             g.jobs[job.id] = job
 
 
-# @main.teardown_request
-# def tear_down():
-#     pass
-
 def fetch(id):
     page = Page.query.get_or_404(id)  # get fresh page object from db
+    app = scheduler.app
     chrome_options = Options()
     # chrome_options.add_argument("--disable-extensions")
     # chrome_options.add_argument("--disable-gpu")
     # chrome_options.add_argument("--no-sandbox") # linux only
     chrome_options.add_argument("--headless")
     # driver = webdriver.Remote(service.service_url)
-    driver = webdriver.Chrome('/Users/cuong/localdev/python/flask/web_monitor/chromedriver', options=chrome_options)
+    driver = webdriver.Chrome(app.config['CHROME_DRIVER'], options=chrome_options)
     driver.implicitly_wait(10)  # seconds
-    # pprint(url)
     driver.get(page.url)
     # time.sleep(5)  # Let the user actually see something!
     # xpath = '/html/body/article/div/div[3]/div/div[4]/div/div[1]/table'
@@ -70,10 +66,16 @@ def fetch(id):
             db.session.rollback()
             raise
         # notify diff
-        app = scheduler.app
         with app.app_context():
-            send_email(app.get_config['MAIL_RECIPIENT'], 'Updated', 'emails/notification', diff=diff_html)
+            send_email(app.config['MAIL_RECIPIENT'], 'Updated', 'emails/notification', diff=diff_html)
     driver.quit()
+    page.last_check_time = datetime.utcnow()
+    db.session.add(page)
+    try:
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        raise
 
 
 def add_job(page, scheduler):
@@ -162,13 +164,4 @@ def edit(id):
 @main.route('/page/<int:id>', methods=['GET', 'POST'])
 def page(id):
     page = Page.query.get_or_404(id)
-    # form = CommentForm()
-    # if form.validate_on_submit():
-    #     comment = Comment(body=form.body.data,
-    #                       post=post,
-    #                       author=current_user._get_current_object())
-    #     db.session.add(comment)
-    #     flash('Your comment has been published.')
-    #     return redirect(url_for('.post', id=post.id, page=-1))
-
     return render_template('page.html', page=page)

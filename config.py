@@ -1,20 +1,14 @@
 import logging
 import os
 from logging.handlers import RotatingFileHandler, SMTPHandler
+from pathlib import Path
 
 from apscheduler.executors.pool import ThreadPoolExecutor, ProcessPoolExecutor
 from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
+from dotenv import load_dotenv
 
-basedir = os.path.abspath(os.path.dirname(__file__))
-
-env_file_name = os.path.join(basedir, '.flaskenv')
-
-if os.path.exists(env_file_name):
-    print(f'Importing environment from {env_file_name}...')
-    for line in open(env_file_name):
-        var = line.strip().split('=')
-        if len(var) == 2:
-            os.environ[var[0]] = var[1]
+env_path = Path(os.path.abspath(os.path.dirname(__file__))) / '.flaskenv'
+load_dotenv(dotenv_path=env_path)
 
 
 class TLSSMTPHandler(SMTPHandler):
@@ -38,15 +32,15 @@ class TLSSMTPHandler(SMTPHandler):
             smtp = smtplib.SMTP(self.mailhost, port)
             msg = self.format(record)
             msg = "From: %s\r\nTo: %s\r\nSubject: %s\r\nDate: %s\r\n\r\n%s" % (
-                    self.fromaddr,
-                    string.join(self.toaddrs, ","),
-                    self.getSubject(record),
-                    formatdate(), msg)
+                self.fromaddr,
+                string.join(self.toaddrs, ","),
+                self.getSubject(record),
+                formatdate(), msg)
 
             if self.username:
-                smtp.ehlo() # for tls add this line
-                smtp.starttls() # for tls
-                smtp.ehlo() # for tls
+                smtp.ehlo()  # for tls add this line
+                smtp.starttls()  # for tls
+                smtp.ehlo()  # for tls
                 smtp.login(self.username, self.password)
             smtp.sendmail(self.fromaddr, self.toaddrs, msg)
             smtp.quit()
@@ -65,8 +59,12 @@ class Config:
     SECRET_KEY = os.environ.get('SECRET_KEY', 'HtrFLAVDdlkjlsdjgoirem4ETLFWnKxcg3XNVCroad}cgNFKxz')
     ALLOWED_EXTENSIONS = set(os.environ.get('ALLOWED_EXTENSIONS', '').split(','))
     WEB_MONITOR_RECORDS_PER_PAGE = 20
-    SQLALCHEMY_DATABASE_URI = 'sqlite:///' + os.path.join(basedir, 'data.sqlite')
-    # SQLALCHEMY_DATABASE_URI = 'mysql+pymysql://root:root@localhost/hkg02p?charset=utf8'
+    CHROME_DRIVER = os.environ.get('CHROME_DRIVER')
+    # SQLALCHEMY_DATABASE_URI = 'sqlite:///' + os.path.join(basedir, 'data.sqlite')
+    SQLALCHEMY_DATABASE_URI = 'mysql+pymysql://{}:{}@{}/{}?charset=utf8'.format(os.environ.get('DB_USER'),
+                                                                                os.environ.get('DB_PASSWORD'),
+                                                                                os.environ.get('DB_SERVER'),
+                                                                                os.environ.get('DB_SCHEMA'))
     SQLALCHEMY_COMMIT_ON_TEARDOWN = True
 
     # SSL_DISABLE = False
@@ -79,11 +77,13 @@ class Config:
     MAIL_USERNAME = os.environ.get('MAIL_USERNAME')
     MAIL_SENDER = os.environ.get('MAIL_SENDER')
     MAIL_PASSWORD = os.environ.get('MAIL_PASSWORD')
+    MAIL_RECIPIENT = os.environ.get('MAIL_RECIPIENT')
     MAIL_SUBJECT_PREFIX = '[Web Monitor]'
     MAIL_DEBUG = False  # default set to app.debug
 
     SCHEDULER_JOBSTORES = {
-        'default': SQLAlchemyJobStore(url='sqlite:///' + os.path.join(basedir, 'data.sqlite'))
+        # 'default': SQLAlchemyJobStore(url='sqlite:///' + os.path.join(basedir, 'data.sqlite'))
+        'default': SQLAlchemyJobStore(url=SQLALCHEMY_DATABASE_URI)
     }
 
     SCHEDULER_EXECUTORS = {
@@ -129,7 +129,6 @@ class TestingConfig(Config):
 
 
 class ProductionConfig(Config):
-
     SSL_DISABLE = bool(os.environ.get('SSL_DISABLE'))
 
     @classmethod
