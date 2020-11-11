@@ -44,19 +44,17 @@ def fetch(id):
     # time.sleep(5)  # Let the user actually see something!
     # xpath = '/html/body/article/div/div[3]/div/div[4]/div/div[1]/table'
     target = polling2.poll(lambda: driver.find_element_by_xpath(page.xpath), step=0.5, timeout=10)
-    # target = driver.find_element_by_xpath(xpath)
-
     target_text = target.get_property('outerHTML')
 
     md5sum = hashlib.md5(target_text.encode('utf-8')).hexdigest()
     if page and (page.md5sum != md5sum):
         # update new md5sum
-        page.md5sum = md5sum
-        page.text = target_text
         dmp = diff_match_patch()
         diffs = dmp.diff_main(target_text, page.text)
+        page.md5sum = md5sum
+        page.text = target_text
+        dmp.diff_cleanupSemantic(diffs)
         diff_html = dmp.diff_prettyHtml(diffs)
-        # diff_html = dmp.diff_text2(diffs)
         page.diff = diff_html
         page.updated_time = datetime.utcnow()
         db.session.add(page)
