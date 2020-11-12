@@ -19,3 +19,8 @@ def send_email(to, subject, template, **kwargs):
     thr = Thread(target=send_async_email, args=[app, msg])
     thr.start()
     return thr
+
+
+def send_multiple_emails(recipients, subject, template, **kwargs):
+    for to in recipients:
+        send_email(to, subject, template, **kwargs)

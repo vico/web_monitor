@@ -16,7 +16,7 @@ from app import scheduler
 from . import main
 from .forms import PageForm
 from .. import db, diff_match_patch
-from ..email import send_email
+from ..email import send_email, send_multiple_emails
 from ..models import Page
 
 
@@ -65,7 +65,7 @@ def fetch(id):
             raise
         # notify diff
         with app.app_context():
-            send_email(app.config['MAIL_RECIPIENT'], 'Updated', 'emails/notification', diff=diff_html)
+            send_multiple_emails(app.config['MAIL_RECIPIENT'].split(','), 'Updated', 'emails/notification', diff=diff_html)
     driver.quit()
     page.last_check_time = datetime.utcnow()
     db.session.add(page)
