@@ -30,13 +30,15 @@ def before_request():
 
 
 def fetch(id):
-    page = Page.query.get_or_404(id)  # get fresh page object from db
     app = scheduler.app
+    page = Page.query.get_or_404(id)  # get fresh page object from db
+    app.logger.info('fetch called on {}'.format(page.url))
     chrome_options = Options()
     # chrome_options.add_argument("--disable-extensions")
     # chrome_options.add_argument("--disable-gpu")
     # chrome_options.add_argument("--no-sandbox") # linux only
-    chrome_options.add_argument("--headless")
+    for option in app.config['CHROME_OPTIONS'].split(','):
+        chrome_options.add_argument(option)
     # driver = webdriver.Remote(service.service_url)
     driver = webdriver.Chrome(app.config['CHROME_DRIVER'], options=chrome_options)
     driver.implicitly_wait(10)  # seconds

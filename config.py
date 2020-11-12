@@ -60,6 +60,7 @@ class Config:
     ALLOWED_EXTENSIONS = set(os.environ.get('ALLOWED_EXTENSIONS', '').split(','))
     WEB_MONITOR_RECORDS_PER_PAGE = 20
     CHROME_DRIVER = os.environ.get('CHROME_DRIVER')
+    CHROME_OPTIONS = os.environ.get('CHROME_OPTIONS', '--headless')
     # SQLALCHEMY_DATABASE_URI = 'sqlite:///' + os.path.join(basedir, 'data.sqlite')
     SQLALCHEMY_DATABASE_URI = 'mysql+pymysql://{}:{}@{}/{}?charset=utf8'.format(os.environ.get('DB_USER'),
                                                                                 os.environ.get('DB_PASSWORD'),

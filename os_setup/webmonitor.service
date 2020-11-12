@@ -4,8 +4,8 @@ After=network.socket
 
 [Service]
 PIDFile=/tmp/pid
-User=www-data
-Group=www-data
+User=pi
+Group=pi
 WorkingDirectory=/home/pi/webmonitor
 Environment="PATH=/home/pi/webmonitor/venv/bin"
 Environment="FLASK_ENV=production"
