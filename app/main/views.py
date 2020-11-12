@@ -67,7 +67,7 @@ def fetch(id):
             raise
         # notify diff
         with app.app_context():
-            send_multiple_emails(app.config['MAIL_RECIPIENT'].split(','), 'Updated', 'emails/notification', diff=diff_html)
+            send_multiple_emails(app.config['MAIL_RECIPIENT'].split(','), 'Updated', 'emails/notification', diff=diff_html, page=page)
     driver.quit()
     page.last_check_time = datetime.utcnow()
     db.session.add(page)
