@@ -24,6 +24,7 @@ class Page(db.Model):
     text = db.Column(db.UnicodeText())
     diff = db.Column(db.UnicodeText())
     md5sum = db.Column(db.String(32))
+    keyword = db.Column(db.Unicode(100))
     last_check_time = db.Column(db.DateTime)
     updated_time = db.Column(db.DateTime, default=datetime.utcnow)
     created_time = db.Column(db.DateTime, default=datetime.utcnow)

@@ -20,6 +20,16 @@ from ..email import send_email, send_multiple_emails
 from ..models import Page
 
 
+def save_to_db(page):
+    db.session.add(page)
+    try:
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        return False
+    return True
+
+
 @main.before_request
 def before_request():
     if 'jobs' not in g:
@@ -34,9 +44,6 @@ def fetch(id):
     page = Page.query.get_or_404(id)  # get fresh page object from db
     app.logger.info('fetch called on {}'.format(page.url))
     chrome_options = Options()
-    # chrome_options.add_argument("--disable-extensions")
-    # chrome_options.add_argument("--disable-gpu")
-    # chrome_options.add_argument("--no-sandbox") # linux only
     for option in app.config['CHROME_OPTIONS'].split(','):
         chrome_options.add_argument(option)
     # driver = webdriver.Remote(service.service_url)
@@ -49,7 +56,7 @@ def fetch(id):
     target_text = target.get_property('outerHTML')
 
     md5sum = hashlib.md5(target_text.encode('utf-8')).hexdigest()
-    if page and (page.md5sum != md5sum):
+    if page and page.md5sum is not None and (page.md5sum != md5sum):
         # update new md5sum
         dmp = diff_match_patch()
         diffs = dmp.diff_main(target_text, page.text)
@@ -66,10 +73,13 @@ def fetch(id):
             db.session.rollback()
             raise
         # notify diff
-        with app.app_context():
-            send_multiple_emails(app.config['MAIL_RECIPIENT'].split(','), 'Updated', 'emails/notification', diff=diff_html, page=page)
+        if page.keyword in target_text:  # only notify if there is keyword in response
+            with app.app_context():
+                send_multiple_emails(app.config['MAIL_RECIPIENT'].split(','), 'Updated', 'emails/notification', diff=diff_html, page=page)
     driver.quit()
     page.last_check_time = datetime.utcnow()
+    page.text = target_text
+    page.md5sum = md5sum
     db.session.add(page)
     try:
         db.session.commit()
@@ -79,10 +89,13 @@ def fetch(id):
 
 
 def add_job(page, scheduler):
-    job = scheduler.add_job(func=fetch, trigger=CronTrigger.from_crontab(page.cron),
-                            args=[page.id], id=str(page.id))
-    g.jobs[job.id] = job
-    return job
+    try:
+        job = scheduler.add_job(func=fetch, trigger=CronTrigger.from_crontab(page.cron),
+                                args=[page.id], id=str(page.id))
+        g.jobs[job.id] = job
+        return job
+    except:
+        return None
 
 
 @main.route('/stop_job', methods=['GET'])
@@ -103,26 +116,41 @@ def start_job():
     return redirect(url_for('.index'))
 
 
+@main.route('/rm', methods=['GET'])
+def delete_page():
+    page_id = request.args.get('id')
+    page = Page.query.get_or_404(page_id)
+    if page_id in g.jobs:  # if the job is started, stop it
+        job = g.jobs[page_id]
+        job.remove()
+    db.session.delete(page)
+    try:
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        raise
+    flash('Target URL is removed.')
+    return redirect(url_for('.index'))
+
+
 @main.route('/', methods=['GET', 'POST'])
 def index():
     form = PageForm()
     pprint(g.jobs)
     if form.validate_on_submit():
         page = Page(url=form.url.data, cron=form.cron_schedule.data,
-                    xpath=form.xpath.data)
+                    xpath=form.xpath.data, keyword=form.keyword.data)
 
-        db.session.add(page)
-        try:
-            db.session.commit()
-        except IntegrityError:
-            db.session.rollback()
-            raise
-        # trigger = CronTrigger(second=5)
+        added_job = add_job(page, scheduler)
 
-        pprint(page)
-        print('id = {}'.format(page.id))
-        add_job(page, scheduler)
-        flash('The page has been created.')
+        if added_job is not None:  # if we have no error in registering job, add info to db
+            _ = save_to_db(page)
+            pprint(page)
+            print('id = {}'.format(page.id))
+            flash('The page has been created.')
+        else:
+            flash('Job is not successfully registered!! Maybe some error in cron expression')
+
         return redirect(url_for('.index'))
 
     urls = Page.query.all()
@@ -140,24 +168,34 @@ def edit(id):
     if form.validate_on_submit():
         page.url = form.url.data
         page.cron = form.cron_schedule.data
-        # xpath = '/html/body/article/div/div[3]/div/div[4]/div/div[1]/table'
         page.xpath = form.xpath.data
-        db.session.add(page)
+        page.keyword = form.keyword.data
+
         try:
-            db.session.commit()
-        except IntegrityError:
-            db.session.rollback()
-            raise
-        if str(page.id) in g.jobs:
-            job = g.jobs[str(page.id)]
-            job.reschedule(trigger=CronTrigger.from_crontab(page.cron))
+            if str(page.id) in g.jobs:
+                job = g.jobs[str(page.id)]
+                job.reschedule(trigger=CronTrigger.from_crontab(page.cron))
+            else:
+                if add_job(page, scheduler) is None:
+                    return redirect(url_for('.edit', id=page.id))
+        except:
+            flash('Job is not successfully registered!! Maybe some error in cron expression')
+            form.url.data = page.url
+            form.cron_schedule.data = page.cron
+            form.xpath.data = page.xpath
+            form.keyword.data = page.keyword
+            return redirect(url_for('.edit', id=page.id))
+
+        if save_to_db(page):
+            flash('The page has been updated.')
         else:
-            add_job(page, scheduler)
-        flash('The page has been updated.')
+            flash('The page is not successfully saved in db.')
         return redirect(url_for('.page', id=page.id))
+
     form.url.data = page.url
     form.cron_schedule.data = page.cron
     form.xpath.data = page.xpath
+    form.keyword.data = page.keyword
     return render_template('edit_page.html', form=form)
 
 
