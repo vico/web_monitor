@@ -141,12 +141,11 @@ def index():
         page = Page(url=form.url.data, cron=form.cron_schedule.data,
                     xpath=form.xpath.data, keyword=form.keyword.data)
 
+        save_to_db(page)  # save page to db first to get id
+
         added_job = add_job(page, scheduler)
 
-        if added_job is not None:  # if we have no error in registering job, add info to db
-            _ = save_to_db(page)
-            pprint(page)
-            print('id = {}'.format(page.id))
+        if added_job.id:  # if we have no error in registering job, add info to db
             flash('The page has been created.')
         else:
             flash('Job is not successfully registered!! Maybe some error in cron expression')

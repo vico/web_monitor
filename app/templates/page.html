@@ -5,10 +5,15 @@
     <hr/>
     <div class="container">
         <div class="row">
-            <div class="col-md-6">URL: {{ page.url }}</div>
-            <div class="col-md-3">Cron: {{ page.cron }}</div>
-            <div class="col-md-6">XPath: {{ page.xpath }}</div>
-            <div class="col-md-3">更新時刻: {{ page.updated_time }}</div>
+            <ul>
+                <li>URL: {{ page.url }}</li>
+                <li>Cron: {{ page.cron }}</li>
+                <li>XPath: {{ page.xpath }}</li>
+                <li>Keyword: {{ page.keyword }}</li>
+                <li>更新時刻: {{ moment(page.updated_time).format('YYYY-MM-DD HH:mm:ss') }}</li>
+                <li>作成時刻：{{ moment(page.created_time).format('YYYY-MM-DD HH:mm:ss') }}</li>
+                <li>最後確認時刻：{{ moment(page.last_check_time).format('YYYY-MM-DD HH:mm:ss') }}</li>
+            </ul>
         </div>
         <div class="row">
             <a href="{{ url_for('.index') }}">Index</a>
