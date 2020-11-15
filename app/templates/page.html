@@ -2,8 +2,14 @@
 {% import "bootstrap/wtf.html" as wtf %}
 
 {% block page_content %}
+
     <hr/>
+
     <div class="container">
+    <div class="row">
+        <a href="{{ url_for('.index') }}">ホーム</a>
+    </div>
+    <h2>登録内容：</h2>
         <div class="row">
             <ul>
                 <li>URL: {{ page.url }}</li>
@@ -15,8 +21,25 @@
                 <li>最後確認時刻：{{ moment(page.last_check_time).format('YYYY-MM-DD HH:mm:ss') }}</li>
             </ul>
         </div>
+        <h3>最後の差異</h3>
+        {% if page.diff %}
         <div class="row">
-            <a href="{{ url_for('.index') }}">Index</a>
+            {{ page.diff | safe }}
         </div>
+        {% else %}
+            なし。
+        {% endif %}
+        <h3>最後取得コンテンツ:</h3>
+        {% if page.text %}
+            <div class="row" style="background-color: grey">
+                <p>{{ page.text | safe }}</p>
+            </div>
+        {% else %}
+            なし。
+        {% endif %}
+        <div class="row">
+            <a href="{{ url_for('.index') }}">ホーム</a>
+        </div>
+
     </div>
 {% endblock %}
