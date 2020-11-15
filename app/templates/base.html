@@ -44,6 +44,10 @@
 <script type="text/javascript" src="{{ url_for('static', filename='js/datatables.min.js') }}"></script>
 {{ moment.include_moment() }}
 
-{% block add_script %} {% endblock %}
+{% block add_script %}
+    $(function () {
+      $('[data-toggle="tooltip"]').tooltip()
+    })
+{% endblock %}
 </body>
 </html>

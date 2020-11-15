@@ -40,9 +40,9 @@
                         </td>
                         <td>
                             {% if url.id|string in jobs %}
-                                <a href="{{ url_for('.stop_job', id=url.id) }}"><span class="label label-primary">Stop</span></a>
+                                <a href="{{ url_for('.stop_job', id=url.id) }}"><span class="label label-primary" data-toggle="tooltip" data-placement="top" title="確認プロセスを停止する">Stop</span></a>
                             {%  else %}
-                                <a href="{{ url_for('.start_job', id=url.id) }}"><span class="label label-primary">Start</span></a>
+                                <a href="{{ url_for('.start_job', id=url.id) }}"><span class="label label-primary" data-toggle="tooltip" data-placement="top" title="確認プロセスを開始させる">Start</span></a>
                             {% endif %}
                         </td>
                         <td>
