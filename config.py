@@ -84,7 +84,7 @@ class Config:
 
     SCHEDULER_JOBSTORES = {
         # 'default': SQLAlchemyJobStore(url='sqlite:///' + os.path.join(basedir, 'data.sqlite'))
-        'default': SQLAlchemyJobStore(url=SQLALCHEMY_DATABASE_URI)
+        'default': SQLAlchemyJobStore(url=SQLALCHEMY_DATABASE_URI, engine_options={'pool_pre_ping': True})
     }
 
     SCHEDULER_EXECUTORS = {
