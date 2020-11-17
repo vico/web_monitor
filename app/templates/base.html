@@ -45,9 +45,11 @@
 {{ moment.include_moment() }}
 
 {% block add_script %}
+    <script>
     $(function () {
       $('[data-toggle="tooltip"]').tooltip()
     })
+    </script>
 {% endblock %}
 </body>
 </html>
