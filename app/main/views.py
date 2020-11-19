@@ -96,10 +96,21 @@ def index():
 
         return redirect(url_for('.index'))
 
-    urls = Page.query.all()
+    pages = Page.query.all()
     jobs = get_jobs()
     job_ids = [job.id for job in jobs]
-    return render_template('index.html', urls=urls, form=form, jobs=job_ids)
+    ps = []
+    for page in pages:
+        domain = page.url.split('/')[2] if '/' in page.url else ''
+        p = {
+            'url': domain,
+            'cron': page.cron,
+            'id': page.id,
+            'updated_time': page.updated_time,
+            'last_check_time': page.last_check_time
+        }
+        ps.append(p)
+    return render_template('index.html', urls=ps, form=form, jobs=job_ids)
 
 
 @main.route('/edit/<int:id>', methods=['GET', 'POST'])

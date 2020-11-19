@@ -1,0 +1,18 @@
+[Unit]
+Description=WebMonitor APScheduler
+After=network.socket
+
+[Service]
+PIDFile=/tmp/pid_apscheduler
+User=pi
+Group=pi
+WorkingDirectory=/home/pi/webmonitor
+Environment="PATH=/home/pi/webmonitor/venv/bin"
+
+ExecStart=/home/pi/webmonitor/scheduler_server.py
+ExecReload=/bin/kill -s HUP $MAINPID
+ExecStop=/bin/kill -s TERM $MAINPID
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
