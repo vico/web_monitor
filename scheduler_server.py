@@ -34,10 +34,6 @@ logging.basicConfig()
 logging.getLogger('apscheduler').setLevel(logging.DEBUG)
 
 
-def print_text(text):
-    print(text)
-
-
 def fetch(page_id):
     page = db_session.query(Page).filter(Page.id == page_id).one()  # get fresh page object from db
     chrome_options = Options()
@@ -71,7 +67,8 @@ def fetch(page_id):
             raise
         # notify diff
         if page.keyword in target_text:  # only notify if there is keyword in response
-            send_multiple_emails(Config.MAIL_RECIPIENT.split(','), 'Updated', 'emails/notification',
+            send_multiple_emails(Config.MAIL_RECIPIENT.split(','),
+                                 '{} updated'.format(page.url), 'emails/notification',
                                  diff=diff_html, page=page)
     driver.quit()
     page.last_check_time = datetime.utcnow()

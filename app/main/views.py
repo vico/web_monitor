@@ -97,10 +97,8 @@ def index():
         return redirect(url_for('.index'))
 
     urls = Page.query.all()
-    # job_id_list = get_job_id_list()
     jobs = get_jobs()
     job_ids = [job.id for job in jobs]
-    print(job_ids)
     return render_template('index.html', urls=urls, form=form, jobs=job_ids)
 
 

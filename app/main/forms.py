@@ -29,7 +29,8 @@ cron = CronValidator
 
 class PageForm(FlaskForm):
     url = URLField(validators=[DataRequired()], render_kw={'size': 40, 'placeholder': 'https://example.com'})
-    cron_schedule = StringField('Cron schedule: ', [cron()], render_kw={'placeholder': '*/1 * * * *'})
+    cron_schedule = StringField('Cron schedule: ', [cron()], render_kw={'placeholder': '*/1 * * * *'},
+                                default='*/30 15-20 * * 0-6')
     xpath = StringField('XPath: ', render_kw={'placeholder': '/html/body/article/div/div[3]/div/div[4]/div/div[1]/table'})
     keyword = StringField('Keyword: ', render_kw={'placeholder': '月次'})
     submit = SubmitField('Submit')
