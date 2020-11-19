@@ -1,22 +1,14 @@
 # -*- encoding: utf8 -*-
-import hashlib
-from datetime import datetime
-from pprint import pprint
 
-import polling2
-from apscheduler.triggers.cron import CronTrigger
+import rpyc
 from flask import g
-from flask import render_template, request, current_app, flash, redirect, url_for
-from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
+from flask import render_template, request, flash, redirect, url_for
 # from selenium.webdriver.remote.webelement import WebElement
 from sqlalchemy.exc import IntegrityError
 
-from app import scheduler
 from . import main
 from .forms import PageForm
-from .. import db, diff_match_patch
-from ..email import send_email, send_multiple_emails
+from .. import db
 from ..models import Page
 
 
@@ -30,79 +22,33 @@ def save_to_db(page):
     return True
 
 
-@main.before_request
-def before_request():
-    if 'jobs' not in g:
-        g.jobs = {}
-        jobs = current_app.apscheduler.get_jobs()
-        for job in jobs:
-            g.jobs[job.id] = job
+def add_job(page):
+    conn = rpyc.connect('localhost', 12345)
+    job = conn.root.add_job('scheduler_server:fetch', cron=page.cron,
+                            args=[page.id], id=str(page.id))
+    return job.id
 
 
-def fetch(id):
-    app = scheduler.app
-    page = Page.query.get_or_404(id)  # get fresh page object from db
-    app.logger.info('fetch called on {}'.format(page.url))
-    chrome_options = Options()
-    for option in app.config['CHROME_OPTIONS'].split(','):
-        chrome_options.add_argument(option)
-    # driver = webdriver.Remote(service.service_url)
-    driver = webdriver.Chrome(app.config['CHROME_DRIVER'], options=chrome_options)
-    driver.implicitly_wait(10)  # seconds
-    driver.get(page.url)
-    # time.sleep(5)  # Let the user actually see something!
-    # xpath = '/html/body/article/div/div[3]/div/div[4]/div/div[1]/table'
-    target = polling2.poll(lambda: driver.find_element_by_xpath(page.xpath), step=0.5, timeout=10)
-    target_text = target.get_property('outerHTML')
-
-    md5sum = hashlib.md5(target_text.encode('utf-8')).hexdigest()
-    if page and page.md5sum is not None and (page.md5sum != md5sum):
-        # update new md5sum
-        dmp = diff_match_patch()
-        diffs = dmp.diff_main(target_text, page.text)
-        page.md5sum = md5sum
-        page.text = target_text
-        dmp.diff_cleanupSemantic(diffs)
-        diff_html = dmp.diff_prettyHtml(diffs)
-        page.diff = diff_html
-        page.updated_time = datetime.utcnow()
-        db.session.add(page)
-        try:
-            db.session.commit()
-        except IntegrityError:
-            db.session.rollback()
-            raise
-        # notify diff
-        if page.keyword in target_text:  # only notify if there is keyword in response
-            with app.app_context():
-                send_multiple_emails(app.config['MAIL_RECIPIENT'].split(','), 'Updated', 'emails/notification', diff=diff_html, page=page)
-    driver.quit()
-    page.last_check_time = datetime.utcnow()
-    page.text = target_text
-    page.md5sum = md5sum
-    db.session.add(page)
-    try:
-        db.session.commit()
-    except IntegrityError:
-        db.session.rollback()
-        raise
+def reschedule_job(job_id, cron):
+    conn = rpyc.connect('localhost', 12345)
+    job = conn.root.reschedule_job(job_id, cron=cron)
+    return job.id
 
 
-def add_job(page, scheduler):
-    try:
-        job = scheduler.add_job(func=fetch, trigger=CronTrigger.from_crontab(page.cron),
-                                args=[page.id], id=str(page.id))
-        g.jobs[job.id] = job
-        return job
-    except:
-        return None
+def remove_job(job_id):
+    conn = rpyc.connect('localhost', 12345)
+    conn.root.remove_job(job_id)
+
+
+def get_jobs():
+    conn = rpyc.connect('localhost', 12345)
+    return conn.root.get_jobs()
 
 
 @main.route('/stop_job', methods=['GET'])
 def stop_job():
     jid = request.args.get('id')
-    job = g.jobs[jid]
-    job.remove()
+    remove_job(jid)
     flash('Job {} is removed.'.format(jid))
     return redirect(url_for('.index'))
 
@@ -111,8 +57,8 @@ def stop_job():
 def start_job():
     page_id = request.args.get('id')
     page = Page.query.get_or_404(page_id)
-    job = add_job(page, scheduler)
-    flash('Job {} is started.'.format(job.id))
+    job_id = add_job(page)
+    flash('Job {} is started.'.format(job_id))
     return redirect(url_for('.index'))
 
 
@@ -121,8 +67,7 @@ def delete_page():
     page_id = request.args.get('id')
     page = Page.query.get_or_404(page_id)
     if page_id in g.jobs:  # if the job is started, stop it
-        job = g.jobs[page_id]
-        job.remove()
+        remove_job(page_id)
     db.session.delete(page)
     try:
         db.session.commit()
@@ -136,16 +81,15 @@ def delete_page():
 @main.route('/', methods=['GET', 'POST'])
 def index():
     form = PageForm()
-    pprint(g.jobs)
     if form.validate_on_submit():
         page = Page(url=form.url.data, cron=form.cron_schedule.data,
                     xpath=form.xpath.data, keyword=form.keyword.data)
 
         save_to_db(page)  # save page to db first to get id
 
-        added_job = add_job(page, scheduler)
+        job_id = add_job(page)
 
-        if added_job.id:  # if we have no error in registering job, add info to db
+        if job_id:  # if we have no error in registering job, add info to db
             flash('The page has been created.')
         else:
             flash('Job is not successfully registered!! Maybe some error in cron expression')
@@ -153,7 +97,11 @@ def index():
         return redirect(url_for('.index'))
 
     urls = Page.query.all()
-    return render_template('index.html', urls=urls, form=form, jobs=g.jobs)
+    # job_id_list = get_job_id_list()
+    jobs = get_jobs()
+    job_ids = [job.id for job in jobs]
+    print(job_ids)
+    return render_template('index.html', urls=urls, form=form, jobs=job_ids)
 
 
 @main.route('/edit/<int:id>', methods=['GET', 'POST'])
@@ -171,12 +119,12 @@ def edit(id):
         page.keyword = form.keyword.data
 
         try:
-            if str(page.id) in g.jobs:
-                job = g.jobs[str(page.id)]
-                job.reschedule(trigger=CronTrigger.from_crontab(page.cron))
+            jobs = get_jobs()
+            if page.id not in [job.id for job in jobs]:
+                add_job(page)
             else:
-                if add_job(page, scheduler) is None:
-                    return redirect(url_for('.edit', id=page.id))
+                reschedule_job(page.id, page.cron)
+
         except:
             flash('Job is not successfully registered!! Maybe some error in cron expression')
             form.url.data = page.url

@@ -1,10 +1,9 @@
+# -*- encoding: utf8 -*-
 import logging
 import os
 from logging.handlers import RotatingFileHandler, SMTPHandler
 from pathlib import Path
 
-from apscheduler.executors.pool import ThreadPoolExecutor, ProcessPoolExecutor
-from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
 from dotenv import load_dotenv
 
 env_path = Path(os.path.abspath(os.path.dirname(__file__))) / '.flaskenv'
@@ -81,23 +80,14 @@ class Config:
     MAIL_RECIPIENT = os.environ.get('MAIL_RECIPIENT')
     MAIL_SUBJECT_PREFIX = '[Web Monitor]'
     MAIL_DEBUG = False  # default set to app.debug
+    WEB_MONITOR_ADMIN = 'tranvinhcuong@gmail.com'
 
-    SCHEDULER_JOBSTORES = {
-        # 'default': SQLAlchemyJobStore(url='sqlite:///' + os.path.join(basedir, 'data.sqlite'))
-        'default': SQLAlchemyJobStore(url=SQLALCHEMY_DATABASE_URI, engine_options={'pool_pre_ping': True})
-    }
-
-    SCHEDULER_EXECUTORS = {
-        'default': ThreadPoolExecutor(20),
-        'processpool': ProcessPoolExecutor(3)
-    }
-
-    SCHEDULER_JOB_DEFAULTS = {
-        'coalesce': False,
-        'max_instances': 3
-    }
-
-    SCHEDULER_API_ENABLED = True
+    # CELERY_BROKER_URL = 'redis://localhost:6379/0'
+    # CELERY_RESULT_BACKEND = 'redis://localhost:6379/0'
+    # CELERY_ACCEPT_CONTENT = ['application/x-python-serialize']
+    # CELERY_TASK_SERIALIZER = 'pickle'
+    # accept_content = ['pickle', 'application/x-python-serialize']
+    # result_accept_content = ['application/x-python-serialize', 'pickle']
 
     @staticmethod
     def init_app(cls, app):
@@ -139,19 +129,19 @@ class ProductionConfig(Config):
         # email errors to the administrators
         credentials = None
         secure = None
-        # if getattr(cls, 'MAIL_USERNAME', None) is not None:
-        #     credentials = (cls.MAIL_USERNAME, cls.MAIL_PASSWORD)
-        #     if getattr(cls, 'MAIL_USE_TLS', None):
-        #         secure = ()
-        # mail_handler = SMTPHandler(
-        #     mailhost=(cls.MAIL_SERVER, cls.MAIL_PORT),
-        #     fromaddr=cls.FINDAT_MAIL_SENDER,
-        #     toaddrs=[cls.FINDAT_ADMIN],
-        #     subject=cls.FINDAT_MAIL_SUBJECT_PREFIX + ' Application Error',
-        #     credentials=credentials,
-        #     secure=secure)
-        # mail_handler.setLevel(logging.ERROR)
-        # app.logger.addHandler(mail_handler)
+        if getattr(cls, 'MAIL_USERNAME', None) is not None:
+            credentials = (cls.MAIL_USERNAME, cls.MAIL_PASSWORD)
+            if getattr(cls, 'MAIL_USE_TLS', None):
+                secure = ()
+        mail_handler = SMTPHandler(
+            mailhost=(cls.MAIL_SERVER, cls.MAIL_PORT),
+            fromaddr=cls.MAIL_SENDER,
+            toaddrs=[cls.WEB_MONITOR_ADMIN],
+            subject=cls.MAIL_SUBJECT_PREFIX + ' Application Error',
+            credentials=credentials,
+            secure=secure)
+        mail_handler.setLevel(logging.ERROR)
+        app.logger.addHandler(mail_handler)
 
         # for debugging
         open('production.log', 'a').close()  # create file if not exists

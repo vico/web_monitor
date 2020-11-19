@@ -12,16 +12,16 @@ class CronValidator(object):
 
     def __call__(self, form, field):
         values = field.data.split()
-        if len(values) != 5:
-            message = 'Wrong number of fields; got {}, expected 5'.format(len(values))
-            raise ValueError(message)
-
-        day_of_week = values[4]
-        if '-' in day_of_week:
-            start, end = [int(x) for x in day_of_week.split('-')]
-            if not (0 <= start <= 6 and 0 <= end <= 6 and start <= end):
-                message = 'Day of week must be within 0 and 6.'
-                raise ValueError(message)
+        # if len(values) != 5:
+        #     message = 'Wrong number of fields; got {}, expected 5'.format(len(values))
+        #     raise ValueError(message)
+        #
+        # day_of_week = values[4]
+        # if '-' in day_of_week:
+        #     start, end = [int(x) for x in day_of_week.split('-')]
+        #     if not (0 <= start <= 6 and 0 <= end <= 6 and start <= end):
+        #         message = 'Day of week must be within 0 and 6.'
+        #         raise ValueError(message)
 
 
 cron = CronValidator

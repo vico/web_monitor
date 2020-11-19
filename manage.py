@@ -4,7 +4,8 @@ import os
 
 from flask_script import Shell, Manager
 
-from app import create_app, decorate_app, db, scheduler
+from app import create_app, decorate_app, db
+from app.email import send_email
 from app.models import Page
 
 app = create_app(os.getenv('FLASK_ENV') or 'default')
@@ -20,7 +21,7 @@ if os.environ.get('FLASK_COVERAGE'):
 
 
 def make_shell_context():
-    return dict(app=app, db=db, Page=Page, scheduler=scheduler)
+    return dict(app=app, db=db, Page=Page, send_email=send_email)
 
 
 @app.cli.command()
