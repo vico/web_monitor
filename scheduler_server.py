@@ -10,6 +10,7 @@ and run it with ``python -m server``.
 
 import hashlib
 import logging
+import os
 from datetime import datetime
 
 import polling2
@@ -24,7 +25,7 @@ from rpyc.utils.server import ThreadedServer
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 
-from app import diff_match_patch
+from app import diff_match_patch, create_app, decorate_app
 from app.email import send_multiple_emails
 from app.models import Page
 from config import Config
@@ -32,6 +33,9 @@ from db import db_session
 
 logging.basicConfig()
 logging.getLogger('apscheduler').setLevel(logging.DEBUG)
+
+app = create_app(os.getenv('FLASK_ENV') or 'default')
+app = decorate_app(app)
 
 
 def fetch(page_id):
@@ -67,9 +71,10 @@ def fetch(page_id):
             raise
         # notify diff
         if page.keyword in target_text:  # only notify if there is keyword in response
-            send_multiple_emails(Config.MAIL_RECIPIENT.split(','),
-                                 '{} updated'.format(page.url), 'emails/notification',
-                                 diff=diff_html, page=page)
+            with app.app_context():
+                send_multiple_emails(Config.MAIL_RECIPIENT.split(','),
+                                     '{} updated'.format(page.url),
+                                     diff=diff_html, page=page)
     driver.quit()
     page.last_check_time = datetime.utcnow()
     page.text = target_text

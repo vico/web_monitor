@@ -10,7 +10,7 @@ def send_async_email(app, msg):
         mail.send(msg)
 
 
-def send_email(to, subject, template, **kwargs):
+def send_email(to, subject, template='emails/notification', **kwargs):
     app = current_app._get_current_object()
     msg = Message(app.config['MAIL_SUBJECT_PREFIX'] + ' ' + subject,
                   sender=app.config['MAIL_SENDER'], recipients=[to])
@@ -21,6 +21,6 @@ def send_email(to, subject, template, **kwargs):
     return thr
 
 
-def send_multiple_emails(recipients, subject, template, **kwargs):
+def send_multiple_emails(recipients, subject, template='emails/notification', **kwargs):
     for to in recipients:
         send_email(to, subject, template, **kwargs)
