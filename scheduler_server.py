@@ -19,7 +19,7 @@ from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from pymysql import IntegrityError
-from pytz import utc
+from pytz import timezone
 from rpyc.utils.server import ThreadedServer
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
@@ -110,6 +110,9 @@ class SchedulerService(rpyc.Service):
 
 
 if __name__ == '__main__':
+
+    tokyo_timezone = timezone('Asia/Tokyo')
+
     jobstores = {
         'default': SQLAlchemyJobStore(url=Config.SQLALCHEMY_DATABASE_URI, engine_options={'pool_pre_ping': True})
     }
@@ -123,7 +126,8 @@ if __name__ == '__main__':
         'coalesce': False,
         'max_instances': 3
     }
-    scheduler = BackgroundScheduler(jobstores=jobstores, executors=executors, job_defaults=job_defaults, timezone=utc)
+    scheduler = BackgroundScheduler(jobstores=jobstores, executors=executors, job_defaults=job_defaults,
+                                    timezone=tokyo_timezone)
     scheduler.start()
     protocol_config = {'allow_public_attrs': True}
     server = ThreadedServer(SchedulerService, port=12345, protocol_config=protocol_config)
