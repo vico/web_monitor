@@ -22,10 +22,20 @@ def save_to_db(page):
     return True
 
 
+def get_domain_from_url(url):
+    # example: url = http://abc.com/zzz  or https://abc.co.jp/zz
+    parts = url.split('/')
+    if len(parts) >= 3:
+        return parts[2]
+    else:
+        return url  # cannot get domain
+
+
 def add_job(page):
     conn = rpyc.connect('localhost', 12345)
+    domain = get_domain_from_url(page.url)
     job = conn.root.add_job('scheduler_server:fetch', cron=page.cron,
-                            args=[page.id], id=str(page.id))
+                            args=[page.id], id=str(page.id), name=domain)
     return job.id
 
 
@@ -150,7 +160,7 @@ def index():
     job_ids = [job.id for job in jobs]
     ps = []
     for page in pages:
-        domain = page.url.split('/')[2] if '/' in page.url else ''
+        domain = get_domain_from_url(page.url)
         p = {
             'domain': domain,
             'url': page.url,
