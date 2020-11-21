@@ -29,6 +29,11 @@ def add_job(page):
     return job.id
 
 
+def add_all_jobs(pages):
+    for page in pages:
+        add_job(page)
+
+
 def reschedule_job(job_id, cron):
     conn = rpyc.connect('localhost', 12345)
     job = conn.root.reschedule_job(job_id, cron=cron)
@@ -40,9 +45,45 @@ def remove_job(job_id):
     conn.root.remove_job(job_id)
 
 
+def remove_all_jobs():
+    jobs = get_jobs()
+    for job in jobs:
+        remove_job(job.id)
+
+
+def restart_all_jobs(pages):
+    remove_all_jobs()
+    add_all_jobs(pages)
+
+
 def get_jobs():
     conn = rpyc.connect('localhost', 12345)
     return conn.root.get_jobs()
+
+
+@main.route('/start_all_jobs', methods=['GET'])
+def start_all_jobs():
+    scheduled_jobs = get_jobs()
+    no_job_pages = Page.query.filter(Page.id.notin_([j.id for j in scheduled_jobs]))
+    add_all_jobs(no_job_pages)
+    flash('All pages are scheduled to start.')
+    return redirect(url_for('.index', all_started=True))
+
+
+@main.route('/stop_all_jobs')
+def stop_all_jobs():
+    remove_all_jobs()
+    flash('All pages are scheduled to stop.')
+    return redirect(url_for('.index', all_stopped=True))
+
+
+@main.route('/restart_all_jobs')
+def restart_all_jobs():
+    pages = Page.query.all()
+    remove_all_jobs()
+    add_all_jobs(pages)
+    flash('All pages are scheduled to restart.')
+    return redirect(url_for('.index', all_started=True))
 
 
 @main.route('/stop_job', methods=['GET'])
@@ -50,7 +91,10 @@ def stop_job():
     jid = request.args.get('id')
     remove_job(jid)
     flash('Job {} is removed.'.format(jid))
-    return redirect(url_for('.index'))
+    # logic for checking all page started
+    page_count = Page.query.count()
+    job_count = len(get_jobs())
+    return redirect(url_for('.index', all_started=(page_count == job_count), all_stopped=(job_count == 0)))
 
 
 @main.route('/start_job', methods=['GET'])
@@ -58,8 +102,11 @@ def start_job():
     page_id = request.args.get('id')
     page = Page.query.get_or_404(page_id)
     job_id = add_job(page)
+    # logic for checking all page started
+    page_count = Page.query.count()
+    job_count = len(get_jobs())
     flash('Job {} is started.'.format(job_id))
-    return redirect(url_for('.index'))
+    return redirect(url_for('.index', all_started=(page_count == job_count)))
 
 
 @main.route('/rm', methods=['GET'])
@@ -97,7 +144,9 @@ def index():
         return redirect(url_for('.index'))
 
     pages = Page.query.all()
+    page_count = len(pages)
     jobs = get_jobs()
+    job_count = len(jobs)
     job_ids = [job.id for job in jobs]
     ps = []
     for page in pages:
@@ -111,7 +160,8 @@ def index():
             'last_check_time': page.last_check_time
         }
         ps.append(p)
-    return render_template('index.html', urls=ps, form=form, jobs=job_ids)
+    return render_template('index.html', urls=ps, form=form, jobs=job_ids, all_stopped=(job_count == 0),
+                           all_started=(page_count == job_count))
 
 
 @main.route('/edit/<int:id>', methods=['GET', 'POST'])
