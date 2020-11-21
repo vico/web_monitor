@@ -1,7 +1,7 @@
 # -*- encoding: utf8 -*-
 
 import rpyc
-from flask import g
+from flask import g, current_app
 from flask import render_template, request, flash, redirect, url_for
 # from selenium.webdriver.remote.webelement import WebElement
 from sqlalchemy.exc import IntegrityError
@@ -103,7 +103,8 @@ def index():
     for page in pages:
         domain = page.url.split('/')[2] if '/' in page.url else ''
         p = {
-            'url': domain,
+            'domain': domain,
+            'url': page.url,
             'cron': page.cron,
             'id': page.id,
             'updated_time': page.updated_time,
@@ -129,13 +130,15 @@ def edit(id):
 
         try:
             jobs = get_jobs()
-            if page.id not in [job.id for job in jobs]:
+            # remember job.id is of string
+            if str(page.id) not in [job.id for job in jobs]:
                 add_job(page)
             else:
                 reschedule_job(page.id, page.cron)
 
-        except:
-            flash('Job is not successfully registered!! Maybe some error in cron expression')
+        except Exception as e:
+            flash('[edit:{}] Job is not successfully scheduled!!'.format(id))
+            current_app.logger.error(e)
             form.url.data = page.url
             form.cron_schedule.data = page.cron
             form.xpath.data = page.xpath
