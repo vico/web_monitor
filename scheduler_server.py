@@ -23,6 +23,7 @@ from pymysql import IntegrityError
 from pytz import timezone
 from rpyc.utils.server import ThreadedServer
 from selenium import webdriver
+from selenium.common.exceptions import NoSuchElementException, WebDriverException
 from selenium.webdriver.chrome.options import Options
 
 from app import diff_match_patch, create_app, decorate_app
@@ -39,51 +40,67 @@ app = decorate_app(app)
 
 
 def fetch(page_id):
-    page = db_session.query(Page).filter(Page.id == page_id).one()  # get fresh page object from db
-    chrome_options = Options()
-    for option in Config.CHROME_OPTIONS.split(','):
-        chrome_options.add_argument(option)
-    # driver = webdriver.Remote(service.service_url)
-    driver = webdriver.Chrome(Config.CHROME_DRIVER, options=chrome_options)
-    driver.implicitly_wait(10)  # seconds
-    driver.get(page.url)
-    # time.sleep(5)  # Let the user actually see something!
-    # xpath = '/html/body/article/div/div[3]/div/div[4]/div/div[1]/table'
-    target = polling2.poll(lambda: driver.find_element_by_xpath(page.xpath), step=0.5, timeout=10)
-    target_text = target.get_property('outerHTML')
-
-    md5sum = hashlib.md5(target_text.encode('utf-8')).hexdigest()
-    if page and page.md5sum is not None and (page.md5sum != md5sum):
-        # update new md5sum
-        dmp = diff_match_patch()
-        diffs = dmp.diff_main(page.text, target_text)
-        page.md5sum = md5sum
-        page.text = target_text
-        dmp.diff_cleanupSemantic(diffs)
-        diff_html = dmp.diff_prettyHtml(diffs)
-        page.diff = diff_html
-        page.updated_time = datetime.utcnow()
-        db_session.add(page)
-        try:
-            db_session.commit()
-        except IntegrityError:
-            db_session.rollback()
-            raise
-        # notify diff
-        if page.keyword in target_text:  # only notify if there is keyword in response
-            with app.app_context():
-                send_multiple_emails(Config.MAIL_RECIPIENT.split(','),
-                                     '{} updated'.format(page.url),
-                                     diff=diff_html, page=page)
-    driver.quit()
-    page.last_check_time = datetime.utcnow()
-    page.text = target_text
-    page.md5sum = md5sum
-    db_session.add(page)
     try:
-        db_session.commit()
-    except IntegrityError:
+        page = db_session.query(Page).filter(Page.id == page_id).one()  # get fresh page object from db
+        chrome_options = Options()
+        for option in Config.CHROME_OPTIONS.split(','):
+            chrome_options.add_argument(option)
+        # driver = webdriver.Remote(service.service_url)
+        driver = webdriver.Chrome(Config.CHROME_DRIVER, options=chrome_options)
+        driver.implicitly_wait(10)  # seconds
+        driver.get(page.url)
+        # time.sleep(5)  # Let the user actually see something!
+        try:
+            target = polling2.poll(lambda: driver.find_element_by_xpath(page.xpath), step=0.5, timeout=10)
+            target_text = target.get_property('outerHTML')
+
+            md5sum = hashlib.md5(target_text.encode('utf-8')).hexdigest()
+            if page and page.md5sum is not None and (page.md5sum != md5sum):
+                # update new md5sum
+                dmp = diff_match_patch()
+                diffs = dmp.diff_main(page.text, target_text)
+                page.md5sum = md5sum
+                page.text = target_text
+                dmp.diff_cleanupSemantic(diffs)
+                diff_html = dmp.diff_prettyHtml(diffs)
+                page.diff = diff_html
+                page.updated_time = datetime.utcnow()
+                db_session.add(page)
+                try:
+                    db_session.commit()
+                except IntegrityError:
+                    db_session.rollback()
+                    raise
+                # notify diff
+                if page.keyword in target_text:  # only notify if there is keyword in response
+                    with app.app_context():
+                        send_multiple_emails(Config.MAIL_RECIPIENT.split(','),
+                                             '{} updated'.format(page.url),
+                                             diff=diff_html, page=page)
+            driver.quit()
+            page.last_check_time = datetime.utcnow()
+            page.text = target_text
+            page.md5sum = md5sum
+            db_session.add(page)
+            try:
+                db_session.commit()
+            except IntegrityError:
+                db_session.rollback()
+                raise
+        except (NoSuchElementException, WebDriverException) as e:
+            if driver:
+                driver.quit()
+            send_multiple_emails(Config.MAIL_RECIPIENT.split(','),
+                                 '{} ERROR'.format(page.url),
+                                 template='emails/error',
+                                 exception=str(e), page=page)
+
+    except Exception as e:
         db_session.rollback()
+        send_multiple_emails(Config.MAIL_RECIPIENT.split(','),
+                             '{} ERROR'.format(page_id),
+                             template='emails/error_db',
+                             exception=str(e))
         raise
 
 
