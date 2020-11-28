@@ -123,7 +123,8 @@ def start_job():
 def delete_page():
     page_id = request.args.get('id')
     page = Page.query.get_or_404(page_id)
-    if page_id in g.jobs:  # if the job is started, stop it
+    jobs = get_jobs()
+    if page_id in jobs:  # if the job is started, stop it
         remove_job(page_id)
     db.session.delete(page)
     try:
