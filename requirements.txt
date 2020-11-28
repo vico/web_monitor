@@ -1,5 +1,6 @@
 APScheduler==3.6.3
 blinker==1.4
+certifi==2020.11.8
 click==7.1.2
 dominate==2.6.0
 Faker==4.14.2
@@ -26,6 +27,7 @@ pytz==2020.4
 PyYAML==5.3.1
 rpyc==4.1.5
 selenium==3.141.0
+sentry-sdk==0.19.4
 six==1.15.0
 SQLAlchemy==1.3.20
 text-unidecode==1.3

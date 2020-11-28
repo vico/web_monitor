@@ -4,8 +4,21 @@
 #### To start server using gunicorn
 `gunicorn --bind 127.0.0.1:5000 manage:app`
 
+#### Start test maria db
+```bash
+docker run --name mariadb -e MYSQL_ALLOW_EMPTY_PASSWORD=1 -d   mariadb:latest
+```
+
+check for exposed ip
+
+```bash
+docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' mariadb
+```
+
+
+
 #### Creating schema
 ```python
-(web_monitor) $./manage.py shell
->>> db.create_all()
+./manage.py shell
+db.create_all()
 ```

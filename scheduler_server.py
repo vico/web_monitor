@@ -32,14 +32,24 @@ from app.models import Page
 from config import Config
 from db import db_session
 
-logging.basicConfig()
-logging.getLogger('apscheduler').setLevel(logging.DEBUG)
+import sentry_sdk
+
+sentry_sdk.init(
+    Config.SENTRY_URL,
+    traces_sample_rate=1.0
+)
+
+logging.basicConfig(format='%(asctime)-15s.%(msecs).03d %(levelname)-8s %(threadName)-19s %(message)s',
+                    datefmt='%Y-%m-%d %H:%M:%S')
+
+logging.getLogger('apscheduler.scheduler').level = logging.DEBUG
+logging.getLogger('apscheduler.threadpool').level = logging.DEBUG
 
 app = create_app(os.getenv('FLASK_ENV') or 'default')
 app = decorate_app(app)
 
 
-def fetch(page_id):
+def fetch(page_id: int):
     try:
         page = db_session.query(Page).filter(Page.id == page_id).one()  # get fresh page object from db
         chrome_options = Options()
@@ -90,24 +100,17 @@ def fetch(page_id):
         except (NoSuchElementException, WebDriverException) as e:
             if driver:
                 driver.quit()
-            send_multiple_emails(Config.MAIL_RECIPIENT.split(','),
-                                 '{} ERROR'.format(page.url),
-                                 template='emails/error',
-                                 exception=str(e), page=page)
 
     except Exception as e:
         db_session.rollback()
-        send_multiple_emails(Config.MAIL_RECIPIENT.split(','),
-                             '{} ERROR'.format(page_id),
-                             template='emails/error_db',
-                             exception=str(e))
         raise
 
 
 class SchedulerService(rpyc.Service):
     def exposed_add_job(self, func, *args, cron=None, **kwargs):
         # return scheduler.add_job(func, *args, **kwargs)
-        return scheduler.add_job(func, *args, trigger=CronTrigger.from_crontab(cron), **kwargs)
+        return scheduler.add_job(func, *args, trigger=CronTrigger.from_crontab(cron),
+                                 misfire_grace_time=60 * 60, **kwargs)
 
     # def exposed_modify_job(self, job_id, jobstore=None, **changes):
     #     return scheduler.modify_job(job_id, jobstore, **changes)
@@ -141,13 +144,13 @@ if __name__ == '__main__':
 
     executors = {
         'default': ThreadPoolExecutor(20),
-        'processpool': ProcessPoolExecutor(3)
+        'processpool': ProcessPoolExecutor(2)
     }
 
     job_defaults = {
         'coalesce': True,
-        'max_instances': 3,
-        'misfire_grace_time': 20*60  # Maximum time in seconds for the job execution to be allowed to delay
+        'max_instances': 2,
+        'misfire_grace_time': 60 * 60  # Maximum time in seconds for the job execution to be allowed to delay
     }
     scheduler = BackgroundScheduler(jobstores=jobstores, executors=executors, job_defaults=job_defaults,
                                     timezone=tokyo_timezone)

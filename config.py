@@ -81,6 +81,7 @@ class Config:
     MAIL_SUBJECT_PREFIX = '[Web Monitor]'
     MAIL_DEBUG = False  # default set to app.debug
     WEB_MONITOR_ADMIN = 'tranvinhcuong@gmail.com'
+    SENTRY_URL = os.environ.get('SENTRY_URL')
 
     # CELERY_BROKER_URL = 'redis://localhost:6379/0'
     # CELERY_RESULT_BACKEND = 'redis://localhost:6379/0'
