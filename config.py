@@ -78,7 +78,7 @@ class Config:
     MAIL_SENDER = os.environ.get('MAIL_SENDER')
     MAIL_PASSWORD = os.environ.get('MAIL_PASSWORD')
     MAIL_RECIPIENT = os.environ.get('MAIL_RECIPIENT')
-    MAIL_SUBJECT_PREFIX = '[Web Monitor]'
+    MAIL_SUBJECT_PREFIX = os.environ.get('MAIL_SUBJECT_PREFIX')
     MAIL_DEBUG = False  # default set to app.debug
     WEB_MONITOR_ADMIN = 'tranvinhcuong@gmail.com'
     SENTRY_URL = os.environ.get('SENTRY_URL')

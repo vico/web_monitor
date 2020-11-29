@@ -1,5 +1,9 @@
 <html>
 <p>{{ page.url }} has changed as following:</p>
 
-<p> {{ diff | safe }}</p>
+<p> {{ diff | safe }}
+{% if image_path %}
+    <img src="cid:DiffImage" alt="image_changed" width="100%" height="auto">
+{% endif %}
+</p>
 </html>

@@ -11,10 +11,13 @@ and run it with ``python -m server``.
 import hashlib
 import logging
 import os
+import tempfile
+import urllib.request
 from datetime import datetime
 
 import polling2
 import rpyc
+import sentry_sdk
 from apscheduler.executors.pool import ThreadPoolExecutor, ProcessPoolExecutor
 from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -32,8 +35,6 @@ from app.models import Page
 from config import Config
 from db import db_session
 
-import sentry_sdk
-
 sentry_sdk.init(
     Config.SENTRY_URL,
     traces_sample_rate=1.0
@@ -42,8 +43,7 @@ sentry_sdk.init(
 logging.basicConfig(format='%(asctime)-15s.%(msecs).03d %(levelname)-8s %(threadName)-19s %(message)s',
                     datefmt='%Y-%m-%d %H:%M:%S')
 
-logging.getLogger('apscheduler.scheduler').level = logging.DEBUG
-logging.getLogger('apscheduler.threadpool').level = logging.DEBUG
+logging.getLogger('apscheduler').level = logging.DEBUG
 
 app = create_app(os.getenv('FLASK_ENV') or 'default')
 app = decorate_app(app)
@@ -55,42 +55,72 @@ def fetch(page_id: int):
         chrome_options = Options()
         for option in Config.CHROME_OPTIONS.split(','):
             chrome_options.add_argument(option)
+        chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
+        chrome_options.add_experimental_option('useAutomationExtension', False)
         # driver = webdriver.Remote(service.service_url)
         driver = webdriver.Chrome(Config.CHROME_DRIVER, options=chrome_options)
         driver.implicitly_wait(10)  # seconds
+
         driver.get(page.url)
+
         # time.sleep(5)  # Let the user actually see something!
         try:
             target = polling2.poll(lambda: driver.find_element_by_xpath(page.xpath), step=0.5, timeout=10)
-            target_text = target.get_property('outerHTML')
 
-            md5sum = hashlib.md5(target_text.encode('utf-8')).hexdigest()
-            if page and page.md5sum is not None and (page.md5sum != md5sum):
-                # update new md5sum
-                dmp = diff_match_patch()
-                diffs = dmp.diff_main(page.text, target_text)
-                page.md5sum = md5sum
+            if page.xpath.endswith('img'):
+                with tempfile.TemporaryDirectory() as tmp:
+                    path = os.path.join(tmp, 'webmonitor')
+                    # get the image source
+                    img_src = target.get_attribute('src')
+
+                    # download the image and write to `path`
+                    urllib.request.urlretrieve(img_src, path)
+
+                    md5sum = hashlib.md5(open(path, 'rb').read()).hexdigest()
+
+                    if page and md5sum != page.md5sum:
+                        page.md5sum = md5sum
+                        page.updated_time = datetime.utcnow()
+                        db_session.add(page)
+                        try:
+                            db_session.commit()
+                        except IntegrityError:
+                            db_session.rollback()
+                            raise
+                        with app.app_context():
+                            send_multiple_emails(Config.MAIL_RECIPIENT.split(','),
+                                                 '{} updated'.format(page.url),
+                                                 diff='Image', page=page, image_path=path)
+            else:  # not image
+
+                target_text = target.get_property('outerHTML')
+                md5sum = hashlib.md5(target_text.encode('utf-8')).hexdigest()
+                if page and md5sum != page.md5sum:
+                    # update new md5sum
+                    dmp = diff_match_patch()
+                    diffs = dmp.diff_main(page.text, target_text)
+                    page.md5sum = md5sum
+                    page.text = target_text
+                    dmp.diff_cleanupSemantic(diffs)
+                    diff_html = dmp.diff_prettyHtml(diffs)
+                    page.diff = diff_html
+                    page.updated_time = datetime.utcnow()
+                    db_session.add(page)
+                    try:
+                        db_session.commit()
+                    except IntegrityError:
+                        db_session.rollback()
+                        raise
+                    # notify diff
+                    if page.keyword in target_text:  # only notify if there is keyword in response
+                        with app.app_context():
+                            send_multiple_emails(Config.MAIL_RECIPIENT.split(','),
+                                                 '{} updated'.format(page.url),
+                                                 diff=diff_html, page=page)
                 page.text = target_text
-                dmp.diff_cleanupSemantic(diffs)
-                diff_html = dmp.diff_prettyHtml(diffs)
-                page.diff = diff_html
-                page.updated_time = datetime.utcnow()
-                db_session.add(page)
-                try:
-                    db_session.commit()
-                except IntegrityError:
-                    db_session.rollback()
-                    raise
-                # notify diff
-                if page.keyword in target_text:  # only notify if there is keyword in response
-                    with app.app_context():
-                        send_multiple_emails(Config.MAIL_RECIPIENT.split(','),
-                                             '{} updated'.format(page.url),
-                                             diff=diff_html, page=page)
             driver.quit()
             page.last_check_time = datetime.utcnow()
-            page.text = target_text
-            page.md5sum = md5sum
+            page.md5sum = md5sum  # md5sum for new page/image file
             db_session.add(page)
             try:
                 db_session.commit()
@@ -149,7 +179,7 @@ if __name__ == '__main__':
 
     job_defaults = {
         'coalesce': True,
-        'max_instances': 2,
+        'max_instances': 1,
         'misfire_grace_time': 60 * 60  # Maximum time in seconds for the job execution to be allowed to delay
     }
     scheduler = BackgroundScheduler(jobstores=jobstores, executors=executors, job_defaults=job_defaults,
