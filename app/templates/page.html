@@ -6,10 +6,13 @@
     <hr/>
 
     <div class="container">
-    <div class="row">
-        <a href="{{ url_for('.index') }}">ホーム</a>
-    </div>
-    <h2>登録内容：</h2>
+        <div class="row">
+            <div class="col-4">
+                <a href="{{ url_for('.index') }}">ホーム</a>
+                <a href="{{ url_for('.edit', id=page.id) }}">Edit</a>
+            </div>
+        </div>
+        <h2>登録内容：</h2>
         <div class="row">
             <ul>
                 <li>URL: {{ page.url }}</li>
@@ -23,9 +26,9 @@
         </div>
         <h3>最後の差異</h3>
         {% if page.diff %}
-        <div class="row">
-            {{ page.diff | safe }}
-        </div>
+            <div class="row">
+                {{ page.diff | safe }}
+            </div>
         {% else %}
             なし。
         {% endif %}
@@ -38,7 +41,10 @@
             なし。
         {% endif %}
         <div class="row">
-            <a href="{{ url_for('.index') }}">ホーム</a>
+            <div class="col-4">
+                <a href="{{ url_for('.index') }}">ホーム</a>
+                <a href="{{ url_for('.edit', id=page.id) }}">Edit</a>
+            </div>
         </div>
 
     </div>

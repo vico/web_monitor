@@ -12,6 +12,8 @@ import hashlib
 import logging
 import os
 import tempfile
+import time
+import traceback
 import urllib.request
 from datetime import datetime
 
@@ -26,7 +28,7 @@ from pymysql import IntegrityError
 from pytz import timezone
 from rpyc.utils.server import ThreadedServer
 from selenium import webdriver
-from selenium.common.exceptions import NoSuchElementException, WebDriverException
+from selenium.common.exceptions import NoSuchElementException, WebDriverException, TimeoutException
 from selenium.webdriver.chrome.options import Options
 
 from app import diff_match_patch, create_app, decorate_app
@@ -43,10 +45,25 @@ sentry_sdk.init(
 logging.basicConfig(format='%(asctime)-15s.%(msecs).03d %(levelname)-8s %(threadName)-19s %(message)s',
                     datefmt='%Y-%m-%d %H:%M:%S')
 
-logging.getLogger('apscheduler').level = logging.DEBUG
+logger = logging.getLogger('apscheduler')
+logger.level = logging.DEBUG
 
 app = create_app(os.getenv('FLASK_ENV') or 'default')
 app = decorate_app(app)
+
+
+def retry_fetch(page_id: int):
+    retries = 10
+    while retries > 0:
+        try:
+            return fetch(page_id)
+        except (NoSuchElementException, TimeoutException, WebDriverException) as e:
+            if retries > 0:
+                retries -= 1
+                logger.error("Retries left {}, Continuing on {}".format(retries, traceback.format_exc()))
+                time.sleep(5)
+            else:
+                raise e
 
 
 def fetch(page_id: int):
@@ -57,6 +74,8 @@ def fetch(page_id: int):
             chrome_options.add_argument(option)
         chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
         chrome_options.add_experimental_option('useAutomationExtension', False)
+        chrome_options.add_argument(
+            "user-agent=Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/87.0.4280.66 Safari/537.36")
         # driver = webdriver.Remote(service.service_url)
         driver = webdriver.Chrome(Config.CHROME_DRIVER, options=chrome_options)
         driver.implicitly_wait(10)  # seconds
@@ -66,7 +85,6 @@ def fetch(page_id: int):
         # time.sleep(5)  # Let the user actually see something!
         try:
             target = polling2.poll(lambda: driver.find_element_by_xpath(page.xpath), step=0.5, timeout=10)
-
             if page.xpath.endswith('img'):
                 with tempfile.TemporaryDirectory() as tmp:
                     path = os.path.join(tmp, 'webmonitor')
@@ -95,7 +113,7 @@ def fetch(page_id: int):
 
                 target_text = target.get_property('outerHTML')
                 md5sum = hashlib.md5(target_text.encode('utf-8')).hexdigest()
-                if page and md5sum != page.md5sum:
+                if page and page.text and md5sum != page.md5sum:
                     # update new md5sum
                     dmp = diff_match_patch()
                     diffs = dmp.diff_main(page.text, target_text)
@@ -140,7 +158,7 @@ class SchedulerService(rpyc.Service):
     def exposed_add_job(self, func, *args, cron=None, **kwargs):
         # return scheduler.add_job(func, *args, **kwargs)
         return scheduler.add_job(func, *args, trigger=CronTrigger.from_crontab(cron),
-                                 misfire_grace_time=60 * 60, **kwargs)
+                                 misfire_grace_time=180 * 60, **kwargs)
 
     # def exposed_modify_job(self, job_id, jobstore=None, **changes):
     #     return scheduler.modify_job(job_id, jobstore, **changes)
@@ -180,7 +198,7 @@ if __name__ == '__main__':
     job_defaults = {
         'coalesce': True,
         'max_instances': 1,
-        'misfire_grace_time': 60 * 60  # Maximum time in seconds for the job execution to be allowed to delay
+        'misfire_grace_time': 180 * 60  # Maximum time in seconds for the job execution to be allowed to delay
     }
     scheduler = BackgroundScheduler(jobstores=jobstores, executors=executors, job_defaults=job_defaults,
                                     timezone=tokyo_timezone)

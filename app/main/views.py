@@ -34,7 +34,7 @@ def get_domain_from_url(url):
 def add_job(page):
     conn = rpyc.connect('localhost', 12345)
     domain = get_domain_from_url(page.url)
-    job = conn.root.add_job('scheduler_server:fetch', cron=page.cron,
+    job = conn.root.add_job('scheduler_server:retry_fetch', cron=page.cron,
                             args=[page.id], id=str(page.id), name=domain)
     return job.id
 
