@@ -148,6 +148,7 @@ def fetch(page_id: int):
         except (NoSuchElementException, WebDriverException) as e:
             if driver:
                 driver.quit()
+            raise
 
     except Exception as e:
         db_session.rollback()
