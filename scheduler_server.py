@@ -198,7 +198,7 @@ if __name__ == '__main__':
 
     job_defaults = {
         'coalesce': True,
-        'max_instances': 1,
+        'max_instances': 3,
         'misfire_grace_time': 180 * 60  # Maximum time in seconds for the job execution to be allowed to delay
     }
     scheduler = BackgroundScheduler(jobstores=jobstores, executors=executors, job_defaults=job_defaults,
