@@ -30,6 +30,7 @@ from rpyc.utils.server import ThreadedServer
 from selenium import webdriver
 from selenium.common.exceptions import NoSuchElementException, WebDriverException, TimeoutException
 from selenium.webdriver.chrome.options import Options
+from sqlalchemy.orm.exc import NoResultFound
 
 from app import diff_match_patch, create_app, decorate_app
 from app.email import send_multiple_emails
@@ -84,8 +85,9 @@ def fetch(page_id: int):
 
         # time.sleep(5)  # Let the user actually see something!
         try:
-            target = polling2.poll(lambda: driver.find_element_by_xpath(page.xpath), step=0.5, timeout=10)
-            if page.xpath.endswith('img'):
+            xpath = page.xpath if page.xpath else '//body'
+            target = polling2.poll(lambda: driver.find_element_by_xpath(xpath), step=0.5, timeout=10)
+            if page.xpath and page.xpath.endswith('img'):
                 with tempfile.TemporaryDirectory() as tmp:
                     path = os.path.join(tmp, 'webmonitor')
                     # get the image source
@@ -150,6 +152,9 @@ def fetch(page_id: int):
                 driver.quit()
             raise
 
+    except NoResultFound as _:
+        job = scheduler.get_job(str(page_id))
+        job.remove()
     except Exception as e:
         db_session.rollback()
         raise
