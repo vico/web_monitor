@@ -61,9 +61,10 @@ def retry_fetch(page_id: int):
         except (NoSuchElementException, TimeoutException, WebDriverException) as e:
             if retries > 0:
                 retries -= 1
-                logger.error("Retries left {}, Continuing on {}".format(retries, traceback.format_exc()))
+                logger.info("Retries left {}, Continuing on {}".format(retries, traceback.format_exc()))
                 time.sleep(5)
             else:
+                logger.error("Already retried {} times, Continuing on {}".format(10, traceback.format_exc()))
                 raise e
 
 
