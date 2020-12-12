@@ -155,7 +155,10 @@ def fetch(page_id: int):
 
     except NoResultFound as _:
         job = scheduler.get_job(str(page_id))
-        job.remove()
+        if job:
+            job.remove()
+        else:
+            logger.error("No job found for {} even though it is running.".format(page_id))
     except Exception as e:
         db_session.rollback()
         raise
