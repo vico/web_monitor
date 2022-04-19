@@ -80,7 +80,7 @@ class Config:
     MAIL_RECIPIENT = os.environ.get('MAIL_RECIPIENT')
     MAIL_SUBJECT_PREFIX = os.environ.get('MAIL_SUBJECT_PREFIX')
     MAIL_DEBUG = False  # default set to app.debug
-    WEB_MONITOR_ADMIN = 'tranvinhcuong@gmail.com'
+    WEB_MONITOR_ADMIN = os.environ.get('MAIL_RECIPIENT')
     SENTRY_URL = os.environ.get('SENTRY_URL')
 
     # CELERY_BROKER_URL = 'redis://localhost:6379/0'

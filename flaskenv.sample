@@ -1,0 +1,16 @@
+FLASK_ENV=development
+FLASK_DEBUG=1
+SECRET_KEY=abd}ddd
+REPORT_EMAIL=
+SSL_DISABLE=True
+DB_SERVER=localhost
+DB_USER=root
+DB_PASSWORD=root
+DB_SCHEMA=web_monitor
+MAIL_SERVER=smtp.gmail.com
+MAIL_USERNAME=my_gmail@gmail.com
+MAIL_PASSWORD=secret
+MAIL_SENDER=my_gmail@gmail.com
+MAIL_RECIPIENT=my_gmail@gmail.com,another_mail@gmail.com
+CHROME_DRIVER=/Users/cuong/localdev/python/flask/web_monitor/chromedriver
+CHROME_OPTIONS=--headless
